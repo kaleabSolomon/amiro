@@ -11,18 +11,18 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.56 0.11 153);
+  --primary-foreground: oklch(0.98 0.005 140);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.95 0.03 154);
+  --accent-foreground: oklch(0.24 0.03 153);
   --destructive: oklch(0.58 0.22 27);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.6 0.08 153);
   --chart-1: oklch(0.809 0.105 251.813);
   --chart-2: oklch(0.623 0.214 259.815);
   --chart-3: oklch(0.546 0.245 262.881);
@@ -37,6 +37,18 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --landing-bg: oklch(0.975 0.012 155);
+  --landing-grid: oklch(0.5 0.03 155 / 11%);
+  --landing-glow-a: oklch(0.94 0.04 153 / 90%);
+  --landing-glow-b: oklch(0.9 0.02 190 / 55%);
+  --landing-surface: oklch(0.995 0.004 150);
+  --landing-panel: oklch(0.98 0.01 154);
+  --landing-border: oklch(0.83 0.02 154);
+  --landing-ink: oklch(0.24 0.03 152);
+  --landing-subtle-ink: oklch(0.44 0.03 152);
+  --landing-accent: oklch(0.58 0.11 153);
+  --landing-accent-foreground: oklch(0.98 0.005 140);
+  --landing-muted-shadow: oklch(0.68 0.03 153 / 20%);
 }
 
 .dark {
@@ -46,18 +58,18 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.87 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.63 0.1 153);
+  --primary-foreground: oklch(0.2 0.02 150);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.28 0.03 153);
+  --accent-foreground: oklch(0.94 0.01 153);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.62 0.08 153);
   --chart-1: oklch(0.809 0.105 251.813);
   --chart-2: oklch(0.623 0.214 259.815);
   --chart-3: oklch(0.546 0.245 262.881);
@@ -71,10 +83,22 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --landing-bg: oklch(0.2 0.02 155);
+  --landing-grid: oklch(0.86 0.02 154 / 9%);
+  --landing-glow-a: oklch(0.45 0.08 153 / 20%);
+  --landing-glow-b: oklch(0.38 0.05 190 / 20%);
+  --landing-surface: oklch(0.24 0.02 155);
+  --landing-panel: oklch(0.28 0.02 155);
+  --landing-border: oklch(0.38 0.03 155);
+  --landing-ink: oklch(0.95 0.01 153);
+  --landing-subtle-ink: oklch(0.78 0.02 153);
+  --landing-accent: oklch(0.63 0.1 153);
+  --landing-accent-foreground: oklch(0.2 0.02 150);
+  --landing-muted-shadow: oklch(0.07 0.01 155 / 45%);
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", sans-serif;
+  --font-sans: var(--font-geist-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -124,5 +148,26 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  .landing-canvas {
+    background-color: var(--landing-bg);
+    background-image:
+      radial-gradient(circle at 14% 18%, var(--landing-glow-a), transparent 34%),
+      radial-gradient(circle at 82% 12%, var(--landing-glow-b), transparent 33%),
+      linear-gradient(var(--landing-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--landing-grid) 1px, transparent 1px);
+    background-size:
+      100% 100%,
+      100% 100%,
+      24px 24px,
+      24px 24px;
+    background-position:
+      center,
+      center,
+      center,
+      center;
   }
 }

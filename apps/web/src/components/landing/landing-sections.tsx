@@ -1,0 +1,240 @@
+import { LandingButtonLink } from "./landing-button-link";
+import { LandingSection } from "./landing-section";
+
+const WHAT_WE_DO = [
+  {
+    title: "Summarize",
+    description:
+      "Every saved page becomes a concise factual summary with key points you can scan fast.",
+  },
+  {
+    title: "Organize",
+    description:
+      "Amiro tags and categorizes each bookmark so your feed stays structured and searchable.",
+  },
+  {
+    title: "Reflect",
+    description:
+      "Your profile evolves over time to show what topics are becoming more important to you.",
+  },
+] as const;
+
+const HOW_IT_WORKS = [
+  {
+    step: "01",
+    title: "Save content",
+    description:
+      "Use the extension to save articles, videos, or essays as you browse.",
+  },
+  {
+    step: "02",
+    title: "Automatic processing",
+    description:
+      "Amiro extracts the content and generates factual summaries, tags, and categories.",
+  },
+  {
+    step: "03",
+    title: "See your map",
+    description:
+      "Track trends and review your interests in a clean personal dashboard.",
+  },
+] as const;
+
+const PRICING = [
+  {
+    name: "Starter",
+    price: "$0",
+    detail: "Perfect for trying the workflow",
+    features: [
+      "Up to 100 bookmarks",
+      "Basic summaries",
+      "Private profile only",
+    ],
+    cta: "Start Free",
+  },
+  {
+    name: "Pro",
+    price: "$12",
+    detail: "For daily readers and researchers",
+    features: [
+      "Unlimited bookmarks",
+      "Advanced tagging",
+      "Public profile and analytics",
+    ],
+    cta: "Start Pro",
+  },
+] as const;
+
+const FAQS = [
+  {
+    question: "Do you train models on my private bookmarks?",
+    answer:
+      "No. Private bookmarks are processed for your account experience and are not used for model training.",
+  },
+  {
+    question: "Can I keep some bookmarks public and others private?",
+    answer:
+      "Yes. Visibility is per bookmark, and private items stay out of your public profile.",
+  },
+  {
+    question: "Can I cancel Pro anytime?",
+    answer:
+      "Yes. You can switch plans at any time, and your data stays with your account.",
+  },
+] as const;
+
+export function LandingWhatWeDoSection() {
+  return (
+    <LandingSection
+      id="what-we-do"
+      eyebrow="What We Do"
+      title="A smarter layer between reading and remembering."
+      description="Amiro gives structure to the things you consume so your knowledge compounds over time."
+    >
+      <div className="grid gap-4 md:grid-cols-3">
+        {WHAT_WE_DO.map((item) => (
+          <article
+            key={item.title}
+            className="rounded-xl border border-[var(--landing-border)] bg-[var(--landing-surface)] p-5 shadow-sm"
+          >
+            <h3 className="text-lg font-semibold text-[var(--landing-ink)]">
+              {item.title}
+            </h3>
+            <p className="mt-2 text-sm text-[var(--landing-subtle-ink)]">
+              {item.description}
+            </p>
+          </article>
+        ))}
+      </div>
+    </LandingSection>
+  );
+}
+
+export function LandingHowItWorksSection() {
+  return (
+    <LandingSection
+      id="how-it-works"
+      eyebrow="How It Works"
+      title="Built for a simple habit loop."
+      description="Capture, process, and reflect without adding extra overhead to your day."
+    >
+      <div className="grid gap-4 md:grid-cols-3">
+        {HOW_IT_WORKS.map((item) => (
+          <article
+            key={item.step}
+            className="rounded-xl border border-[var(--landing-border)] bg-[var(--landing-surface)] p-5"
+          >
+            <p className="text-xs font-semibold tracking-[0.12em] text-[var(--landing-subtle-ink)] uppercase">
+              Step {item.step}
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-[var(--landing-ink)]">
+              {item.title}
+            </h3>
+            <p className="mt-2 text-sm text-[var(--landing-subtle-ink)]">
+              {item.description}
+            </p>
+          </article>
+        ))}
+      </div>
+    </LandingSection>
+  );
+}
+
+export function LandingPricingSection() {
+  return (
+    <LandingSection
+      id="pricing"
+      eyebrow="Pricing"
+      title="Start free and upgrade when you need depth."
+      description="Simple pricing with no setup complexity."
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        {PRICING.map((plan, idx) => (
+          <article
+            key={plan.name}
+            className="rounded-xl border border-[var(--landing-border)] bg-[var(--landing-surface)] p-6 shadow-sm"
+          >
+            <p className="text-sm font-medium text-[var(--landing-subtle-ink)]">
+              {plan.name}
+            </p>
+            <p className="mt-2 text-4xl font-semibold tracking-tight text-[var(--landing-ink)]">
+              {plan.price}
+              <span className="ml-1 text-sm font-medium text-[var(--landing-subtle-ink)]">
+                /mo
+              </span>
+            </p>
+            <p className="mt-2 text-sm text-[var(--landing-subtle-ink)]">
+              {plan.detail}
+            </p>
+            <ul className="mt-5 space-y-2 text-sm text-[var(--landing-ink)]">
+              {plan.features.map((feature) => (
+                <li key={feature} className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--landing-accent)]" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+            <LandingButtonLink
+              href="/dashboard?mode=signup"
+              emphasis={idx === 0 ? "secondary" : "primary"}
+              className="mt-6 w-full"
+            >
+              {plan.cta}
+            </LandingButtonLink>
+          </article>
+        ))}
+      </div>
+    </LandingSection>
+  );
+}
+
+export function LandingFaqSection() {
+  return (
+    <LandingSection
+      id="faq"
+      eyebrow="FAQ"
+      title="Common questions, clear answers."
+      description="If you need more detail, we can expand these as we finalize product copy."
+    >
+      <div className="space-y-3">
+        {FAQS.map((item) => (
+          <article
+            key={item.question}
+            className="rounded-xl border border-[var(--landing-border)] bg-[var(--landing-surface)] p-5"
+          >
+            <h3 className="text-base font-semibold text-[var(--landing-ink)]">
+              {item.question}
+            </h3>
+            <p className="mt-2 text-sm text-[var(--landing-subtle-ink)]">
+              {item.answer}
+            </p>
+          </article>
+        ))}
+      </div>
+    </LandingSection>
+  );
+}
+
+export function LandingBottomCtaSection() {
+  return (
+    <LandingSection
+      id="start"
+      eyebrow="Get Started"
+      title="Ready to turn reading into momentum?"
+      description="Create your account and start shaping your knowledge profile."
+    >
+      <div className="flex flex-wrap gap-3">
+        <LandingButtonLink href="/dashboard?mode=signup" className="min-w-40">
+          Start Free
+        </LandingButtonLink>
+        <LandingButtonLink
+          href="/dashboard?mode=signin"
+          emphasis="secondary"
+          className="min-w-40"
+        >
+          I have an account
+        </LandingButtonLink>
+      </div>
+    </LandingSection>
+  );
+}
