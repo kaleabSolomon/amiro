@@ -21,6 +21,11 @@ function createAuth(ctx: GenericCtx<DataModel>) {
       enabled: true,
       requireEmailVerification: false,
     },
+    session: {
+      // Keep persistent sessions for 30 days when rememberMe=true.
+      expiresIn: 60 * 60 * 24 * 30,
+      updateAge: 60 * 60 * 24,
+    },
     plugins: [
       convex({
         authConfig,

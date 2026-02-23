@@ -21,6 +21,7 @@ export default function SignInForm({
 }) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [keepLoggedIn, setKeepLoggedIn] = useState(true);
 
   const form = useForm({
     defaultValues: {
@@ -28,10 +29,12 @@ export default function SignInForm({
       password: "",
     },
     onSubmit: async ({ value }) => {
+      window.localStorage.setItem("amiro_last_remember_me", String(keepLoggedIn));
       await authClient.signIn.email(
         {
           email: value.email,
           password: value.password,
+          rememberMe: keepLoggedIn,
         },
         {
           onSuccess: () => {
@@ -216,6 +219,8 @@ export default function SignInForm({
             <div className="flex items-center gap-2">
               <Checkbox
                 id="keep-logged-in"
+                checked={keepLoggedIn}
+                onCheckedChange={(checked) => setKeepLoggedIn(checked === true)}
                 className="h-4 w-4 rounded-[4px] border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
               />
               <label
