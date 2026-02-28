@@ -18,11 +18,13 @@ export default function SignUpForm({
 	onVerificationRequired?: (email: string) => void;
 }) {
 	const [showPassword, setShowPassword] = useState(false);
+	const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
 	const form = useForm({
 		defaultValues: {
 			email: "",
 			password: "",
+			confirmPassword: "",
 			name: "",
 		},
 		onSubmit: async ({ value }) => {
@@ -44,11 +46,19 @@ export default function SignUpForm({
 			);
 		},
 		validators: {
-			onSubmit: z.object({
-				name: z.string().min(2, "Name must be at least 2 characters"),
-				email: z.email("Invalid email address"),
-				password: z.string().min(8, "Password must be at least 8 characters"),
-			}),
+			onSubmit: z
+				.object({
+					name: z.string().min(2, "Name must be at least 2 characters"),
+					email: z.email("Invalid email address"),
+					password: z.string().min(8, "Password must be at least 8 characters"),
+					confirmPassword: z
+						.string()
+						.min(8, "Confirm password must be at least 8 characters"),
+				})
+				.refine((data) => data.password === data.confirmPassword, {
+					path: ["confirmPassword"],
+					message: "Passwords do not match",
+				}),
 		},
 	});
 
@@ -220,7 +230,7 @@ export default function SignUpForm({
 									<Input
 										id={field.name}
 										name={field.name}
-										type={showPassword ? "text" : "password"}
+										type={showConfirmPassword ? "text" : "password"}
 										placeholder="••••••••••"
 										value={field.state.value}
 										onBlur={field.handleBlur}
@@ -234,6 +244,64 @@ export default function SignUpForm({
 										stroke="currentColor"
 									>
 										<title>password</title>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth="1.5"
+											d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+										/>
+									</svg>
+									<button
+										type="button"
+										onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+										className="absolute top-3 right-3 text-muted-foreground/50 transition-colors hover:text-foreground"
+									>
+										{showConfirmPassword ? (
+											<EyeOff className="h-5 w-5 stroke-[1.5]" />
+										) : (
+											<Eye className="h-5 w-5 stroke-[1.5]" />
+										)}
+									</button>
+								</div>
+								{field.state.meta.errors.map((error) => (
+									<p
+										key={error?.message}
+										className="font-medium text-[11px] text-destructive"
+									>
+										{error?.message}
+									</p>
+								))}
+							</div>
+						)}
+					</form.Field>
+
+					<form.Field name="confirmPassword">
+						{(field) => (
+							<div className="space-y-1.5">
+								<Label
+									htmlFor={field.name}
+									className="font-medium text-muted-foreground text-xs"
+								>
+									Confirm Password *
+								</Label>
+								<div className="relative">
+									<Input
+										id={field.name}
+										name={field.name}
+										type={showPassword ? "text" : "password"}
+										placeholder="••••••••••"
+										value={field.state.value}
+										onBlur={field.handleBlur}
+										onChange={(e) => field.handleChange(e.target.value)}
+										className="h-11 rounded-lg border border-input px-4 pr-10 pl-10 tracking-widest shadow-xs placeholder:tracking-widest"
+									/>
+									<svg
+										className="absolute top-3 left-3 h-5 w-5 text-muted-foreground/50"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke="currentColor"
+									>
+										<title>confirm password</title>
 										<path
 											strokeLinecap="round"
 											strokeLinejoin="round"

@@ -14,7 +14,11 @@ import { Checkbox } from "./ui/checkbox";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
-export default function SignInForm() {
+export default function SignInForm({
+	onForgotPassword,
+}: {
+	onForgotPassword?: () => void;
+}) {
 	const router = useRouter();
 	const [showPassword, setShowPassword] = useState(false);
 	const [keepLoggedIn, setKeepLoggedIn] = useState(true);
@@ -34,7 +38,7 @@ export default function SignInForm() {
 					email: value.email,
 					password: value.password,
 					rememberMe: keepLoggedIn,
-					callbackURL: "/auth?mode=signin&verification=success",
+					callbackURL: "/dashboard",
 				},
 				{
 					onSuccess: () => {
@@ -245,6 +249,7 @@ export default function SignInForm() {
 						</div>
 						<button
 							type="button"
+							onClick={onForgotPassword}
 							className="font-medium text-muted-foreground text-xs underline underline-offset-4 hover:text-foreground"
 						>
 							Forgot password?

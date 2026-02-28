@@ -9,7 +9,9 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as email_sendPasswordResetEmail from "../email/sendPasswordResetEmail.js";
 import type * as email_sendVerificationEmail from "../email/sendVerificationEmail.js";
+import type * as email_templates_passwordResetEmail from "../email/templates/passwordResetEmail.js";
 import type * as email_templates_verificationEmail from "../email/templates/verificationEmail.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
@@ -23,7 +25,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  "email/sendPasswordResetEmail": typeof email_sendPasswordResetEmail;
   "email/sendVerificationEmail": typeof email_sendVerificationEmail;
+  "email/templates/passwordResetEmail": typeof email_templates_passwordResetEmail;
   "email/templates/verificationEmail": typeof email_templates_verificationEmail;
   healthCheck: typeof healthCheck;
   http: typeof http;

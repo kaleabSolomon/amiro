@@ -5,6 +5,7 @@ import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import authConfig from "./auth.config";
+import { sendPasswordResetEmail } from "./email/sendPasswordResetEmail";
 import { sendVerificationEmail } from "./email/sendVerificationEmail";
 
 const siteUrl = process.env.SITE_URL || "http://localhost:3000";
@@ -19,6 +20,13 @@ function createAuth(ctx: GenericCtx<DataModel>) {
 		emailAndPassword: {
 			enabled: true,
 			requireEmailVerification: true,
+			sendResetPassword: async ({ user, url }) => {
+				await sendPasswordResetEmail({
+					to: user.email,
+					userName: user.name,
+					resetUrl: url,
+				});
+			},
 		},
 		emailVerification: {
 			sendOnSignUp: true,

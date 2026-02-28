@@ -3,39 +3,83 @@
 import { Chrome, Instagram, Music2, Twitter, Youtube } from "lucide-react";
 import { motion } from "motion/react";
 
-const PLATFORMS = [
-	{ icon: Youtube, color: "text-red-500", label: "YouTube" },
-	{ icon: Twitter, color: "text-sky-500", label: "Twitter" },
-	{ icon: Instagram, color: "text-pink-500", label: "Instagram" },
-	{ icon: Chrome, color: "text-green-500", label: "Chrome" },
-	{ icon: Music2, color: "text-black dark:text-white", label: "TikTok" }, // Using Music2 as TikTok placeholder
-];
-
-// Calculate positions in a semi-circle/circle around the center
-const RADIUS = 140;
 const CENTER_X = 200;
 const CENTER_Y = 200;
+const RADIUS = 140;
 
-const nodes = PLATFORMS.map((platform, i) => {
-	// Distribute around 360 degrees
+const PLATFORMS = [
+	{ id: "youtube", icon: Youtube, color: "text-red-500", label: "YouTube" },
+	{ id: "twitter", icon: Twitter, color: "text-sky-500", label: "Twitter" },
+	{
+		id: "instagram",
+		icon: Instagram,
+		color: "text-pink-500",
+		label: "Instagram",
+	},
+	{ id: "chrome", icon: Chrome, color: "text-green-500", label: "Chrome" },
+	{
+		id: "tiktok",
+		icon: Music2,
+		color: "text-black dark:text-white",
+		label: "TikTok",
+	},
+];
+
+const ORBIT_STEPS = [
+	{ radial: 0, tangential: 0 },
+	{ radial: -7, tangential: 8 },
+	{ radial: 0, tangential: 0 },
+	{ radial: 6, tangential: -7 },
+	{ radial: 0, tangential: 0 },
+];
+
+function connectorPath(startX: number, startY: number, bendDirection: 1 | -1) {
+	const vx = CENTER_X - startX;
+	const vy = CENTER_Y - startY;
+	const len = Math.hypot(vx, vy) || 1;
+	const nx = (-vy / len) * bendDirection;
+	const ny = (vx / len) * bendDirection;
+	const curve = 18;
+	const cpX = startX + vx * 0.52 + nx * curve;
+	const cpY = startY + vy * 0.52 + ny * curve;
+
+	return `M ${startX.toFixed(2)} ${startY.toFixed(2)} Q ${cpX.toFixed(2)} ${cpY.toFixed(2)} ${CENTER_X} ${CENTER_Y}`;
+}
+
+const NODES = PLATFORMS.map((platform, i) => {
 	const angle = (i / PLATFORMS.length) * Math.PI * 2 - Math.PI / 2;
 	const x = CENTER_X + RADIUS * Math.cos(angle);
 	const y = CENTER_Y + RADIUS * Math.sin(angle);
 
-	// Create a curved path from node to center
-	// Control point is offset for a natural curve
-	const cpX = CENTER_X + RADIUS * 0.5 * Math.cos(angle + 0.5);
-	const cpY = CENTER_Y + RADIUS * 0.5 * Math.sin(angle + 0.5);
+	const rx = Math.cos(angle);
+	const ry = Math.sin(angle);
+	const tx = -ry;
+	const ty = rx;
+	const amplitude = 0.95 + (i % 3) * 0.12;
 
-	const path = `M ${x} ${y} Q ${cpX} ${cpY} ${CENTER_X} ${CENTER_Y}`;
+	const offsets = ORBIT_STEPS.map((step) => {
+		const dx = (rx * step.radial + tx * step.tangential) * amplitude;
+		const dy = (ry * step.radial + ty * step.tangential) * amplitude;
+		return { dx, dy };
+	});
 
-	return { ...platform, x, y, path };
+	return {
+		...platform,
+		x,
+		y,
+		xFrames: offsets.map(({ dx }) => dx),
+		yFrames: offsets.map(({ dy }) => dy),
+		pathFrames: offsets.map(({ dx, dy }) =>
+			connectorPath(x + dx, y + dy, i % 2 === 0 ? 1 : -1),
+		),
+		duration: 5.6 + i * 0.35,
+		delay: i * 0.28,
+	};
 });
 
 export function LandingHeroAnimation() {
 	return (
 		<div className="relative mx-auto flex aspect-square w-full max-w-[400px] items-center justify-center">
-			{/* Connecting Lines */}
 			<svg
 				aria-hidden="true"
 				focusable="false"
@@ -43,95 +87,109 @@ export function LandingHeroAnimation() {
 				viewBox="0 0 400 400"
 			>
 				<defs>
-					<linearGradient id="pulse-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-						<stop
-							offset="0%"
-							stopColor="var(--landing-accent)"
-							stopOpacity="0"
-						/>
+					<linearGradient
+						id="hero-flow-gradient"
+						x1="0%"
+						y1="0%"
+						x2="100%"
+						y2="0%"
+					>
+						<stop offset="0%" stopColor="white" stopOpacity="0" />
+						<stop offset="18%" stopColor="white" stopOpacity="0.8" />
 						<stop
 							offset="50%"
 							stopColor="var(--landing-accent)"
 							stopOpacity="1"
 						/>
-						<stop
-							offset="100%"
-							stopColor="var(--landing-accent)"
-							stopOpacity="0"
-						/>
+						<stop offset="82%" stopColor="white" stopOpacity="0.65" />
+						<stop offset="100%" stopColor="white" stopOpacity="0" />
 					</linearGradient>
 				</defs>
 
-				{nodes.map((node, i) => (
-					<g key={`line-group-${node.label}`}>
-						{/* Base faded line */}
-						<path
-							d={node.path}
-							fill="none"
-							stroke="var(--landing-border)"
-							strokeWidth="1.5"
-							className="opacity-50"
-						/>
-						{/* Animated pulse flowing to center */}
+				{NODES.map((node) => (
+					<g key={`line-group-${node.id}`}>
 						<motion.path
-							d={node.path}
 							fill="none"
-							stroke="url(#pulse-gradient)"
-							strokeWidth="2"
+							stroke="white"
+							strokeWidth="1.5"
 							strokeLinecap="round"
-							initial={{ pathLength: 0, pathOffset: 1, opacity: 0 }}
+							className="opacity-55"
+							initial={false}
+							animate={{ d: node.pathFrames }}
+							transition={{
+								d: {
+									duration: node.duration,
+									repeat: Number.POSITIVE_INFINITY,
+									ease: "easeInOut",
+									delay: node.delay,
+								},
+							}}
+						/>
+						<motion.path
+							fill="none"
+							stroke="url(#hero-flow-gradient)"
+							strokeWidth="3"
+							strokeLinecap="round"
+							className="drop-shadow-[0_0_10px_var(--landing-glow-b)]"
+							pathLength={1}
+							strokeDasharray="0.56 0.44"
+							initial={false}
 							animate={{
-								pathLength: [0, 0.5, 0],
-								pathOffset: [1, 0.5, 0],
-								opacity: [0, 1, 0],
+								d: node.pathFrames,
+								strokeDashoffset: [0, -1],
 							}}
 							transition={{
-								duration: 2.5,
-								repeat: Number.POSITIVE_INFINITY,
-								ease: "linear",
-								delay: i * 0.4, // Stagger delays for a living feel
+								d: {
+									duration: node.duration,
+									repeat: Number.POSITIVE_INFINITY,
+									ease: "easeInOut",
+									delay: node.delay,
+								},
+								strokeDashoffset: {
+									duration: 2.6,
+									repeat: Number.POSITIVE_INFINITY,
+									ease: "linear",
+									delay: node.delay * 0.5,
+								},
 							}}
 						/>
 					</g>
 				))}
 			</svg>
 
-			{/* Outer Nodes */}
-			{nodes.map((node, i) => (
+			{NODES.map((node) => (
 				<motion.div
-					key={`node-${node.label}`}
+					key={`node-${node.id}`}
 					className="absolute z-10 flex h-12 w-12 items-center justify-center rounded-xl border border-(--landing-border) bg-(--landing-panel) text-(--landing-subtle-ink) shadow-sm"
 					style={{
-						left: node.x - 24, // minus half width to center
+						left: node.x - 24,
 						top: node.y - 24,
 					}}
+					initial={false}
 					animate={{
-						y: ["0%", "-10%", "0%"],
-						x: ["0%", "5%", "0%"],
+						x: node.xFrames,
+						y: node.yFrames,
 					}}
 					transition={{
-						duration: 3 + i * 0.5,
+						duration: node.duration,
 						repeat: Number.POSITIVE_INFINITY,
 						ease: "easeInOut",
+						delay: node.delay,
 					}}
 				>
 					<node.icon className={`h-6 w-6 ${node.color}`} />
 				</motion.div>
 			))}
 
-			{/* Center Logo Node */}
 			<motion.div
 				className="relative z-20 flex h-24 w-24 items-center justify-center rounded-3xl border-(--landing-accent) border-2 bg-(--landing-surface) shadow-[0_0_30px_var(--landing-glow-a)]"
-				animate={{
-					scale: [1, 1.05, 1],
-				}}
+				animate={{ scale: [1, 1.05, 1] }}
 				transition={{
 					duration: 4,
 					repeat: Number.POSITIVE_INFINITY,
 					ease: "easeInOut",
 				}}
 			>
-				{/* Placeholder for Amiro Logo */}
 				<span className="font-bold text-(--landing-ink) text-xl">Amiro</span>
 			</motion.div>
 		</div>
