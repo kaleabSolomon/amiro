@@ -22,6 +22,20 @@ export default function SignInForm({
 	const router = useRouter();
 	const [showPassword, setShowPassword] = useState(false);
 	const [keepLoggedIn, setKeepLoggedIn] = useState(true);
+	const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+	const handleGoogleSignIn = async () => {
+		setIsGoogleLoading(true);
+		try {
+			await authClient.signIn.social({
+				provider: "google",
+				callbackURL: "/dashboard",
+			});
+		} catch {
+			toast.error("Google sign in failed. Please try again.");
+			setIsGoogleLoading(false);
+		}
+	};
 
 	const form = useForm({
 		defaultValues: {
@@ -83,8 +97,11 @@ export default function SignInForm({
 
 			<div className="w-full space-y-5">
 				<Button
+					type="button"
 					variant="outline"
 					className="h-11 w-full rounded-lg border border-input bg-background font-normal shadow-xs"
+					onClick={handleGoogleSignIn}
+					disabled={isGoogleLoading}
 				>
 					<svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
 						<title>Google Logo</title>
@@ -105,7 +122,9 @@ export default function SignInForm({
 							fill="#EA4335"
 						/>
 					</svg>
-					Continue with Google
+					{isGoogleLoading
+						? "Redirecting to Google..."
+						: "Continue with Google"}
 				</Button>
 
 				<div className="relative">

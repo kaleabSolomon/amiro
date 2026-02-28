@@ -13,10 +13,23 @@ const siteUrl = process.env.SITE_URL || "http://localhost:3000";
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 function createAuth(ctx: GenericCtx<DataModel>) {
+	const googleClientId = process.env.GOOGLE_CLIENT_ID;
+	const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
 	return betterAuth({
 		baseURL: siteUrl,
 		trustedOrigins: [siteUrl],
 		database: authComponent.adapter(ctx),
+		...(googleClientId && googleClientSecret
+			? {
+					socialProviders: {
+						google: {
+							clientId: googleClientId,
+							clientSecret: googleClientSecret,
+						},
+					},
+				}
+			: {}),
 		emailAndPassword: {
 			enabled: true,
 			requireEmailVerification: true,

@@ -19,6 +19,20 @@ export default function SignUpForm({
 }) {
 	const [showPassword, setShowPassword] = useState(false);
 	const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+	const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+	const handleGoogleSignUp = async () => {
+		setIsGoogleLoading(true);
+		try {
+			await authClient.signIn.social({
+				provider: "google",
+				callbackURL: "/dashboard",
+			});
+		} catch {
+			toast.error("Google sign up failed. Please try again.");
+			setIsGoogleLoading(false);
+		}
+	};
 
 	const form = useForm({
 		defaultValues: {
@@ -76,8 +90,11 @@ export default function SignUpForm({
 
 			<div className="w-full space-y-5">
 				<Button
+					type="button"
 					variant="outline"
 					className="h-11 w-full rounded-lg border border-input bg-background font-normal shadow-xs"
+					onClick={handleGoogleSignUp}
+					disabled={isGoogleLoading}
 				>
 					<svg
 						aria-hidden="true"
@@ -102,7 +119,7 @@ export default function SignUpForm({
 							fill="#EA4335"
 						/>
 					</svg>
-					Sign up with Google
+					{isGoogleLoading ? "Redirecting to Google..." : "Sign up with Google"}
 				</Button>
 
 				<div className="relative">
