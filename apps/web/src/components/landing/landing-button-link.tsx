@@ -1,5 +1,5 @@
-import Link from "next/link";
 import type { Route } from "next";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -21,9 +21,9 @@ export function LandingButtonLink({
     <Link
       href={href}
       className={cn(
-        "inline-flex h-11 items-center justify-center rounded-md border px-5 text-sm font-semibold transition-colors",
+        "inline-flex h-11 items-center justify-center rounded-md border px-5 font-semibold text-sm transition-colors",
         "border-[var(--landing-border)]",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--landing-bg)] focus-visible:outline-none",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--landing-bg)]",
         emphasis === "primary"
           ? "bg-[var(--landing-accent)] text-[var(--landing-accent-foreground)] shadow-sm hover:brightness-95"
           : "bg-[var(--landing-surface)] text-[var(--landing-ink)] hover:bg-[var(--landing-panel)]",

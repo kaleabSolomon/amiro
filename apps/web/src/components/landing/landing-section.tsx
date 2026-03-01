@@ -20,18 +20,23 @@ export function LandingSection({
   children,
 }: LandingSectionProps) {
   return (
-    <section id={id} className={cn("mx-auto w-full max-w-6xl px-6 py-14 sm:py-16", className)}>
+    <section
+      id={id}
+      className={cn("mx-auto w-full max-w-6xl px-6 py-14 sm:py-16", className)}
+    >
       <div className="mb-8 space-y-3">
         {eyebrow ? (
-          <p className="text-xs font-medium tracking-[0.14em] text-[var(--landing-subtle-ink)] uppercase">
+          <p className="font-medium text-[var(--landing-subtle-ink)] text-xs uppercase tracking-[0.14em]">
             {eyebrow}
           </p>
         ) : null}
-        <h2 className="text-balance text-3xl font-semibold tracking-tight text-[var(--landing-ink)] sm:text-4xl">
+        <h2 className="text-balance font-semibold text-3xl text-[var(--landing-ink)] tracking-tight sm:text-4xl">
           {title}
         </h2>
         {description ? (
-          <p className="max-w-2xl text-sm text-[var(--landing-subtle-ink)] sm:text-base">{description}</p>
+          <p className="max-w-2xl text-[var(--landing-subtle-ink)] text-sm sm:text-base">
+            {description}
+          </p>
         ) : null}
       </div>
       {children}

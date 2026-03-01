@@ -25,7 +25,8 @@
     "dev:server": "turbo -F @amiro/backend dev",
     "dev:setup": "turbo -F @amiro/backend dev:setup",
     "check": "biome check --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:extension": "turbo -F extension dev"
   },
   "dependencies": {
     "@amiro/env": "workspace:*",

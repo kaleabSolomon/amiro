@@ -1,0 +1,22 @@
+{
+  "name": "extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -noEmit && vite build",
+    "check-types": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@amiro/config": "workspace:*",
+    "@crxjs/vite-plugin": "^2.1.0-beta.30",
+    "@types/chrome": "^0.0.319",
+    "typescript": "catalog:",
+    "vite": "^7.1.5"
+  }
+}

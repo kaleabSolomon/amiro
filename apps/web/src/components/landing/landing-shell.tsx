@@ -17,7 +17,7 @@ export function LandingShell({
         <LandingNav hideAuth={hideAuth} />
         {children}
       </main>
-      <SiteFooter className="relative z-10 border-t border-(--landing-border)/70" />
+      <SiteFooter className="relative z-10 border-(--landing-border)/70 border-t" />
     </div>
   );
 }

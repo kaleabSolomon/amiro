@@ -1,28 +1,28 @@
 type PasswordResetEmailTemplateInput = {
-	appName: string;
-	userName?: string | null;
-	resetUrl: string;
+  appName: string;
+  userName?: string | null;
+  resetUrl: string;
 };
 
 export function buildPasswordResetEmailTemplate({
-	appName,
-	userName,
-	resetUrl,
+  appName,
+  userName,
+  resetUrl,
 }: PasswordResetEmailTemplateInput) {
-	const greeting = userName ? `Hi ${userName},` : "Hi,";
-	const subject = `Reset your ${appName} password`;
+  const greeting = userName ? `Hi ${userName},` : "Hi,";
+  const subject = `Reset your ${appName} password`;
 
-	const text = [
-		greeting,
-		"",
-		`We received a request to reset your password for ${appName}.`,
-		"",
-		`Open this link to set a new password: ${resetUrl}`,
-		"",
-		"If you did not request this, you can safely ignore this email.",
-	].join("\n");
+  const text = [
+    greeting,
+    "",
+    `We received a request to reset your password for ${appName}.`,
+    "",
+    `Open this link to set a new password: ${resetUrl}`,
+    "",
+    "If you did not request this, you can safely ignore this email.",
+  ].join("\n");
 
-	const html = `
+  const html = `
 <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111;max-width:560px;margin:0 auto;padding:24px;">
   <h1 style="font-size:20px;margin:0 0 16px;">Reset your password</h1>
   <p style="margin:0 0 16px;">${greeting}</p>
@@ -36,5 +36,5 @@ export function buildPasswordResetEmailTemplate({
 </div>
 `.trim();
 
-	return { subject, text, html };
+  return { subject, text, html };
 }

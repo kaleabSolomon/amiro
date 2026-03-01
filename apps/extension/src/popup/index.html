@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Amiro Clipper</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="popup-header">
+        <p class="kicker">Amiro</p>
+        <h1>Web Clipper</h1>
+        <p class="muted">Capture the active page into your sync queue.</p>
+      </header>
+
+      <button id="capture" class="button" type="button">Save Current Tab</button>
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <section class="meta">
+        <p><span>Shortcut</span><strong>Ctrl/Cmd + Shift + S</strong></p>
+        <p><span>Source</span><strong>Chrome</strong></p>
+      </section>
+    </main>
+
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

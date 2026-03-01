@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import type { Route } from "next";
-import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { ModeToggle } from "@/components/mode-toggle";
 import { LandingButtonLink } from "./landing-button-link";
@@ -26,8 +26,8 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
     <header
       className={`sticky top-0 z-50 w-full transition-all duration-300 ${
         isScrolled
-          ? "bg-background/40 border-b border-(--landing-border)/10"
-          : "bg-transparent border-transparent"
+          ? "border-(--landing-border)/10 border-b bg-background/40"
+          : "border-transparent bg-transparent"
       }`}
       style={{
         backdropFilter: isScrolled ? "blur(14px) saturate(125%)" : "none",
@@ -39,7 +39,7 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
       >
         <Link
           href="/"
-          className="inline-flex rounded-md border border-(--landing-border) bg-(--landing-surface) px-3 py-1.5 text-sm font-semibold tracking-tight text-(--landing-ink)"
+          className="inline-flex rounded-md border border-(--landing-border) bg-(--landing-surface) px-3 py-1.5 font-semibold text-(--landing-ink) text-sm tracking-tight"
         >
           Amiro
         </Link>
@@ -48,7 +48,7 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-(--landing-subtle-ink) transition-colors hover:text-(--landing-ink)"
+              className="font-medium text-(--landing-subtle-ink) text-sm transition-colors hover:text-(--landing-ink)"
             >
               {link.label}
             </Link>

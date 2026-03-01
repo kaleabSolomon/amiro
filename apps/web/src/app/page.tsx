@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
 
 import { LandingHero } from "@/components/landing/landing-hero";
-import { LandingBottomCtaSection, LandingFaqSection, LandingHowItWorksSection, LandingPricingSection, LandingWhatWeDoSection } from "@/components/landing/landing-sections";
+import {
+  LandingBottomCtaSection,
+  LandingFaqSection,
+  LandingHowItWorksSection,
+  LandingPricingSection,
+  LandingWhatWeDoSection,
+} from "@/components/landing/landing-sections";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { getToken } from "@/lib/auth-server";
 
