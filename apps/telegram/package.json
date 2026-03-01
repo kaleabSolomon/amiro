@@ -1,0 +1,22 @@
+{
+  "name": "telegram",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "dotenv": "catalog:",
+    "grammy": "^1.41.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@amiro/config": "workspace:*",
+    "@types/node": "^24.3.0",
+    "typescript": "catalog:"
+  }
+}
