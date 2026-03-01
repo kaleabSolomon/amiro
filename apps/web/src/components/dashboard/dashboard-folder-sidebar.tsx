@@ -14,14 +14,14 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import type { MockFolder } from "./mock-data";
+import type { DashboardFolder } from "./types";
 
 export function DashboardFolderSidebar({
   folders,
   selectedFolderId,
   onSelectFolder,
 }: {
-  folders: MockFolder[];
+  folders: DashboardFolder[];
   selectedFolderId: string;
   onSelectFolder: (folderId: string) => void;
 }) {
@@ -31,7 +31,7 @@ export function DashboardFolderSidebar({
   );
 
   const folderEntries = useMemo(() => {
-    const getDepth = (folder: MockFolder) => {
+    const getDepth = (folder: DashboardFolder) => {
       let depth = 0;
       let currentParentId = folder.parentId;
 

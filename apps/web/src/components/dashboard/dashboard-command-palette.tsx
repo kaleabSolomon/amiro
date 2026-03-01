@@ -4,7 +4,7 @@ import { FolderClosed } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 
-import type { MockFolder } from "./mock-data";
+import type { DashboardFolder } from "./types";
 
 export function DashboardCommandPalette({
   open,
@@ -17,7 +17,7 @@ export function DashboardCommandPalette({
   open: boolean;
   query: string;
   onQueryChange: (query: string) => void;
-  folders: MockFolder[];
+  folders: DashboardFolder[];
   onClose: () => void;
   onSelectFolder: (folderId: string) => void;
 }) {

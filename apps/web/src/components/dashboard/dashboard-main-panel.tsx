@@ -1,26 +1,38 @@
 "use client";
 
-import { FolderClosed, Hash, Search } from "lucide-react";
+import { ExternalLink, FolderClosed, Hash, Plus, Search } from "lucide-react";
+import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 import { DashboardBreadcrumbs } from "./dashboard-breadcrumbs";
-import type { MockFolder } from "./mock-data";
+import { formatRelativeTime } from "./time";
+import type { DashboardBookmark, DashboardFolder } from "./types";
 
 export function DashboardMainPanel({
   selectedFolder,
   breadcrumbs,
   childFolders,
+  bookmarks,
+  creatingFolder,
   onSelectFolder,
+  onCreateFolder,
   onOpenSearch,
 }: {
-  selectedFolder: MockFolder;
-  breadcrumbs: MockFolder[];
-  childFolders: MockFolder[];
+  selectedFolder: DashboardFolder;
+  breadcrumbs: DashboardFolder[];
+  childFolders: DashboardFolder[];
+  bookmarks: DashboardBookmark[];
+  creatingFolder: boolean;
   onSelectFolder: (folderId: string) => void;
+  onCreateFolder: (name: string) => void;
   onOpenSearch: () => void;
 }) {
+  const [creatingMode, setCreatingMode] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+
   return (
     <div className="rounded-2xl border border-border/80 bg-card/70 p-5 shadow-xs backdrop-blur-sm">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -56,12 +68,58 @@ export function DashboardMainPanel({
       />
 
       <header className="mb-4">
-        <h1 className="font-semibold text-2xl tracking-tight">
-          {selectedFolder.name}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="font-semibold text-2xl tracking-tight">
+            {selectedFolder.name}
+          </h1>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setCreatingMode((prev) => !prev)}
+            disabled={creatingFolder}
+          >
+            <Plus className="h-4 w-4" />
+            New folder
+          </Button>
+        </div>
+        {creatingMode ? (
+          <form
+            className="mt-3 flex gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!newFolderName.trim()) {
+                return;
+              }
+              onCreateFolder(newFolderName.trim());
+              setNewFolderName("");
+              setCreatingMode(false);
+            }}
+          >
+            <Input
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              placeholder="Folder name"
+              className="h-9"
+            />
+            <Button type="submit" size="sm" disabled={creatingFolder}>
+              Create
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setCreatingMode(false);
+                setNewFolderName("");
+              }}
+            >
+              Cancel
+            </Button>
+          </form>
+        ) : null}
         <p className="mt-1 text-muted-foreground text-sm">
           {selectedFolder.itemCount} saved items • updated{" "}
-          {selectedFolder.updatedAt}
+          {formatRelativeTime(selectedFolder.updatedAtMs)}
         </p>
       </header>
 
@@ -97,7 +155,8 @@ export function DashboardMainPanel({
                   <FolderClosed className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {folder.itemCount} items • updated {folder.updatedAt}
+                  {folder.itemCount} items • updated{" "}
+                  {formatRelativeTime(folder.updatedAtMs)}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {folder.tags.map((tag) => (
@@ -110,6 +169,55 @@ export function DashboardMainPanel({
                   ))}
                 </div>
               </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8">
+        <p className="mb-3 font-medium text-sm">Bookmarks</p>
+        {bookmarks.length === 0 ? (
+          <div className="rounded-xl border border-border border-dashed p-6 text-center text-muted-foreground text-sm">
+            No bookmarks in this folder yet.
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {bookmarks.map((bookmark) => (
+              <a
+                key={bookmark.id}
+                href={bookmark.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl border border-border/80 bg-background p-4 transition-colors hover:bg-muted"
+              >
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <p className="line-clamp-1 font-medium text-sm">
+                    {bookmark.title}
+                  </p>
+                  <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </div>
+                <p className="line-clamp-1 text-muted-foreground text-xs">
+                  {bookmark.url}
+                </p>
+                {bookmark.text ? (
+                  <p className="mt-2 line-clamp-2 text-muted-foreground text-xs">
+                    {bookmark.text}
+                  </p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground uppercase">
+                    {bookmark.source}
+                  </span>
+                  {bookmark.tags.slice(0, 5).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              </a>
             ))}
           </div>
         )}

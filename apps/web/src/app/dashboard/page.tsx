@@ -1,13 +1,22 @@
 "use client";
 
-import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
+import { api } from "@amiro/backend/convex/_generated/api";
+import type { Id } from "@amiro/backend/convex/_generated/dataModel";
+import {
+  Authenticated,
+  AuthLoading,
+  Unauthenticated,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
 import { DashboardFolderSidebar } from "@/components/dashboard/dashboard-folder-sidebar";
 import { DashboardMainPanel } from "@/components/dashboard/dashboard-main-panel";
-import { MOCK_FOLDERS } from "@/components/dashboard/mock-data";
+import type { DashboardFolder } from "@/components/dashboard/types";
 import { AppShell } from "@/components/layout/app-shell";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
@@ -22,20 +31,43 @@ function RedirectToAuth() {
 }
 
 function FolderWorkspace() {
-  const [selectedFolderId, setSelectedFolderId] = useState("inbox");
+  const [selectedFolderId, setSelectedFolderId] = useState("unfiled");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const foldersQuery = useQuery(api.dashboard.getFolderTree);
+  const bookmarks = useQuery(api.dashboard.getBookmarksForFolder, {
+    folderId: selectedFolderId,
+  });
+  const createFolder = useMutation(api.dashboard.createFolder);
+
+  const folders = useMemo<DashboardFolder[]>(() => {
+    if (!foldersQuery || foldersQuery.length === 0) {
+      return [
+        {
+          id: "unfiled",
+          name: "Unfiled",
+          parentId: null,
+          tags: [],
+          itemCount: 0,
+          updatedAtMs: null,
+        },
+      ];
+    }
+
+    return foldersQuery;
+  }, [foldersQuery]);
 
   const folderMap = useMemo(
-    () => new Map(MOCK_FOLDERS.map((folder) => [folder.id, folder])),
-    [],
+    () => new Map(folders.map((folder) => [folder.id, folder])),
+    [folders],
   );
 
-  const selectedFolder = folderMap.get(selectedFolderId) ?? MOCK_FOLDERS[0];
+  const selectedFolder = folderMap.get(selectedFolderId) ?? folders[0];
 
   const breadcrumbs = useMemo(() => {
-    const path = [] as typeof MOCK_FOLDERS;
-    let current: (typeof MOCK_FOLDERS)[number] | undefined = selectedFolder;
+    const path: DashboardFolder[] = [];
+    let current: DashboardFolder | undefined = selectedFolder;
 
     while (current) {
       path.unshift(current);
@@ -46,24 +78,29 @@ function FolderWorkspace() {
   }, [folderMap, selectedFolder]);
 
   const childFolders = useMemo(
-    () =>
-      MOCK_FOLDERS.filter((folder) => folder.parentId === selectedFolder.id),
-    [selectedFolder.id],
+    () => folders.filter((folder) => folder.parentId === selectedFolder.id),
+    [folders, selectedFolder.id],
   );
 
   const filteredFolders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) {
-      return MOCK_FOLDERS;
+      return folders;
     }
 
-    return MOCK_FOLDERS.filter((folder) => {
+    return folders.filter((folder) => {
       return (
         folder.name.toLowerCase().includes(query) ||
         folder.tags.some((tag) => tag.toLowerCase().includes(query))
       );
     });
-  }, [searchQuery]);
+  }, [folders, searchQuery]);
+
+  useEffect(() => {
+    if (!folderMap.has(selectedFolderId) && folders.length > 0) {
+      setSelectedFolderId(folders[0].id);
+    }
+  }, [folderMap, folders, selectedFolderId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -88,11 +125,36 @@ function FolderWorkspace() {
     setSearchQuery("");
   };
 
+  const handleCreateFolder = async (folderName: string) => {
+    if (creatingFolder) {
+      return;
+    }
+
+    setCreatingFolder(true);
+    try {
+      const result = await createFolder({
+        name: folderName.trim(),
+        parentFolderId:
+          selectedFolderId !== "unfiled"
+            ? (selectedFolderId as Id<"folders">)
+            : undefined,
+      });
+      setSelectedFolderId(result.id);
+      toast.success("Folder created.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create folder.";
+      toast.error(message);
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-8">
       <SidebarProvider>
         <DashboardFolderSidebar
-          folders={MOCK_FOLDERS}
+          folders={folders}
           selectedFolderId={selectedFolder.id}
           onSelectFolder={selectFolder}
         />
@@ -102,7 +164,10 @@ function FolderWorkspace() {
             selectedFolder={selectedFolder}
             breadcrumbs={breadcrumbs}
             childFolders={childFolders}
+            bookmarks={bookmarks ?? []}
+            creatingFolder={creatingFolder}
             onSelectFolder={selectFolder}
+            onCreateFolder={handleCreateFolder}
             onOpenSearch={() => setPaletteOpen(true)}
           />
         </SidebarInset>

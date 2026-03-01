@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as dashboard from "../dashboard.js";
 import type * as email_sendPasswordResetEmail from "../email/sendPasswordResetEmail.js";
 import type * as email_sendVerificationEmail from "../email/sendVerificationEmail.js";
 import type * as email_templates_passwordResetEmail from "../email/templates/passwordResetEmail.js";
@@ -26,6 +27,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  dashboard: typeof dashboard;
   "email/sendPasswordResetEmail": typeof email_sendPasswordResetEmail;
   "email/sendVerificationEmail": typeof email_sendVerificationEmail;
   "email/templates/passwordResetEmail": typeof email_templates_passwordResetEmail;

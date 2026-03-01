@@ -4,14 +4,14 @@ import { ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import type { MockFolder } from "./mock-data";
+import type { DashboardFolder } from "./types";
 
 export function DashboardBreadcrumbs({
   folders,
   selectedFolderId,
   onSelectFolder,
 }: {
-  folders: MockFolder[];
+  folders: DashboardFolder[];
   selectedFolderId: string;
   onSelectFolder: (folderId: string) => void;
 }) {
