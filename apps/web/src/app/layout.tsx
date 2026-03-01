@@ -5,7 +5,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "../index.css";
 import Providers from "@/components/providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { getToken } from "@/lib/auth-server";
+import { safeGetToken } from "@/lib/auth-server";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +27,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const token = await getToken();
+  const token = await safeGetToken();
   return (
     <html lang="en" suppressHydrationWarning>
       <body

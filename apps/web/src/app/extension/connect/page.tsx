@@ -1,10 +1,10 @@
 import { env } from "@amiro/env/web";
 import Link from "next/link";
 
-import { getToken } from "@/lib/auth-server";
+import { safeGetToken } from "@/lib/auth-server";
 
 export default async function ExtensionConnectPage() {
-  const token = await getToken();
+  const token = await safeGetToken();
 
   if (!token) {
     return (

@@ -1,4 +1,5 @@
 import { Bot } from "grammy";
+import { completeTelegramLink } from "./amiro-client";
 import { config } from "./config";
 import type { CapturePayload } from "./types";
 
@@ -32,6 +33,35 @@ export function createTelegramBot() {
   const bot = new Bot(config.botToken);
 
   bot.command("start", async (ctx) => {
+    const payload = ctx.match.trim();
+    if (payload.startsWith("link_")) {
+      if (!ctx.from) {
+        await ctx.reply(
+          "Could not identify Telegram user for linking. Please try again in a direct chat.",
+        );
+        return;
+      }
+
+      const token = payload.slice("link_".length);
+      try {
+        await completeTelegramLink({
+          token,
+          telegramUserId: ctx.from.id,
+          telegramChatId: ctx.chat.id,
+          telegramUsername: ctx.from.username,
+        });
+
+        await ctx.reply(
+          "Telegram connected to your Amiro account. You can now forward content here.",
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to link account.";
+        await ctx.reply(`Could not link this Telegram account: ${message}`);
+      }
+      return;
+    }
+
     await ctx.reply(
       "Amiro Telegram bot is running. Send a message with a URL to capture it.",
     );

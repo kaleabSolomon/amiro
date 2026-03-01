@@ -9,10 +9,10 @@ import {
   LandingWhatWeDoSection,
 } from "@/components/landing/landing-sections";
 import { LandingShell } from "@/components/landing/landing-shell";
-import { getToken } from "@/lib/auth-server";
+import { safeGetToken } from "@/lib/auth-server";
 
 export default async function Home() {
-  const token = await getToken();
+  const token = await safeGetToken();
 
   if (token) {
     redirect("/dashboard");

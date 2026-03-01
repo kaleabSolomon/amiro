@@ -13,3 +13,12 @@ export const {
   convexUrl: env.NEXT_PUBLIC_CONVEX_URL,
   convexSiteUrl: env.NEXT_PUBLIC_CONVEX_SITE_URL,
 });
+
+export async function safeGetToken() {
+  try {
+    return await getToken();
+  } catch (error) {
+    console.error("[auth] getToken failed", error);
+    return null;
+  }
+}

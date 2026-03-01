@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
 
 type FolderStats = {
@@ -29,6 +29,10 @@ function topTags(tagCounts: Map<string, number>, limit = 4) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([tag]) => tag);
+}
+
+function generateLinkToken() {
+  return `tg_${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
 export const getFolderTree = query({
@@ -200,5 +204,139 @@ export const getConnectedSources = query({
     return [...counts.entries()]
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count);
+  },
+});
+
+export const getTelegramConnectionStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return {
+        connected: false,
+      } as const;
+    }
+
+    const connection = await ctx.db
+      .query("telegramConnections")
+      .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+      .unique();
+
+    if (!connection || connection.status !== "active") {
+      return {
+        connected: false,
+      } as const;
+    }
+
+    return {
+      connected: true,
+      telegramUserId: connection.telegramUserId,
+      telegramChatId: connection.telegramChatId,
+      telegramUsername: connection.telegramUsername ?? null,
+      connectedAt: connection.connectedAt,
+    } as const;
+  },
+});
+
+export const createTelegramLinkToken = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const now = Date.now();
+    const token = generateLinkToken();
+    const expiresAt = now + 10 * 60 * 1000;
+
+    await ctx.db.insert("telegramLinkTokens", {
+      token,
+      userId: authUser._id,
+      createdAt: now,
+      expiresAt,
+    });
+
+    const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+    const deepLink = botUsername
+      ? `https://t.me/${botUsername}?start=link_${token}`
+      : null;
+
+    return {
+      token,
+      expiresAt,
+      deepLink,
+    };
+  },
+});
+
+export const completeTelegramLink = internalMutation({
+  args: {
+    token: v.string(),
+    telegramUserId: v.number(),
+    telegramChatId: v.number(),
+    telegramUsername: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const linkToken = await ctx.db
+      .query("telegramLinkTokens")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .unique();
+
+    if (!linkToken) {
+      throw new ConvexError("Invalid link token.");
+    }
+    if (linkToken.usedAt) {
+      throw new ConvexError("Link token already used.");
+    }
+    if (linkToken.expiresAt < now) {
+      throw new ConvexError("Link token expired.");
+    }
+
+    const existingByTelegram = await ctx.db
+      .query("telegramConnections")
+      .withIndex("by_telegram_user_id", (q) =>
+        q.eq("telegramUserId", args.telegramUserId),
+      )
+      .unique();
+
+    if (
+      existingByTelegram &&
+      existingByTelegram.userId !== linkToken.userId &&
+      existingByTelegram.status === "active"
+    ) {
+      throw new ConvexError("Telegram account is already linked.");
+    }
+
+    const existingByUser = await ctx.db
+      .query("telegramConnections")
+      .withIndex("by_user", (q) => q.eq("userId", linkToken.userId))
+      .unique();
+
+    if (existingByUser) {
+      await ctx.db.patch(existingByUser._id, {
+        telegramUserId: args.telegramUserId,
+        telegramChatId: args.telegramChatId,
+        telegramUsername: args.telegramUsername,
+        status: "active",
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("telegramConnections", {
+        userId: linkToken.userId,
+        telegramUserId: args.telegramUserId,
+        telegramChatId: args.telegramChatId,
+        telegramUsername: args.telegramUsername,
+        connectedAt: now,
+        updatedAt: now,
+        status: "active",
+      });
+    }
+
+    await ctx.db.patch(linkToken._id, {
+      usedAt: now,
+    });
+
+    return {
+      ok: true,
+      userId: linkToken.userId,
+    } as const;
   },
 });

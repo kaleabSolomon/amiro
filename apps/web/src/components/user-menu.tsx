@@ -38,9 +38,16 @@ export default function UserMenu() {
   const user = useQuery(api.auth.getCurrentUser);
   const sessions = useQuery(api.auth.getActiveSessions) ?? [];
   const connectedSources = useQuery(api.dashboard.getConnectedSources) ?? [];
+  const telegramConnection = useQuery(
+    api.dashboard.getTelegramConnectionStatus,
+  );
   const updateProfile = useMutation(api.auth.updateProfile);
+  const createTelegramLinkToken = useMutation(
+    api.dashboard.createTelegramLinkToken,
+  );
   const [displayName, setDisplayName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [creatingTelegramToken, setCreatingTelegramToken] = useState(false);
 
   useEffect(() => {
     setDisplayName(user?.name ?? "");
@@ -64,6 +71,29 @@ export default function UserMenu() {
       toast.error(message);
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const onConnectTelegram = async () => {
+    setCreatingTelegramToken(true);
+    try {
+      const result = await createTelegramLinkToken({});
+      if (result.deepLink) {
+        window.open(result.deepLink, "_blank", "noopener,noreferrer");
+      } else {
+        toast.info(
+          `Set TELEGRAM_BOT_USERNAME in backend env. Token: ${result.token}`,
+        );
+      }
+      toast.success("Open Telegram to finish linking.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to create Telegram link token.";
+      toast.error(message);
+    } finally {
+      setCreatingTelegramToken(false);
     }
   };
 
@@ -165,6 +195,34 @@ export default function UserMenu() {
                 ))}
               </div>
             )}
+            <div className="rounded-md border border-dashed p-2 text-xs">
+              {telegramConnection?.connected ? (
+                <p>
+                  Telegram linked as{" "}
+                  <span className="font-medium">
+                    {telegramConnection.telegramUsername
+                      ? `@${telegramConnection.telegramUsername}`
+                      : `ID ${telegramConnection.telegramUserId}`}
+                  </span>
+                  .
+                </p>
+              ) : (
+                <p className="text-muted-foreground">
+                  Telegram not linked yet.
+                </p>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2"
+                onClick={onConnectTelegram}
+                disabled={creatingTelegramToken}
+              >
+                {telegramConnection?.connected
+                  ? "Relink Telegram"
+                  : "Connect Telegram"}
+              </Button>
+            </div>
           </section>
 
           <section className="space-y-3 rounded-xl border p-3">

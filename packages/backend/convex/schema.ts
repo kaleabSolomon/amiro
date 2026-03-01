@@ -2,6 +2,27 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
+  telegramLinkTokens: defineTable({
+    token: v.string(),
+    userId: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"])
+    .index("by_user_and_used_at", ["userId", "usedAt"]),
+  telegramConnections: defineTable({
+    userId: v.string(),
+    telegramUserId: v.number(),
+    telegramChatId: v.number(),
+    telegramUsername: v.optional(v.string()),
+    connectedAt: v.number(),
+    updatedAt: v.number(),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+  })
+    .index("by_user", ["userId"])
+    .index("by_telegram_user_id", ["telegramUserId"]),
   folders: defineTable({
     userId: v.string(),
     name: v.string(),

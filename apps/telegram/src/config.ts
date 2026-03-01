@@ -20,6 +20,8 @@ const envSchema = z
       .string()
       .optional()
       .default("message,channel_post"),
+    AMIRO_CONVEX_SITE_URL: z.string().url(),
+    AMIRO_TELEGRAM_INTERNAL_SECRET: z.string().min(1),
     AMIRO_TELEGRAM_DEFAULT_TAGS: z
       .string()
       .optional()
@@ -49,6 +51,8 @@ export const config = {
   allowedUpdates: env.TELEGRAM_ALLOWED_UPDATES.split(",")
     .map((value) => value.trim())
     .filter((value) => value.length > 0),
+  convexSiteUrl: env.AMIRO_CONVEX_SITE_URL,
+  internalSecret: env.AMIRO_TELEGRAM_INTERNAL_SECRET,
   defaultTags: env.AMIRO_TELEGRAM_DEFAULT_TAGS.split(",")
     .map((value) => value.trim())
     .filter((value) => value.length > 0),

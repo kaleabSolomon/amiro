@@ -20,6 +20,13 @@ const syncCaptureSchema = z.object({
   capturedAt: z.string(),
 });
 
+const telegramLinkCompleteSchema = z.object({
+  token: z.string().min(1),
+  telegramUserId: z.number().int(),
+  telegramChatId: z.number().int(),
+  telegramUsername: z.string().optional(),
+});
+
 const syncCorsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -108,6 +115,78 @@ http.route({
         headers: syncCorsHeaders,
       },
     );
+  }),
+});
+
+http.route({
+  path: "/api/telegram/link/complete",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const internalSecret = process.env.TELEGRAM_INTERNAL_SECRET;
+    if (!internalSecret) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Server misconfigured: TELEGRAM_INTERNAL_SECRET missing.",
+        }),
+        { status: 500, headers: syncCorsHeaders },
+      );
+    }
+
+    const authHeader = request.headers.get("Authorization");
+    const expected = `Bearer ${internalSecret}`;
+    if (authHeader !== expected) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized bot request." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = telegramLinkCompleteSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid link completion payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const result = await ctx.runMutation(
+        internal.dashboard.completeTelegramLink,
+        {
+          token: parsed.data.token,
+          telegramUserId: parsed.data.telegramUserId,
+          telegramChatId: parsed.data.telegramChatId,
+          telegramUsername: parsed.data.telegramUsername,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data: result }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to complete link.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
   }),
 });
 
