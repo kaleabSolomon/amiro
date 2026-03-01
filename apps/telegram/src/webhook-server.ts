@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import type { Bot } from "grammy";
+import type { Bot, Context } from "grammy";
 import { webhookCallback } from "grammy";
 
 import { config } from "./config";
@@ -14,7 +14,7 @@ function json(status: number, payload: Record<string, unknown>) {
   };
 }
 
-export function startWebhookServer(bot: Bot) {
+export function startWebhookServer(bot: Bot<Context>) {
   const handleTelegram = webhookCallback(bot, "http");
 
   const server = createServer((req, res) => {
