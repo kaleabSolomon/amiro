@@ -13,7 +13,21 @@ import type {
 
 const HANDSHAKE_PATH = "/extension/connect";
 
-async function captureTab(tabId: number) {
+function isCapturableUrl(url?: string) {
+  if (!url) {
+    return false;
+  }
+
+  return !(
+    url.startsWith("chrome://") ||
+    url.startsWith("chrome-extension://") ||
+    url.startsWith("edge://") ||
+    url.startsWith("about:") ||
+    url.startsWith("view-source:")
+  );
+}
+
+async function extractViaContentScript(tabId: number) {
   const response = (await chrome.tabs.sendMessage(tabId, {
     type: "amiro/extract-page",
   })) as ExtensionMessageResponse;
@@ -22,18 +36,72 @@ async function captureTab(tabId: number) {
     throw new Error(response.ok ? "Capture returned no data." : response.error);
   }
 
-  await addCaptureToQueue(response.data);
   return response.data;
+}
+
+async function extractViaScripting(tabId: number) {
+  const [result] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const title = document.title || "Untitled page";
+      const url = window.location.href;
+      const text = document.body?.innerText?.slice(0, 12000) ?? "";
+      return {
+        url,
+        title,
+        text,
+        source: "chrome",
+        capturedAt: new Date().toISOString(),
+        tags: [] as string[],
+      };
+    },
+  });
+
+  if (!result?.result) {
+    throw new Error("Capture returned no data.");
+  }
+
+  return result.result as CapturePayload;
+}
+
+async function captureTab(tab: chrome.tabs.Tab) {
+  if (!tab.id) {
+    throw new Error("No active tab found.");
+  }
+
+  if (!isCapturableUrl(tab.url)) {
+    throw new Error(
+      "This tab cannot be captured. Open a regular website tab and try again.",
+    );
+  }
+
+  let capture: CapturePayload;
+
+  try {
+    capture = await extractViaContentScript(tab.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const shouldFallback = message.includes("Receiving end does not exist");
+
+    if (!shouldFallback) {
+      throw error;
+    }
+
+    capture = await extractViaScripting(tab.id);
+  }
+
+  await addCaptureToQueue(capture);
+  return capture;
 }
 
 async function captureCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  if (!tab?.id) {
+  if (!tab) {
     throw new Error("No active tab found.");
   }
 
-  return await captureTab(tab.id);
+  return await captureTab(tab);
 }
 
 async function notifyCapture(capture: CapturePayload) {
@@ -61,12 +129,12 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== "amiro-capture-page" || !tab?.id) {
+  if (info.menuItemId !== "amiro-capture-page" || !tab) {
     return;
   }
 
   try {
-    const capture = await captureTab(tab.id);
+    const capture = await captureTab(tab);
     await notifyCapture(capture);
   } catch (error) {
     console.error("[amiro-extension] context capture failed", error);

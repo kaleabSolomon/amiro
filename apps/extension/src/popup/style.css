@@ -1,30 +1,96 @@
+/* ── Amiro Design Tokens (Light) ───────────────────────────── */
 :root {
-  color-scheme: light;
-  font-family: "Geist", "Inter", sans-serif;
+  color-scheme: light dark;
+
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.56 0.11 153);
+  --primary-foreground: oklch(0.98 0.005 140);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.95 0.03 154);
+  --accent-foreground: oklch(0.24 0.03 153);
+  --destructive: oklch(0.58 0.22 27);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.6 0.08 153);
+  --radius: 0.625rem;
+
+  font-family:
+    "Geist",
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+/* ── Amiro Design Tokens (Dark — system) ──────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.63 0.1 153);
+    --primary-foreground: oklch(0.2 0.02 150);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.28 0.03 153);
+    --accent-foreground: oklch(0.94 0.01 153);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.62 0.08 153);
+  }
+}
+
+/* ── Reset & Shell ────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  margin: 0;
-  min-width: 320px;
-  background: #f7f9f8;
-  color: #121a14;
+  min-width: 340px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ── Popup Layout ─────────────────────────────────────────── */
 .popup {
   padding: 16px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.popup-header {
+  display: grid;
+  gap: 4px;
 }
 
 .popup-header h1 {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.2;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
 }
 
 .kicker {
-  margin: 0 0 6px;
-  color: #4d9d56;
+  color: var(--primary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -32,24 +98,39 @@ body {
 }
 
 .muted {
-  margin: 6px 0 0;
-  color: #5e6b62;
+  margin-top: 2px;
+  color: var(--muted-foreground);
   font-size: 12px;
+  line-height: 1.45;
 }
 
-.connection {
-  border: 1px solid #d9e1dc;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 10px;
+/* ── Card Sections (Connection & Meta) ───────────────────── */
+.connection,
+.meta {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+  padding: 12px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 4%);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.connection:hover,
+.meta:hover {
+  border-color: var(--ring);
+  box-shadow:
+    0 0 0 1px var(--ring),
+    0 1px 3px oklch(0 0 0 / 6%);
 }
 
 .connection-state {
-  margin: 0;
   font-size: 12px;
-  color: #3e4a43;
+  color: var(--muted-foreground);
 }
 
 .connection-actions {
@@ -58,59 +139,97 @@ body {
   gap: 8px;
 }
 
+/* ── Buttons ──────────────────────────────────────────────── */
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: #4d9d56;
-  color: #ffffff;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  background: var(--primary);
+  color: var(--primary-foreground);
   font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
+  transition:
+    opacity 0.15s ease,
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
+  outline: none;
+}
+
+.button:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--ring);
 }
 
 .button-secondary {
-  background: #e9efe9;
-  color: #1c2a20;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.button-secondary:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
 .button:disabled {
-  opacity: 0.7;
+  opacity: 0.5;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
-.hidden {
-  display: none;
-}
-
+/* ── Status Message ───────────────────────────────────────── */
 .status {
   min-height: 18px;
-  margin: 0;
   font-size: 12px;
-  color: #3e4a43;
+  color: var(--muted-foreground);
+  transition: color 0.15s ease;
 }
 
 .status[data-kind="error"] {
-  color: #b3261e;
+  color: var(--destructive);
+  font-weight: 500;
 }
 
-.meta {
-  border: 1px solid #d9e1dc;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 10px;
-  display: grid;
-  gap: 6px;
-}
-
+/* ── Meta Details ─────────────────────────────────────────── */
 .meta p {
-  margin: 0;
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  align-items: baseline;
+  gap: 12px;
   font-size: 11px;
 }
 
 .meta span {
-  color: #66756b;
+  color: var(--muted-foreground);
+}
+
+.meta strong {
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* ── Divider (optional utility) ───────────────────────────── */
+.divider {
+  height: 1px;
+  background: var(--border);
+  border: none;
+}
+
+/* ── Utilities ────────────────────────────────────────────── */
+.hidden {
+  display: none !important;
 }

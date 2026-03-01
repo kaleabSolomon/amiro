@@ -12,6 +12,7 @@ const disconnectButton =
 const status = document.querySelector<HTMLParagraphElement>("#status");
 const connectionState =
   document.querySelector<HTMLParagraphElement>("#connection-state");
+const AUTH_SESSION_KEY = "amiro_auth_session";
 
 function setStatus(message: string, kind: "default" | "error" = "default") {
   if (!status) {
@@ -154,6 +155,20 @@ disconnectButton?.addEventListener("click", () => {
 
 captureButton?.addEventListener("click", () => {
   void captureCurrentTab();
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes[AUTH_SESSION_KEY]) {
+    return;
+  }
+
+  const nextSession = (changes[AUTH_SESSION_KEY].newValue ??
+    null) as AuthSessionState | null;
+  setConnectionState(nextSession);
+});
+
+window.addEventListener("focus", () => {
+  void refreshConnectionState();
 });
 
 void refreshConnectionState();
