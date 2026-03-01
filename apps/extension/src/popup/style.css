@@ -20,12 +20,7 @@
   --ring: oklch(0.6 0.08 153);
   --radius: 0.625rem;
 
-  font-family:
-    "Geist",
-    "Inter",
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: "Geist", "Inter", system-ui, -apple-system, sans-serif;
 }
 
 /* ── Amiro Design Tokens (Dark — system) ──────────────────── */
@@ -126,6 +121,39 @@ body {
   box-shadow:
     0 0 0 1px var(--ring),
     0 1px 3px oklch(0 0 0 / 6%);
+}
+
+.folder-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.folder-picker label {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  padding: 9px 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.input:focus-visible {
+  border-color: var(--ring);
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--ring);
+}
+
+.input:disabled {
+  opacity: 0.6;
 }
 
 .connection-state {

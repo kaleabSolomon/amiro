@@ -13,6 +13,12 @@ import type {
 
 const HANDSHAKE_PATH = "/extension/connect";
 
+type CaptureSyncResult = {
+  capture: CapturePayload;
+  syncStatus: "synced" | "queued";
+  syncMessage?: string;
+};
+
 function isCapturableUrl(url?: string) {
   if (!url) {
     return false;
@@ -64,7 +70,7 @@ async function extractViaScripting(tabId: number) {
   return result.result as CapturePayload;
 }
 
-async function captureTab(tab: chrome.tabs.Tab) {
+async function captureTab(tab: chrome.tabs.Tab, folderId?: string) {
   if (!tab.id) {
     throw new Error("No active tab found.");
   }
@@ -90,26 +96,104 @@ async function captureTab(tab: chrome.tabs.Tab) {
     capture = await extractViaScripting(tab.id);
   }
 
-  await addCaptureToQueue(capture);
-  return capture;
+  if (folderId) {
+    capture = {
+      ...capture,
+      folderId,
+    };
+  }
+
+  const session = await getAuthSession();
+  if (!session) {
+    await addCaptureToQueue(capture);
+    return {
+      capture,
+      syncStatus: "queued",
+      syncMessage: "Not connected. Capture queued locally.",
+    } satisfies CaptureSyncResult;
+  }
+
+  if (!session.convexSiteUrl) {
+    await addCaptureToQueue(capture);
+    return {
+      capture,
+      syncStatus: "queued",
+      syncMessage:
+        "Session missing Convex URL. Reconnect extension and try again.",
+    } satisfies CaptureSyncResult;
+  }
+
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/sync`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.token}`,
+      },
+      body: JSON.stringify(capture),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Sync failed with status ${response.status}.`;
+      try {
+        const body = (await response.json()) as { error?: string };
+        if (body.error) {
+          errorMessage = body.error;
+        }
+      } catch {
+        // Ignore JSON parse failures and use fallback message.
+      }
+
+      if (response.status === 401) {
+        await clearAuthSession();
+      }
+
+      await addCaptureToQueue(capture);
+      return {
+        capture,
+        syncStatus: "queued",
+        syncMessage: `${errorMessage} Capture queued locally.`,
+      } satisfies CaptureSyncResult;
+    }
+
+    return {
+      capture,
+      syncStatus: "synced",
+      syncMessage: "Capture synced.",
+    } satisfies CaptureSyncResult;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Network error.";
+    await addCaptureToQueue(capture);
+    return {
+      capture,
+      syncStatus: "queued",
+      syncMessage: `${errorMessage} Capture queued locally.`,
+    } satisfies CaptureSyncResult;
+  }
 }
 
-async function captureCurrentTab() {
+async function captureCurrentTab(folderId?: string) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab) {
     throw new Error("No active tab found.");
   }
 
-  return await captureTab(tab);
+  return await captureTab(tab, folderId);
 }
 
-async function notifyCapture(capture: CapturePayload) {
+async function notifyCapture(result: CaptureSyncResult) {
   await chrome.action.setBadgeBackgroundColor({ color: "#4D9D56" });
-  await chrome.action.setBadgeText({ text: "1" });
+  await chrome.action.setBadgeText({
+    text: result.syncStatus === "synced" ? "✓" : "1",
+  });
   console.log("[amiro-extension] captured", {
-    title: capture.title,
-    url: capture.url,
+    title: result.capture.title,
+    url: result.capture.url,
+    syncStatus: result.syncStatus,
   });
 }
 
@@ -118,6 +202,43 @@ async function startHandshake(webAppUrl?: string) {
   await chrome.tabs.create({
     url: `${baseUrl}${HANDSHAKE_PATH}`,
   });
+}
+
+async function getFolders() {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/folders`;
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${session.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    throw new Error(`Failed to load folders (${response.status}).`);
+  }
+
+  const body = (await response.json()) as {
+    ok: boolean;
+    data?: Array<{ id: string; name: string; parentFolderId: string | null }>;
+    error?: string;
+  };
+
+  if (!body.ok || !body.data) {
+    throw new Error(body.error || "Failed to load folders.");
+  }
+
+  return body.data;
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -134,8 +255,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   try {
-    const capture = await captureTab(tab);
-    await notifyCapture(capture);
+    const result = await captureTab(tab);
+    await notifyCapture(result);
   } catch (error) {
     console.error("[amiro-extension] context capture failed", error);
   }
@@ -147,8 +268,8 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 
   try {
-    const capture = await captureCurrentTab();
-    await notifyCapture(capture);
+    const result = await captureCurrentTab();
+    await notifyCapture(result);
   } catch (error) {
     console.error("[amiro-extension] keyboard capture failed", error);
   }
@@ -161,16 +282,35 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response: ExtensionMessageResponse) => void,
   ) => {
     if (message.type === "amiro/capture-current-tab") {
-      captureCurrentTab()
-        .then(async (capture) => {
-          await notifyCapture(capture);
-          sendResponse({ ok: true, data: capture });
+      captureCurrentTab(message.folderId)
+        .then(async (result) => {
+          await notifyCapture(result);
+          sendResponse({
+            ok: true,
+            data: result.capture,
+            syncStatus: result.syncStatus,
+            syncMessage: result.syncMessage,
+          });
         })
         .catch((error: unknown) => {
           const errorMessage =
             error instanceof Error
               ? error.message
               : "Failed to capture current tab.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/get-folders") {
+      getFolders()
+        .then((folders) => {
+          sendResponse({ ok: true, folders });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to load folders.";
           sendResponse({ ok: false, error: errorMessage });
         });
 
@@ -197,6 +337,7 @@ chrome.runtime.onMessage.addListener(
       setAuthSession({
         token: message.token,
         webAppUrl: message.webAppUrl,
+        convexSiteUrl: message.convexSiteUrl,
         connectedAt: new Date().toISOString(),
       })
         .then(async () => {

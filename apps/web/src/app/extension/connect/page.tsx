@@ -1,3 +1,4 @@
+import { env } from "@amiro/env/web";
 import Link from "next/link";
 
 import { getToken } from "@/lib/auth-server";
@@ -33,6 +34,7 @@ export default async function ExtensionConnectPage() {
         <div
           id="amiro-extension-handshake"
           data-token={token}
+          data-convex-site-url={env.NEXT_PUBLIC_CONVEX_SITE_URL}
           className="hidden"
         />
         <p className="font-semibold text-xl tracking-tight">

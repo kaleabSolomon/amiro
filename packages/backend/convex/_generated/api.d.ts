@@ -16,6 +16,7 @@ import type * as email_templates_verificationEmail from "../email/templates/veri
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as privateData from "../privateData.js";
+import type * as sync from "../sync.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   healthCheck: typeof healthCheck;
   http: typeof http;
   privateData: typeof privateData;
+  sync: typeof sync;
 }>;
 
 /**

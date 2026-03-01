@@ -44,8 +44,9 @@ function completeAuthHandshakeIfNeeded() {
 
   const tokenElement = document.getElementById(HANDSHAKE_DATA_ID);
   const token = tokenElement?.getAttribute("data-token");
+  const convexSiteUrl = tokenElement?.getAttribute("data-convex-site-url");
 
-  if (!token) {
+  if (!token || !convexSiteUrl) {
     return;
   }
 
@@ -56,6 +57,7 @@ function completeAuthHandshakeIfNeeded() {
       type: "amiro/complete-handshake",
       token,
       webAppUrl: window.location.origin,
+      convexSiteUrl,
     } satisfies ExtensionMessage,
     (response: ExtensionMessageResponse) => {
       if (!response?.ok) {

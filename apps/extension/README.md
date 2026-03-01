@@ -1,6 +1,6 @@
 # Amiro Chrome Extension
 
-Chrome extension workspace for capturing content from the active tab into a local queue before syncing to Amiro backend.
+Chrome extension workspace for capturing content from the active tab and syncing it to Amiro backend.
 
 ## Commands
 
@@ -24,9 +24,12 @@ Chrome extension workspace for capturing content from the active tab into a loca
 - Popup action UI
 - Context menu: **Save page to Amiro**
 - Keyboard command: `Ctrl/Cmd + Shift + S`
-- Local queue storage via `chrome.storage.local`
+- Direct backend sync to Convex HTTP endpoint: `POST /api/extension/sync`
+- Local queue fallback via `chrome.storage.local` when offline / unauthorized
+- Folder picker in popup (loads from backend user folders)
+- Automatic default tags on sync (`source:*`, `domain:*`, `captured:YYYY-MM`)
 - Web-session handshake flow (`/extension/connect`)
-- Connected session token persisted in extension local storage
+- Connected session token + Convex site URL persisted in extension local storage
 
 ## Handshake setup
 
@@ -35,8 +38,25 @@ Chrome extension workspace for capturing content from the active tab into a loca
 3. In popup, click **Connect Web Session**.
 4. Sign in on web app if prompted, then extension stores the session token.
 
+## Sync flow
+
+1. User clicks **Save current page**.
+2. Extension extracts page payload (`url`, `title`, `text`, `tags`, `capturedAt`, optional `folderId`).
+3. If connected, extension sends payload to `${convexSiteUrl}/api/extension/sync` with `Authorization: Bearer <token>`.
+4. If sync fails, capture is queued locally as fallback.
+5. Backend merges user tags with default tags and upserts per `(userId, source, url)`.
+
+## Verify end to end
+
+1. Run backend/web and ensure `NEXT_PUBLIC_CONVEX_SITE_URL` is set in web env.
+2. Build and reload extension in Chrome.
+3. Click **Connect Web Session** and finish handshake.
+4. Save a page from popup.
+5. In Convex dashboard, check `syncedBookmarks` for a new/updated row with `folderId` and tags.
+
 ## Next steps
 
-- Add sync mutation endpoint to backend
-- Add retry + backoff + dedupe for queued captures
-- Add source metadata normalization for Telegram/X/Instagram adapters
+- Add background queue flusher (retry with exponential backoff).
+- Add dedupe/idempotency key at payload level (for cross-device sync).
+- Add adapters and normalization for Telegram/X/Instagram sources.
+- Add sync history UI in popup (last sync time + failures).
