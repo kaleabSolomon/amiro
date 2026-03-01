@@ -1,16 +1,25 @@
-import { addCaptureToQueue } from "../lib/storage";
+import { DEFAULT_WEB_APP_URL } from "../lib/config";
+import {
+  addCaptureToQueue,
+  clearAuthSession,
+  getAuthSession,
+  setAuthSession,
+} from "../lib/storage";
 import type {
   CapturePayload,
+  ExtensionMessage,
   ExtensionMessageResponse,
 } from "../types/messages";
+
+const HANDSHAKE_PATH = "/extension/connect";
 
 async function captureTab(tabId: number) {
   const response = (await chrome.tabs.sendMessage(tabId, {
     type: "amiro/extract-page",
   })) as ExtensionMessageResponse;
 
-  if (!response.ok) {
-    throw new Error(response.error);
+  if (!response.ok || !response.data) {
+    throw new Error(response.ok ? "Capture returned no data." : response.error);
   }
 
   await addCaptureToQueue(response.data);
@@ -33,6 +42,13 @@ async function notifyCapture(capture: CapturePayload) {
   console.log("[amiro-extension] captured", {
     title: capture.title,
     url: capture.url,
+  });
+}
+
+async function startHandshake(webAppUrl?: string) {
+  const baseUrl = (webAppUrl || DEFAULT_WEB_APP_URL).replace(/\/$/, "");
+  await chrome.tabs.create({
+    url: `${baseUrl}${HANDSHAKE_PATH}`,
   });
 }
 
@@ -70,23 +86,103 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type !== "amiro/capture-current-tab") {
-    return;
-  }
+chrome.runtime.onMessage.addListener(
+  (
+    message: ExtensionMessage,
+    sender,
+    sendResponse: (response: ExtensionMessageResponse) => void,
+  ) => {
+    if (message.type === "amiro/capture-current-tab") {
+      captureCurrentTab()
+        .then(async (capture) => {
+          await notifyCapture(capture);
+          sendResponse({ ok: true, data: capture });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to capture current tab.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
 
-  captureCurrentTab()
-    .then(async (capture) => {
-      await notifyCapture(capture);
-      sendResponse({ ok: true, data: capture });
-    })
-    .catch((error: unknown) => {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to capture current tab.";
-      sendResponse({ ok: false, error: message });
-    });
+      return true;
+    }
 
-  return true;
-});
+    if (message.type === "amiro/start-handshake") {
+      startHandshake(message.webAppUrl)
+        .then(() => {
+          sendResponse({ ok: true, started: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to start extension handshake.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/complete-handshake") {
+      setAuthSession({
+        token: message.token,
+        webAppUrl: message.webAppUrl,
+        connectedAt: new Date().toISOString(),
+      })
+        .then(async () => {
+          await chrome.action.setBadgeBackgroundColor({ color: "#4D9D56" });
+          await chrome.action.setBadgeText({ text: "✓" });
+
+          if (sender.tab?.id) {
+            await chrome.tabs.remove(sender.tab.id);
+          }
+
+          sendResponse({ ok: true, connected: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to save auth session.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/get-auth-state") {
+      getAuthSession()
+        .then((session) => {
+          sendResponse({ ok: true, session });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to get auth session state.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/disconnect-auth") {
+      clearAuthSession()
+        .then(async () => {
+          await chrome.action.setBadgeText({ text: "" });
+          sendResponse({ ok: true, disconnected: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to clear auth session.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+  },
+);
