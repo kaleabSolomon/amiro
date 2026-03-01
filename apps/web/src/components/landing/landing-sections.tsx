@@ -234,19 +234,28 @@ export function LandingFaqSection() {
 			title="Common questions, clear answers."
 			description="If you need more detail, we can expand these as we finalize product copy."
 		>
-			<div className="space-y-3">
+			<div className="group/list grid gap-3">
 				{FAQS.map((item) => (
-					<article
+					<div
 						key={item.question}
-						className="rounded-xl border border-[var(--landing-border)] bg-[var(--landing-surface)] p-5"
+						className="group/item relative flex cursor-pointer flex-col rounded-lg border border-(--landing-border) bg-(--landing-panel) px-4 py-4 transition-all duration-300 hover:border-(--landing-accent) hover:opacity-100! group-hover/list:opacity-50"
 					>
-						<h3 className="font-semibold text-[var(--landing-ink)] text-base">
-							{item.question}
-						</h3>
-						<p className="mt-2 text-[var(--landing-subtle-ink)] text-sm">
-							{item.answer}
-						</p>
-					</article>
+						<div className="flex items-center justify-between">
+							<span className="font-semibold text-(--landing-ink) text-sm transition-colors duration-300 group-hover/item:text-(--landing-foreground)">
+								{item.question}
+							</span>
+							<span className="h-2.5 w-2.5 shrink-0 rounded-full bg-(--landing-accent) transition-all duration-300 group-hover/item:animate-pulse group-hover/item:shadow-[0_0_8px_var(--landing-accent)]" />
+						</div>
+						<div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-hover/item:grid-rows-[1fr] group-hover/item:opacity-100">
+							<div className="overflow-hidden">
+								<div className="mt-3 border-(--landing-border)/50 border-t pt-3">
+									<p className="text-(--landing-subtle-ink) text-sm">
+										{item.answer}
+									</p>
+								</div>
+							</div>
+						</div>
+					</div>
 				))}
 			</div>
 		</LandingSection>

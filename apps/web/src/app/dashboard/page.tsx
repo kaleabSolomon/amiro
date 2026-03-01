@@ -1,140 +1,141 @@
 "use client";
 
-import { api } from "@amiro/backend/convex/_generated/api";
-import {
-  Authenticated,
-  AuthLoading,
-  Unauthenticated,
-  useQuery,
-} from "convex/react";
+import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
+import { DashboardFolderSidebar } from "@/components/dashboard/dashboard-folder-sidebar";
+import { DashboardMainPanel } from "@/components/dashboard/dashboard-main-panel";
+import { MOCK_FOLDERS } from "@/components/dashboard/mock-data";
 import { AppShell } from "@/components/layout/app-shell";
-import { authClient } from "@/lib/auth-client";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 function RedirectToAuth() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace("/auth");
-  }, [router]);
-  return null;
+	const router = useRouter();
+
+	useEffect(() => {
+		router.replace("/auth");
+	}, [router]);
+
+	return null;
 }
 
-function SessionDebugCard() {
-  const { data: sessionData, isPending } = authClient.useSession();
-  const [rememberMeChoice, setRememberMeChoice] = useState<string | null>(null);
+function FolderWorkspace() {
+	const [selectedFolderId, setSelectedFolderId] = useState("inbox");
+	const [paletteOpen, setPaletteOpen] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    setRememberMeChoice(window.localStorage.getItem("amiro_last_remember_me"));
-  }, []);
+	const folderMap = useMemo(
+		() => new Map(MOCK_FOLDERS.map((folder) => [folder.id, folder])),
+		[],
+	);
 
-  const parsed = useMemo(() => {
-    const expiresRaw = sessionData?.session?.expiresAt;
-    const createdRaw = sessionData?.session?.createdAt;
-    const updatedRaw = sessionData?.session?.updatedAt;
+	const selectedFolder = folderMap.get(selectedFolderId) ?? MOCK_FOLDERS[0];
 
-    const expiresAt = expiresRaw ? new Date(expiresRaw) : null;
-    const createdAt = createdRaw ? new Date(createdRaw) : null;
-    const updatedAt = updatedRaw ? new Date(updatedRaw) : null;
-    const remainingMs = expiresAt ? expiresAt.getTime() - Date.now() : null;
-    const remainingHours = remainingMs ? remainingMs / (1000 * 60 * 60) : null;
-    const remainingDays = remainingHours ? remainingHours / 24 : null;
+	const breadcrumbs = useMemo(() => {
+		const path = [] as typeof MOCK_FOLDERS;
+		let current: (typeof MOCK_FOLDERS)[number] | undefined = selectedFolder;
 
-    return {
-      expiresAt,
-      createdAt,
-      updatedAt,
-      remainingHours,
-      remainingDays,
-    };
-  }, [sessionData]);
+		while (current) {
+			path.unshift(current);
+			current = current.parentId ? folderMap.get(current.parentId) : undefined;
+		}
 
-  return (
-    <div className="mt-6 rounded-xl border border-border/70 bg-muted/40 p-4">
-      <p className="text-sm text-muted-foreground">Session Debug</p>
-      {isPending ? (
-        <p className="mt-1 text-sm font-medium">Loading session...</p>
-      ) : (
-        <div className="mt-2 space-y-1 text-sm">
-          <p>
-            Last Remember Me selection:{" "}
-            <span className="font-medium">
-              {rememberMeChoice === null
-                ? "Unknown"
-                : rememberMeChoice === "true"
-                  ? "Checked"
-                  : "Unchecked"}
-            </span>
-          </p>
-          <p>
-            Session created:{" "}
-            <span className="font-medium">
-              {parsed.createdAt ? parsed.createdAt.toLocaleString() : "N/A"}
-            </span>
-          </p>
-          <p>
-            Session updated:{" "}
-            <span className="font-medium">
-              {parsed.updatedAt ? parsed.updatedAt.toLocaleString() : "N/A"}
-            </span>
-          </p>
-          <p>
-            Session expires:{" "}
-            <span className="font-medium">
-              {parsed.expiresAt ? parsed.expiresAt.toLocaleString() : "N/A"}
-            </span>
-          </p>
-          <p>
-            Time remaining:{" "}
-            <span className="font-medium">
-              {parsed.remainingDays
-                ? `${parsed.remainingDays.toFixed(2)} days (${parsed.remainingHours?.toFixed(1)} hours)`
-                : "N/A"}
-            </span>
-          </p>
-        </div>
-      )}
-      <p className="mt-2 text-xs text-muted-foreground">
-        Compare this after logging in with/without Remember Me to validate
-        behavior.
-      </p>
-    </div>
-  );
+		return path;
+	}, [folderMap, selectedFolder]);
+
+	const childFolders = useMemo(
+		() =>
+			MOCK_FOLDERS.filter((folder) => folder.parentId === selectedFolder.id),
+		[selectedFolder.id],
+	);
+
+	const filteredFolders = useMemo(() => {
+		const query = searchQuery.trim().toLowerCase();
+		if (!query) {
+			return MOCK_FOLDERS;
+		}
+
+		return MOCK_FOLDERS.filter((folder) => {
+			return (
+				folder.name.toLowerCase().includes(query) ||
+				folder.tags.some((tag) => tag.toLowerCase().includes(query))
+			);
+		});
+	}, [searchQuery]);
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			const isShortcut = (event.metaKey || event.ctrlKey) && event.key === "k";
+			if (isShortcut) {
+				event.preventDefault();
+				setPaletteOpen(true);
+			}
+
+			if (event.key === "Escape") {
+				setPaletteOpen(false);
+			}
+		};
+
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, []);
+
+	const selectFolder = (folderId: string) => {
+		setSelectedFolderId(folderId);
+		setPaletteOpen(false);
+		setSearchQuery("");
+	};
+
+	return (
+		<section className="mx-auto w-full max-w-6xl px-6 py-8">
+			<SidebarProvider>
+				<DashboardFolderSidebar
+					folders={MOCK_FOLDERS}
+					selectedFolderId={selectedFolder.id}
+					onSelectFolder={selectFolder}
+				/>
+
+				<SidebarInset>
+					<DashboardMainPanel
+						selectedFolder={selectedFolder}
+						breadcrumbs={breadcrumbs}
+						childFolders={childFolders}
+						onSelectFolder={selectFolder}
+						onOpenSearch={() => setPaletteOpen(true)}
+					/>
+				</SidebarInset>
+
+				<DashboardCommandPalette
+					open={paletteOpen}
+					query={searchQuery}
+					onQueryChange={setSearchQuery}
+					folders={filteredFolders}
+					onClose={() => setPaletteOpen(false)}
+					onSelectFolder={selectFolder}
+				/>
+			</SidebarProvider>
+		</section>
+	);
 }
 
 export default function DashboardPage() {
-  const privateData = useQuery(api.privateData.get);
-
-  return (
-    <>
-      <Authenticated>
-        <AppShell>
-          <section className="mx-auto w-full max-w-6xl px-6 py-12">
-            <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
-              <p className="text-sm text-muted-foreground">Dashboard</p>
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Welcome back
-              </h1>
-              <div className="mt-6 rounded-xl border border-border/70 bg-muted/40 p-4">
-                <p className="text-sm text-muted-foreground">Status</p>
-                <p className="mt-1 text-sm font-medium">
-                  {privateData?.message ?? "Loading private data..."}
-                </p>
-              </div>
-              <SessionDebugCard />
-            </div>
-          </section>
-        </AppShell>
-      </Authenticated>
-      <Unauthenticated>
-        <RedirectToAuth />
-      </Unauthenticated>
-      <AuthLoading>
-        <div className="flex min-h-svh items-center justify-center">
-          <div className="text-sm text-muted-foreground">Loading...</div>
-        </div>
-      </AuthLoading>
-    </>
-  );
+	return (
+		<>
+			<Authenticated>
+				<AppShell>
+					<FolderWorkspace />
+				</AppShell>
+			</Authenticated>
+			<Unauthenticated>
+				<RedirectToAuth />
+			</Unauthenticated>
+			<AuthLoading>
+				<div className="flex min-h-svh items-center justify-center">
+					<div className="text-muted-foreground text-sm">Loading...</div>
+				</div>
+			</AuthLoading>
+		</>
+	);
 }
