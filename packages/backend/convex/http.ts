@@ -41,6 +41,18 @@ const telegramFoldersSchema = z.object({
   telegramUserId: z.number().int(),
 });
 
+const telegramCreateFolderSchema = z.object({
+  telegramUserId: z.number().int(),
+  name: z.string().min(1),
+  parentFolderId: z.string().optional(),
+});
+
+const telegramBookmarksSchema = z.object({
+  telegramUserId: z.number().int(),
+  folderId: z.string().optional(),
+  limit: z.number().int().positive().max(50).optional(),
+});
+
 const telegramSyncSchema = z.object({
   telegramUserId: z.number().int(),
   folderId: z.string().optional(),
@@ -303,6 +315,146 @@ http.route({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to load folders.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/telegram/folders/create",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const internalSecret = process.env.TELEGRAM_INTERNAL_SECRET;
+    if (!internalSecret) {
+      return missingBotSecretResponse();
+    }
+
+    const authHeader = request.headers.get("Authorization");
+    const expected = `Bearer ${internalSecret}`;
+    if (authHeader !== expected) {
+      return unauthorizedBotResponse();
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = telegramCreateFolderSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid create folder payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const userId = await ctx.runQuery(
+        internal.dashboard.getLinkedUserIdByTelegramUserId,
+        {
+          telegramUserId: parsed.data.telegramUserId,
+        },
+      );
+
+      const result = await ctx.runMutation(
+        internal.dashboard.createFolderForUser,
+        {
+          userId,
+          name: parsed.data.name,
+          parentFolderId: parsed.data.parentFolderId as
+            | Id<"folders">
+            | undefined,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data: result }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create folder.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/telegram/bookmarks",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const internalSecret = process.env.TELEGRAM_INTERNAL_SECRET;
+    if (!internalSecret) {
+      return missingBotSecretResponse();
+    }
+
+    const authHeader = request.headers.get("Authorization");
+    const expected = `Bearer ${internalSecret}`;
+    if (authHeader !== expected) {
+      return unauthorizedBotResponse();
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = telegramBookmarksSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid bookmarks payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const userId = await ctx.runQuery(
+        internal.dashboard.getLinkedUserIdByTelegramUserId,
+        {
+          telegramUserId: parsed.data.telegramUserId,
+        },
+      );
+
+      const data = await ctx.runQuery(
+        internal.sync.listBookmarksForUserFolder,
+        {
+          userId,
+          folderId: parsed.data.folderId as Id<"folders"> | undefined,
+          limit: parsed.data.limit,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load bookmarks.";
       return new Response(JSON.stringify({ ok: false, error: message }), {
         status: 400,
         headers: syncCorsHeaders,

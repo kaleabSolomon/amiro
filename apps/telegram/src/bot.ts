@@ -1,8 +1,11 @@
 import { Bot, InlineKeyboard } from "grammy";
 import {
   completeTelegramLink,
+  createTelegramFolder,
+  getTelegramBookmarks,
   getTelegramFolders,
   syncTelegramCapture,
+  type TelegramBookmarkItem,
   type TelegramFolderOption,
 } from "./amiro-client";
 import { config } from "./config";
@@ -231,7 +234,22 @@ type PendingSelection = {
   expiresAt: number;
 };
 
+type PendingFolderCreate = {
+  telegramUserId: number;
+  selectionId?: string;
+  expiresAt: number;
+};
+
 const pendingSelections = new Map<string, PendingSelection>();
+const pendingFolderCreates = new Map<number, PendingFolderCreate>();
+const pendingBookmarkFolderSelections = new Map<
+  string,
+  {
+    telegramUserId: number;
+    folders: TelegramFolderOption[];
+    expiresAt: number;
+  }
+>();
 
 function createPendingSelectionId() {
   return crypto.randomUUID().slice(0, 8);
@@ -242,6 +260,24 @@ function cleanupExpiredSelections() {
   for (const [id, item] of pendingSelections) {
     if (item.expiresAt < now) {
       pendingSelections.delete(id);
+    }
+  }
+}
+
+function cleanupExpiredFolderCreates() {
+  const now = Date.now();
+  for (const [userId, item] of pendingFolderCreates) {
+    if (item.expiresAt < now) {
+      pendingFolderCreates.delete(userId);
+    }
+  }
+}
+
+function cleanupExpiredBookmarkSelections() {
+  const now = Date.now();
+  for (const [id, item] of pendingBookmarkFolderSelections) {
+    if (item.expiresAt < now) {
+      pendingBookmarkFolderSelections.delete(id);
     }
   }
 }
@@ -259,7 +295,82 @@ function buildFolderKeyboard(
     keyboard.row().text(folder.name, `tgsv:${selectionId}:${index + 1}`);
   });
 
+  keyboard.row().text("➕ New folder", `tgsvnew:${selectionId}`);
+
   return keyboard;
+}
+
+function buildBookmarksFolderKeyboard(
+  selectionId: string,
+  folders: TelegramFolderOption[],
+) {
+  const keyboard = new InlineKeyboard().text(
+    "Unfiled",
+    `tgbm:${selectionId}:0`,
+  );
+
+  folders.forEach((folder, index) => {
+    keyboard.row().text(folder.name, `tgbm:${selectionId}:${index + 1}`);
+  });
+
+  return keyboard;
+}
+
+function formatBookmarkLines(bookmarks: TelegramBookmarkItem[]) {
+  if (bookmarks.length === 0) {
+    return "No bookmarks found in this folder.";
+  }
+
+  return bookmarks
+    .map(
+      (bookmark, index) =>
+        `${index + 1}. ${truncateText(bookmark.title, 180)}\n${truncateText(
+          bookmark.url,
+          400,
+        )}`,
+    )
+    .join("\n\n");
+}
+
+function truncateText(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function splitForTelegram(text: string, maxLength = 3500) {
+  if (text.length <= maxLength) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + maxLength, text.length);
+    const lastBreak = text.lastIndexOf("\n\n", end);
+    if (lastBreak > start + 500) {
+      end = lastBreak;
+    }
+    chunks.push(text.slice(start, end).trim());
+    start = end;
+  }
+  return chunks.filter((chunk) => chunk.length > 0);
+}
+
+function formatErrorMessage(error: unknown) {
+  const raw =
+    error instanceof Error ? error.message : "Unknown error while processing.";
+  const cleaned = raw.replace(/\s+/g, " ").trim();
+
+  if (cleaned.includes("failed (404)")) {
+    return "Service endpoint was not found (404). Please try again in a moment.";
+  }
+  if (cleaned.includes("<!DOCTYPE html>")) {
+    return "Service returned an unexpected HTML response.";
+  }
+
+  return truncateText(cleaned, 280);
 }
 
 export function createTelegramBot() {
@@ -302,13 +413,158 @@ export function createTelegramBot() {
 
   bot.command("help", async (ctx) => {
     await ctx.reply(
-      "Forward any message containing a URL. I will ask which folder to save it to, then bookmark it with default tags.",
+      "Commands: /folders, /bookmarks, /newfolder.\nForward a message to save it, then choose a folder.",
     );
+  });
+
+  bot.command("folders", async (ctx) => {
+    if (!ctx.from) {
+      await ctx.reply("Could not identify your Telegram account.");
+      return;
+    }
+
+    try {
+      const folders = await getTelegramFolders({ telegramUserId: ctx.from.id });
+      if (folders.length === 0) {
+        await ctx.reply("No folders yet. Use /newfolder to create one.");
+        return;
+      }
+
+      const lines = folders
+        .map((folder, index) => `${index + 1}. ${folder.name}`)
+        .join("\n");
+      await ctx.reply(`Your folders:\n\n${lines}`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load folders.";
+      await ctx.reply(`Could not load folders: ${message}`);
+    }
+  });
+
+  bot.command("bookmarks", async (ctx) => {
+    if (!ctx.from) {
+      await ctx.reply("Could not identify your Telegram account.");
+      return;
+    }
+
+    try {
+      const folders = await getTelegramFolders({ telegramUserId: ctx.from.id });
+      cleanupExpiredBookmarkSelections();
+
+      const selectionId = createPendingSelectionId();
+      pendingBookmarkFolderSelections.set(selectionId, {
+        telegramUserId: ctx.from.id,
+        folders,
+        expiresAt: Date.now() + 5 * 60 * 1000,
+      });
+
+      await ctx.reply("Choose a folder to list bookmarks:", {
+        reply_markup: buildBookmarksFolderKeyboard(selectionId, folders),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load folders.";
+      await ctx.reply(`Could not prepare bookmark list: ${message}`);
+    }
+  });
+
+  bot.command("newfolder", async (ctx) => {
+    if (!ctx.from) {
+      await ctx.reply("Could not identify your Telegram account.");
+      return;
+    }
+
+    const name = ctx.match.trim();
+    if (name) {
+      try {
+        await createTelegramFolder({
+          telegramUserId: ctx.from.id,
+          name,
+        });
+        await ctx.reply(`Created folder "${name}".`);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to create folder.";
+        await ctx.reply(`Could not create folder: ${message}`);
+      }
+      return;
+    }
+
+    cleanupExpiredFolderCreates();
+    pendingFolderCreates.set(ctx.from.id, {
+      telegramUserId: ctx.from.id,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
+    await ctx.reply("Send the folder name to create it. Example: Work Leads");
   });
 
   bot.on("message", async (ctx) => {
     const message = ctx.message;
     if (!message || !ctx.from) {
+      return;
+    }
+
+    cleanupExpiredFolderCreates();
+    const pendingCreate = pendingFolderCreates.get(ctx.from.id);
+    if (pendingCreate) {
+      const text =
+        ("text" in message ? message.text : undefined) ||
+        ("caption" in message ? message.caption : undefined) ||
+        "";
+      const folderName = text.trim();
+
+      if (!folderName) {
+        await ctx.reply("Folder name cannot be empty. Send a valid name.");
+        return;
+      }
+
+      try {
+        const created = await createTelegramFolder({
+          telegramUserId: ctx.from.id,
+          name: folderName,
+        });
+
+        if (pendingCreate.selectionId) {
+          const selection = pendingSelections.get(pendingCreate.selectionId);
+          if (
+            selection &&
+            selection.telegramUserId === ctx.from.id &&
+            selection.expiresAt >= Date.now()
+          ) {
+            const enrichedLinks = await enrichChildLinks(
+              selection.capture.additionalLinks,
+            );
+            await syncTelegramCapture({
+              telegramUserId: selection.telegramUserId,
+              folderId: created.id,
+              url: selection.capture.url,
+              title: selection.capture.title,
+              text: selection.capture.text,
+              additionalLinks: enrichedLinks,
+              tags: selection.capture.tags,
+              capturedAt: selection.capture.capturedAt,
+            });
+
+            pendingSelections.delete(pendingCreate.selectionId);
+            await ctx.reply(
+              `Created folder "${folderName}" and saved bookmark into it.`,
+            );
+          } else {
+            await ctx.reply(
+              `Created folder "${folderName}", but previous bookmark selection expired.`,
+            );
+          }
+        } else {
+          await ctx.reply(`Created folder "${folderName}".`);
+        }
+      } catch (error) {
+        const messageText =
+          error instanceof Error ? error.message : "Failed to create folder.";
+        await ctx.reply(`Could not create folder: ${messageText}`);
+      } finally {
+        pendingFolderCreates.delete(ctx.from.id);
+      }
+
       return;
     }
 
@@ -370,6 +626,113 @@ export function createTelegramBot() {
       const messageText =
         error instanceof Error ? error.message : "Failed to load folders.";
       await ctx.reply(`Could not prepare save options: ${messageText}`);
+    }
+  });
+
+  bot.callbackQuery(/^tgsvnew:/, async (ctx) => {
+    const parts = ctx.callbackQuery.data.split(":");
+    if (parts.length !== 2) {
+      await ctx.answerCallbackQuery({ text: "Invalid selection." });
+      return;
+    }
+
+    const selectionId = parts[1];
+    if (!selectionId) {
+      await ctx.answerCallbackQuery({ text: "Invalid selection." });
+      return;
+    }
+
+    const selection = pendingSelections.get(selectionId);
+    if (!selection) {
+      await ctx.answerCallbackQuery({ text: "This selection expired." });
+      return;
+    }
+
+    if (!ctx.from || ctx.from.id !== selection.telegramUserId) {
+      await ctx.answerCallbackQuery({ text: "Not allowed." });
+      return;
+    }
+
+    if (selection.expiresAt < Date.now()) {
+      pendingSelections.delete(selectionId);
+      await ctx.answerCallbackQuery({ text: "This selection expired." });
+      return;
+    }
+
+    pendingFolderCreates.set(selection.telegramUserId, {
+      telegramUserId: selection.telegramUserId,
+      selectionId,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
+
+    await ctx.answerCallbackQuery({
+      text: "Send the new folder name.",
+    });
+    await ctx.reply(
+      "Send the new folder name. I will create it and save this bookmark there.",
+    );
+  });
+
+  bot.callbackQuery(/^tgbm:/, async (ctx) => {
+    const parts = ctx.callbackQuery.data.split(":");
+    if (parts.length !== 3) {
+      await ctx.answerCallbackQuery({ text: "Invalid selection." });
+      return;
+    }
+
+    const selectionId = parts[1];
+    const indexRaw = parts[2];
+    if (!selectionId || !indexRaw) {
+      await ctx.answerCallbackQuery({ text: "Invalid selection." });
+      return;
+    }
+
+    cleanupExpiredBookmarkSelections();
+    const selection = pendingBookmarkFolderSelections.get(selectionId);
+    if (!selection) {
+      await ctx.answerCallbackQuery({ text: "This selection expired." });
+      return;
+    }
+
+    if (!ctx.from || ctx.from.id !== selection.telegramUserId) {
+      await ctx.answerCallbackQuery({ text: "Not allowed." });
+      return;
+    }
+
+    const index = Number(indexRaw);
+    if (
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index > selection.folders.length
+    ) {
+      await ctx.answerCallbackQuery({ text: "Invalid folder choice." });
+      return;
+    }
+
+    const folder = index === 0 ? null : selection.folders[index - 1];
+
+    try {
+      const bookmarks = await getTelegramBookmarks({
+        telegramUserId: selection.telegramUserId,
+        folderId: folder?.id,
+        limit: 20,
+      });
+
+      await ctx.answerCallbackQuery({ text: "Loaded." });
+      const folderLabel = folder ? folder.name : "Unfiled";
+      const body = `Bookmarks in "${folderLabel}":\n\n${formatBookmarkLines(
+        bookmarks,
+      )}`;
+      const parts = splitForTelegram(body);
+      for (const part of parts) {
+        await ctx.reply(part);
+      }
+    } catch (error) {
+      const message = formatErrorMessage(error);
+      await ctx.answerCallbackQuery({ text: "Load failed. Try again." });
+      await ctx.reply(`Could not load bookmarks.\n${message}`);
+    } finally {
+      pendingBookmarkFolderSelections.delete(selectionId);
     }
   });
 

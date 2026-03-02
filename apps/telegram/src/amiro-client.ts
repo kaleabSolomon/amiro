@@ -56,8 +56,32 @@ export type TelegramFolderOption = {
   parentFolderId: string | null;
 };
 
+export type TelegramBookmarkItem = {
+  id: string;
+  title: string;
+  url: string;
+  source: "chrome" | "telegram" | "instagram" | "twitter";
+  capturedAt: number;
+};
+
 export async function getTelegramFolders(args: { telegramUserId: number }) {
   return await post<TelegramFolderOption[]>("/api/telegram/folders", args);
+}
+
+export async function createTelegramFolder(args: {
+  telegramUserId: number;
+  name: string;
+  parentFolderId?: string;
+}) {
+  return await post<{ id: string }>("/api/telegram/folders/create", args);
+}
+
+export async function getTelegramBookmarks(args: {
+  telegramUserId: number;
+  folderId?: string;
+  limit?: number;
+}) {
+  return await post<TelegramBookmarkItem[]>("/api/telegram/bookmarks", args);
 }
 
 export async function syncTelegramCapture(args: {

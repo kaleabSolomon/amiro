@@ -6,6 +6,14 @@ async function main() {
   const bot = createTelegramBot();
   const me = await bot.api.getMe();
 
+  await bot.api.setMyCommands([
+    { command: "start", description: "Start or link the bot" },
+    { command: "help", description: "Show available commands" },
+    { command: "folders", description: "List your folders" },
+    { command: "bookmarks", description: "List bookmarks by folder" },
+    { command: "newfolder", description: "Create a new folder" },
+  ]);
+
   console.log("[telegram] bot", {
     id: me.id,
     username: me.username,

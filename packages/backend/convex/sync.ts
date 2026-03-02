@@ -196,3 +196,37 @@ export const listFoldersForUser = internalQuery({
       }));
   },
 });
+
+export const listBookmarksForUserFolder = internalQuery({
+  args: {
+    userId: v.string(),
+    folderId: v.optional(v.id("folders")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
+
+    if (args.folderId) {
+      const folder = await ctx.db.get(args.folderId);
+      if (!folder || folder.userId !== args.userId) {
+        throw new ConvexError("Invalid folder for this user.");
+      }
+    }
+
+    const docs = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_folder", (q) =>
+        q.eq("userId", args.userId).eq("folderId", args.folderId),
+      )
+      .order("desc")
+      .take(limit);
+
+    return docs.map((bookmark) => ({
+      id: bookmark._id,
+      title: bookmark.title,
+      url: bookmark.url,
+      source: bookmark.source,
+      capturedAt: bookmark.capturedAt,
+    }));
+  },
+});
