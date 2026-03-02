@@ -31,10 +31,41 @@
       </section>
 
       <section class="folder-picker">
-        <label for="folder-select">Save to folder</label>
+        <div class="folder-header">
+          <label for="folder-select">Save to folder</label>
+          <button
+            id="toggle-create-folder"
+            class="icon-button"
+            type="button"
+            aria-label="Create folder"
+          >
+            +
+          </button>
+        </div>
         <select id="folder-select" class="input" disabled>
           <option value="">No folder</option>
         </select>
+        <div id="create-folder-panel" class="folder-create hidden">
+          <input
+            id="new-folder-name"
+            class="input"
+            type="text"
+            placeholder="New folder name"
+            maxlength="80"
+          />
+          <div class="folder-create-actions">
+            <button id="create-folder" class="button" type="button">
+              Create
+            </button>
+            <button
+              id="cancel-create-folder"
+              class="button button-secondary"
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       </section>
 
       <button id="capture" class="button" type="button">
@@ -45,8 +76,8 @@
       <hr class="divider" />
 
       <section class="meta">
-        <p><span>Shortcut</span><strong>Ctrl / ⌘ + Shift + S</strong></p>
-        <p><span>Source</span><strong>Chrome</strong></p>
+        <p><span>Shortcut</span><strong>Ctrl / ⌘ + Shift + Y</strong></p>
+        <p><span>Source</span><strong id="source-label">Detecting…</strong></p>
       </section>
     </main>
 

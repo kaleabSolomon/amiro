@@ -128,10 +128,45 @@ body {
   gap: 6px;
 }
 
+.folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .folder-picker label {
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 500;
+}
+
+.icon-button {
+  border: 1px solid var(--input);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--accent);
+}
+
+.folder-create {
+  margin-top: 2px;
+  display: grid;
+  gap: 8px;
+}
+
+.folder-create-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .input {
@@ -259,5 +294,5 @@ body {
 
 /* ── Utilities ────────────────────────────────────────────── */
 .hidden {
-  display: none !important;
+  display: none;
 }

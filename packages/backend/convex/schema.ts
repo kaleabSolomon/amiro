@@ -49,6 +49,8 @@ export default defineSchema({
         v.object({
           url: v.string(),
           title: v.optional(v.string()),
+          siteName: v.optional(v.string()),
+          description: v.optional(v.string()),
         }),
       ),
     ),

@@ -89,10 +89,7 @@ export const getActiveSessions = query({
       {
         model: "session",
         paginationOpts: { cursor: null, numItems: 50 },
-        where: [
-          { field: "userId", value: authUser._id },
-          { field: "expiresAt", operator: "gt", value: Date.now() },
-        ],
+        where: [{ field: "userId", value: authUser._id }],
       },
     )) as
       | Array<{
@@ -117,6 +114,7 @@ export const getActiveSessions = query({
       : sessionResults.page;
 
     return sessions
+      .filter((session) => session.expiresAt > Date.now())
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((session) => ({
         id: session._id,

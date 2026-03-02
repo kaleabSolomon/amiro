@@ -4,7 +4,7 @@ const manifest: ManifestV3Export = {
   manifest_version: 3,
   name: "Amiro Web Clipper",
   description:
-    "Capture pages from Chrome and prepare them for sync into your global bookmark workspace.",
+    "Capture pages from your browser and prepare them for sync into your global bookmark workspace.",
   version: "0.1.0",
   action: {
     default_popup: "src/popup/index.html",
@@ -25,8 +25,8 @@ const manifest: ManifestV3Export = {
   commands: {
     "capture-current-page": {
       suggested_key: {
-        default: "Ctrl+Shift+S",
-        mac: "Command+Shift+S",
+        default: "Ctrl+Shift+Y",
+        mac: "Command+Shift+Y",
       },
       description: "Capture the current page into Amiro queue",
     },

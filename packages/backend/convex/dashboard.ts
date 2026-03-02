@@ -185,6 +185,38 @@ export const createFolder = mutation({
   },
 });
 
+export const createFolderForUser = internalMutation({
+  args: {
+    userId: v.string(),
+    name: v.string(),
+    parentFolderId: v.optional(v.id("folders")),
+  },
+  handler: async (ctx, args) => {
+    const name = args.name.trim();
+    if (!name) {
+      throw new ConvexError("Folder name cannot be empty.");
+    }
+
+    if (args.parentFolderId) {
+      const parent = await ctx.db.get(args.parentFolderId);
+      if (!parent || parent.userId !== args.userId) {
+        throw new ConvexError("Invalid parent folder.");
+      }
+    }
+
+    const now = Date.now();
+    const id = await ctx.db.insert("folders", {
+      userId: args.userId,
+      name,
+      parentFolderId: args.parentFolderId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { id };
+  },
+});
+
 export const getConnectedSources = query({
   args: {},
   handler: async (ctx) => {

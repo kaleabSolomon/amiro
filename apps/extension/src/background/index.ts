@@ -241,6 +241,50 @@ async function getFolders() {
   return body.data;
 }
 
+async function createFolder(name: string) {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new Error("Folder name cannot be empty.");
+  }
+
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/folders`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.token}`,
+    },
+    body: JSON.stringify({ name: trimmedName }),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    throw new Error(`Failed to create folder (${response.status}).`);
+  }
+
+  const body = (await response.json()) as {
+    ok: boolean;
+    data?: { id: string };
+    error?: string;
+  };
+
+  if (!body.ok || !body.data) {
+    throw new Error(body.error || "Failed to create folder.");
+  }
+
+  return body.data.id;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "amiro-capture-page",
@@ -311,6 +355,20 @@ chrome.runtime.onMessage.addListener(
         .catch((error: unknown) => {
           const errorMessage =
             error instanceof Error ? error.message : "Failed to load folders.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/create-folder") {
+      createFolder(message.name)
+        .then((folderId) => {
+          sendResponse({ ok: true, folderId });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to create folder.";
           sendResponse({ ok: false, error: errorMessage });
         });
 

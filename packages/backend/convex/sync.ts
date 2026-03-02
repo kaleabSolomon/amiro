@@ -13,13 +13,28 @@ function normalizeTag(tag: string) {
 }
 
 function normalizeChildLinks(
-  links: Array<{ url: string; title?: string }> | undefined,
+  links:
+    | Array<{
+        url: string;
+        title?: string;
+        siteName?: string;
+        description?: string;
+      }>
+    | undefined,
 ) {
   if (!links || links.length === 0) {
     return undefined;
   }
 
-  const deduped = new Map<string, { url: string; title?: string }>();
+  const deduped = new Map<
+    string,
+    {
+      url: string;
+      title?: string;
+      siteName?: string;
+      description?: string;
+    }
+  >();
   for (const link of links) {
     const url = link.url.trim();
     if (!url) {
@@ -30,6 +45,8 @@ function normalizeChildLinks(
       deduped.set(url, {
         url,
         title: link.title?.trim() || undefined,
+        siteName: link.siteName?.trim() || undefined,
+        description: link.description?.trim() || undefined,
       });
     }
   }
@@ -77,6 +94,8 @@ export const upsertCaptureFromExtension = internalMutation({
         v.object({
           url: v.string(),
           title: v.optional(v.string()),
+          siteName: v.optional(v.string()),
+          description: v.optional(v.string()),
         }),
       ),
     ),

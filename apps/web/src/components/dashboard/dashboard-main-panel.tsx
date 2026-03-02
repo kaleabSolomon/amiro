@@ -228,15 +228,29 @@ export function DashboardMainPanel({
                     </summary>
                     <div className="mt-2 flex flex-col gap-1.5">
                       {bookmark.childLinks.map((link) => (
-                        <a
+                        <div
                           key={link.url}
-                          href={link.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="line-clamp-1 text-primary hover:underline"
+                          className="rounded-md border border-border/60 bg-background p-2"
                         >
-                          {link.title || link.url}
-                        </a>
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="line-clamp-1 text-primary hover:underline"
+                          >
+                            {link.title || link.url}
+                          </a>
+                          <p className="line-clamp-1 text-muted-foreground">
+                            {link.url}
+                          </p>
+                          {link.siteName || link.description ? (
+                            <p className="line-clamp-2 text-muted-foreground">
+                              {[link.siteName, link.description]
+                                .filter(Boolean)
+                                .join(" • ")}
+                            </p>
+                          ) : null}
+                        </div>
                       ))}
                     </div>
                   </details>

@@ -15,7 +15,9 @@ function json(status: number, payload: Record<string, unknown>) {
 }
 
 export function startWebhookServer(bot: Bot<Context>) {
-  const handleTelegram = webhookCallback(bot, "http");
+  const handleTelegram = webhookCallback(bot, "http", {
+    onTimeout: "return",
+  });
 
   const server = createServer((req, res) => {
     if (!req.url) {
@@ -52,7 +54,9 @@ export function startWebhookServer(bot: Bot<Context>) {
         }
       }
 
-      void handleTelegram(req, res);
+      void handleTelegram(req, res).catch((error) => {
+        console.error("[telegram] webhook handler error", error);
+      });
       return;
     }
 

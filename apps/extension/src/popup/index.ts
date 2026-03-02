@@ -15,6 +15,20 @@ const connectionState =
   document.querySelector<HTMLParagraphElement>("#connection-state");
 const folderSelect =
   document.querySelector<HTMLSelectElement>("#folder-select");
+const createFolderToggle = document.querySelector<HTMLButtonElement>(
+  "#toggle-create-folder",
+);
+const createFolderPanel = document.querySelector<HTMLDivElement>(
+  "#create-folder-panel",
+);
+const newFolderNameInput =
+  document.querySelector<HTMLInputElement>("#new-folder-name");
+const createFolderButton =
+  document.querySelector<HTMLButtonElement>("#create-folder");
+const cancelCreateFolderButton = document.querySelector<HTMLButtonElement>(
+  "#cancel-create-folder",
+);
+const sourceLabel = document.querySelector<HTMLElement>("#source-label");
 const AUTH_SESSION_KEY = "amiro_auth_session";
 let currentSession: AuthSessionState | null = null;
 
@@ -47,11 +61,12 @@ function setConnectionState(session: AuthSessionState | null) {
   disconnectButton.classList.remove("hidden");
 }
 
-function setFolderOptions(folders: FolderOption[]) {
+function setFolderOptions(folders: FolderOption[], selectedFolderId?: string) {
   if (!folderSelect) {
     return;
   }
 
+  const previousSelection = folderSelect.value;
   folderSelect.innerHTML = "";
   const defaultOption = document.createElement("option");
   defaultOption.value = "";
@@ -63,6 +78,14 @@ function setFolderOptions(folders: FolderOption[]) {
     option.value = folder.id;
     option.textContent = folder.name;
     folderSelect.append(option);
+  }
+
+  const nextSelection = selectedFolderId ?? previousSelection;
+  if (
+    nextSelection &&
+    Array.from(folderSelect.options).some((opt) => opt.value === nextSelection)
+  ) {
+    folderSelect.value = nextSelection;
   }
 
   folderSelect.disabled = !currentSession;
@@ -90,6 +113,21 @@ async function loadFolders() {
     setStatus(message, "error");
     setFolderOptions([]);
   }
+}
+
+async function createFolder(name: string) {
+  const response = (await chrome.runtime.sendMessage({
+    type: "amiro/create-folder",
+    name,
+  } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+
+  if (!response.ok || !response.folderId) {
+    throw new Error(
+      response.ok ? "Folder create returned no id." : response.error,
+    );
+  }
+
+  return response.folderId;
 }
 
 async function getAuthState() {
@@ -162,6 +200,7 @@ async function disconnectSession() {
     setStatus("Disconnected extension session.");
     setConnectionState(null);
     setFolderOptions([]);
+    hideCreateFolderPanel();
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to disconnect session.";
@@ -169,6 +208,110 @@ async function disconnectSession() {
   } finally {
     disconnectButton.disabled = false;
   }
+}
+
+function showCreateFolderPanel() {
+  createFolderPanel?.classList.remove("hidden");
+  newFolderNameInput?.focus();
+}
+
+function hideCreateFolderPanel() {
+  createFolderPanel?.classList.add("hidden");
+  if (newFolderNameInput) {
+    newFolderNameInput.value = "";
+  }
+}
+
+async function handleCreateFolder() {
+  if (!createFolderButton || !newFolderNameInput) {
+    return;
+  }
+
+  const name = newFolderNameInput.value.trim();
+  if (!name) {
+    setStatus("Folder name is required.", "error");
+    newFolderNameInput.focus();
+    return;
+  }
+
+  createFolderButton.disabled = true;
+  setStatus("Creating folder...");
+
+  try {
+    const folderId = await createFolder(name);
+    await loadFolders();
+    if (folderSelect) {
+      folderSelect.value = folderId;
+    }
+    hideCreateFolderPanel();
+    setStatus(`Folder "${name}" created.`);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to create folder.";
+    setStatus(message, "error");
+  } finally {
+    createFolderButton.disabled = false;
+  }
+}
+
+function getBrowserLabel(userAgent: string) {
+  const ua = userAgent.toLowerCase();
+  if (ua.includes("edg/")) return "Edge";
+  if (ua.includes("opr/") || ua.includes("opera")) return "Opera";
+  if (ua.includes("vivaldi")) return "Vivaldi";
+  if (ua.includes("brave")) return "Brave";
+  if (ua.includes("firefox")) return "Firefox";
+  if (ua.includes("chromium")) return "Chromium";
+  if (ua.includes("chrome")) return "Chrome";
+  if (ua.includes("safari")) return "Safari";
+  return "Browser";
+}
+
+function getOsLabel(platform?: string) {
+  if (!platform) return "Unknown OS";
+  const value = platform.toLowerCase();
+  if (value.includes("win")) return "Windows";
+  if (value.includes("mac")) return "macOS";
+  if (value.includes("linux")) return "Linux";
+  if (value.includes("android")) return "Android";
+  if (
+    value.includes("ios") ||
+    value.includes("iphone") ||
+    value.includes("ipad")
+  ) {
+    return "iOS";
+  }
+  return platform;
+}
+
+async function setSourceLabel() {
+  if (!sourceLabel) {
+    return;
+  }
+
+  let browser = getBrowserLabel(navigator.userAgent);
+  const braveNavigator = navigator as Navigator & {
+    brave?: { isBrave?: () => Promise<boolean> };
+  };
+  if (typeof braveNavigator.brave?.isBrave === "function") {
+    try {
+      const isBrave = await braveNavigator.brave.isBrave();
+      if (isBrave) {
+        browser = "Brave";
+      }
+    } catch {
+      // Ignore Brave detection errors and keep UA fallback.
+    }
+  }
+
+  const userAgentNavigator = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  const platform =
+    userAgentNavigator.userAgentData?.platform ||
+    navigator.platform ||
+    "Unknown OS";
+  sourceLabel.textContent = `${browser} on ${getOsLabel(platform)}`;
 }
 
 async function captureCurrentTab() {
@@ -217,6 +360,30 @@ captureButton?.addEventListener("click", () => {
   void captureCurrentTab();
 });
 
+createFolderToggle?.addEventListener("click", () => {
+  if (createFolderPanel?.classList.contains("hidden")) {
+    showCreateFolderPanel();
+    return;
+  }
+
+  hideCreateFolderPanel();
+});
+
+cancelCreateFolderButton?.addEventListener("click", () => {
+  hideCreateFolderPanel();
+});
+
+createFolderButton?.addEventListener("click", () => {
+  void handleCreateFolder();
+});
+
+newFolderNameInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void handleCreateFolder();
+  }
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || !changes[AUTH_SESSION_KEY]) {
     return;
@@ -233,3 +400,4 @@ window.addEventListener("focus", () => {
 });
 
 void refreshConnectionState();
+void setSourceLabel();

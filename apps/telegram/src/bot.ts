@@ -8,9 +8,114 @@ import {
 import { config } from "./config";
 import type { CapturePayload } from "./types";
 
+type ChildLink = NonNullable<CapturePayload["additionalLinks"]>[number];
+
 function extractUrls(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/gi;
   return [...new Set(text.match(urlRegex) ?? [])];
+}
+
+function extractBareDomainLinks(text: string) {
+  const domainRegex =
+    /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s|,)]*)?/gi;
+  const matches = [...new Set(text.match(domainRegex) ?? [])];
+  return matches.map((match) => ({
+    raw: match,
+    url: `https://${match}`,
+  }));
+}
+
+function extractTelegramHandles(text: string) {
+  const handleRegex = /(^|[\s|,(])@([a-zA-Z0-9_]{4,32})\b/g;
+  const handles = new Set<string>();
+  let match: RegExpExecArray | null = handleRegex.exec(text);
+  while (match) {
+    const handle = match[2];
+    if (handle) {
+      handles.add(handle);
+    }
+    match = handleRegex.exec(text);
+  }
+  return [...handles];
+}
+
+function extractMetaContent(html: string, attr: string, name: string) {
+  const pattern = new RegExp(
+    `<meta[^>]*${attr}=["']${name}["'][^>]*content=["']([^"']+)["'][^>]*>`,
+    "i",
+  );
+  const match = html.match(pattern);
+  return match?.[1]?.trim();
+}
+
+async function fetchLinkMetadata(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; AmiroBot/1.0)",
+      },
+    });
+
+    if (!response.ok) {
+      return {};
+    }
+
+    const html = (await response.text()).slice(0, 200_000);
+    const ogTitle = extractMetaContent(html, "property", "og:title");
+    const ogDescription = extractMetaContent(
+      html,
+      "property",
+      "og:description",
+    );
+    const ogSiteName = extractMetaContent(html, "property", "og:site_name");
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+
+    return {
+      title: ogTitle || titleMatch?.[1]?.trim() || undefined,
+      description: ogDescription || undefined,
+      siteName: ogSiteName || undefined,
+    };
+  } catch {
+    return {};
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function enrichChildLinks(
+  links: CapturePayload["additionalLinks"],
+): Promise<CapturePayload["additionalLinks"]> {
+  if (!links || links.length === 0) {
+    return links;
+  }
+
+  const enriched = await Promise.all(
+    links.slice(0, 8).map(async (link) => {
+      // Keep handle links quick and deterministic.
+      if (link.url.startsWith("https://t.me/")) {
+        return {
+          ...link,
+          siteName: link.siteName || "Telegram",
+          title: link.title || link.url,
+        } satisfies ChildLink;
+      }
+
+      const metadata = await fetchLinkMetadata(link.url);
+      return {
+        ...link,
+        title: metadata.title || link.title || link.url,
+        description: metadata.description || link.description,
+        siteName: metadata.siteName || link.siteName,
+      } satisfies ChildLink;
+    }),
+  );
+
+  return enriched;
 }
 
 function isForwardedMessage(message: Record<string, unknown>) {
@@ -31,6 +136,11 @@ function toCapturePayload(args: {
   title: string;
 }): CapturePayload | null {
   const urlsInText = extractUrls(args.text);
+  const bareDomains = extractBareDomainLinks(args.text);
+  const handleLinks = extractTelegramHandles(args.text).map((handle) => ({
+    url: `https://t.me/${handle}`,
+    title: `@${handle}`,
+  }));
 
   const legacyForwardChat = (args.message as { forward_from_chat?: unknown })
     .forward_from_chat as { username?: string; id?: number } | undefined;
@@ -72,12 +182,36 @@ function toCapturePayload(args: {
     return null;
   }
 
-  const childLinks = urlsInText
-    .filter((childUrl) => childUrl !== url)
-    .map((childUrl, index) => ({
+  const childLinksByUrl = new Map<string, ChildLink>();
+
+  for (const childUrl of urlsInText) {
+    if (childUrl === url) {
+      continue;
+    }
+    childLinksByUrl.set(childUrl, {
       url: childUrl,
-      title: `Link ${index + 1}`,
-    }));
+      title: childUrl,
+    });
+  }
+
+  for (const domain of bareDomains) {
+    if (domain.url === url || childLinksByUrl.has(domain.url)) {
+      continue;
+    }
+    childLinksByUrl.set(domain.url, {
+      url: domain.url,
+      title: domain.raw,
+    });
+  }
+
+  for (const handle of handleLinks) {
+    if (handle.url === url) {
+      continue;
+    }
+    childLinksByUrl.set(handle.url, handle);
+  }
+
+  const childLinks = [...childLinksByUrl.values()];
 
   return {
     source: "telegram",
@@ -283,13 +417,16 @@ export function createTelegramBot() {
     const folder = index === 0 ? null : selection.folders[index - 1];
 
     try {
+      const enrichedLinks = await enrichChildLinks(
+        selection.capture.additionalLinks,
+      );
       await syncTelegramCapture({
         telegramUserId: selection.telegramUserId,
         folderId: folder?.id,
         url: selection.capture.url,
         title: selection.capture.title,
         text: selection.capture.text,
-        additionalLinks: selection.capture.additionalLinks,
+        additionalLinks: enrichedLinks,
         tags: selection.capture.tags,
         capturedAt: selection.capture.capturedAt,
       });

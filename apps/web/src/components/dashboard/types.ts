@@ -15,6 +15,8 @@ export type DashboardBookmark = {
   childLinks: Array<{
     url: string;
     title?: string;
+    siteName?: string;
+    description?: string;
   }>;
   tags: string[];
   source: "chrome" | "telegram" | "instagram" | "twitter";

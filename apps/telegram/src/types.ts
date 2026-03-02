@@ -6,6 +6,8 @@ export type CapturePayload = {
   additionalLinks?: Array<{
     url: string;
     title?: string;
+    siteName?: string;
+    description?: string;
   }>;
   tags: string[];
   capturedAt: string;

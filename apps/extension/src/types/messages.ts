@@ -32,6 +32,7 @@ export type ExtensionMessage =
       convexSiteUrl: string;
     }
   | { type: "amiro/get-folders" }
+  | { type: "amiro/create-folder"; name: string }
   | { type: "amiro/get-auth-state" }
   | { type: "amiro/disconnect-auth" };
 
@@ -43,6 +44,7 @@ export type ExtensionMessageResponse =
       syncMessage?: string;
       session?: AuthSessionState | null;
       folders?: FolderOption[];
+      folderId?: string;
       started?: true;
       connected?: true;
       disconnected?: true;
