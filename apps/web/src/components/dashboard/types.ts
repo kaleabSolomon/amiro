@@ -12,6 +12,10 @@ export type DashboardBookmark = {
   url: string;
   title: string;
   text: string;
+  childLinks: Array<{
+    url: string;
+    title?: string;
+  }>;
   tags: string[];
   source: "chrome" | "telegram" | "instagram" | "twitter";
   capturedAt: number;

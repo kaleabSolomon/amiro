@@ -10,6 +10,7 @@ async function main() {
     id: me.id,
     username: me.username,
     mode: config.mode,
+    allowedUpdates: config.allowedUpdates,
   });
 
   if (config.mode === "webhook") {

@@ -66,6 +66,10 @@ export async function syncTelegramCapture(args: {
   url: string;
   title: string;
   text?: string;
+  additionalLinks?: Array<{
+    url: string;
+    title?: string;
+  }>;
   tags: string[];
   capturedAt: string;
 }) {

@@ -12,6 +12,35 @@ function normalizeTag(tag: string) {
   return tag.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
+function normalizeChildLinks(
+  links: Array<{ url: string; title?: string }> | undefined,
+) {
+  if (!links || links.length === 0) {
+    return undefined;
+  }
+
+  const deduped = new Map<string, { url: string; title?: string }>();
+  for (const link of links) {
+    const url = link.url.trim();
+    if (!url) {
+      continue;
+    }
+
+    if (!deduped.has(url)) {
+      deduped.set(url, {
+        url,
+        title: link.title?.trim() || undefined,
+      });
+    }
+  }
+
+  if (deduped.size === 0) {
+    return undefined;
+  }
+
+  return [...deduped.values()];
+}
+
 function buildDefaultTags(args: {
   source: "chrome" | "telegram" | "instagram" | "twitter";
   url: string;
@@ -43,6 +72,14 @@ export const upsertCaptureFromExtension = internalMutation({
     url: v.string(),
     title: v.string(),
     text: v.optional(v.string()),
+    additionalLinks: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          title: v.optional(v.string()),
+        }),
+      ),
+    ),
     tags: v.array(v.string()),
     capturedAt: v.string(),
   },
@@ -64,6 +101,7 @@ export const upsertCaptureFromExtension = internalMutation({
       url: args.url,
       capturedAtMs,
     });
+    const childLinks = normalizeChildLinks(args.additionalLinks);
     const mergedTags = [
       ...new Set(
         [...args.tags, ...defaultTags]
@@ -88,6 +126,7 @@ export const upsertCaptureFromExtension = internalMutation({
         folderId: args.folderId,
         title: args.title,
         text: args.text,
+        childLinks,
         tags: mergedTags,
         capturedAt: capturedAtMs,
         lastSyncedAt: now,
@@ -106,6 +145,7 @@ export const upsertCaptureFromExtension = internalMutation({
       url: args.url,
       title: args.title,
       text: args.text,
+      childLinks,
       tags: mergedTags,
       capturedAt: capturedAtMs,
       lastSyncedAt: now,

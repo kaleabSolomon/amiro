@@ -10,7 +10,7 @@ import type { CapturePayload } from "./types";
 
 function extractUrls(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/gi;
-  return text.match(urlRegex) ?? [];
+  return [...new Set(text.match(urlRegex) ?? [])];
 }
 
 function isForwardedMessage(message: Record<string, unknown>) {
@@ -25,21 +25,66 @@ function isForwardedMessage(message: Record<string, unknown>) {
 }
 
 function toCapturePayload(args: {
+  message: Record<string, unknown>;
   text: string;
   timestampSeconds: number;
   title: string;
 }): CapturePayload | null {
-  const urls = extractUrls(args.text);
-  const url = urls.at(0);
+  const urlsInText = extractUrls(args.text);
+
+  const legacyForwardChat = (args.message as { forward_from_chat?: unknown })
+    .forward_from_chat as { username?: string; id?: number } | undefined;
+  const legacyForwardMessageId = (
+    args.message as { forward_from_message_id?: unknown }
+  ).forward_from_message_id as number | undefined;
+
+  const origin = (args.message as { forward_origin?: unknown })
+    .forward_origin as
+    | {
+        type?: string;
+        chat?: { username?: string; id?: number };
+        message_id?: number;
+      }
+    | undefined;
+
+  const channelChat = origin?.type === "channel" ? origin.chat : undefined;
+  const channelMessageId =
+    origin?.type === "channel" ? origin.message_id : undefined;
+
+  const forwardedChat = channelChat || legacyForwardChat;
+  const forwardedMessageId = channelMessageId || legacyForwardMessageId;
+
+  let parentUrl: string | undefined;
+  if (forwardedChat?.username && forwardedMessageId) {
+    parentUrl = `https://t.me/${forwardedChat.username}/${forwardedMessageId}`;
+  } else if (
+    typeof forwardedChat?.id === "number" &&
+    forwardedMessageId &&
+    String(forwardedChat.id).startsWith("-100")
+  ) {
+    const internalId = String(forwardedChat.id).slice(4);
+    parentUrl = `https://t.me/c/${internalId}/${forwardedMessageId}`;
+  }
+
+  const fallbackUrl = urlsInText.at(0);
+  const url = parentUrl ?? fallbackUrl;
   if (!url) {
     return null;
   }
+
+  const childLinks = urlsInText
+    .filter((childUrl) => childUrl !== url)
+    .map((childUrl, index) => ({
+      url: childUrl,
+      title: `Link ${index + 1}`,
+    }));
 
   return {
     source: "telegram",
     url,
     title: args.title,
     text: args.text,
+    additionalLinks: childLinks.length > 0 ? childLinks : undefined,
     tags: config.defaultTags,
     capturedAt: new Date(args.timestampSeconds * 1000).toISOString(),
   };
@@ -133,7 +178,20 @@ export function createTelegramBot() {
       return;
     }
 
-    if (!isForwardedMessage(message as unknown as Record<string, unknown>)) {
+    const isForwarded = isForwardedMessage(
+      message as unknown as Record<string, unknown>,
+    );
+    console.log("[telegram] message received", {
+      chatId: message.chat.id,
+      fromId: ctx.from.id,
+      isForwarded,
+      hasTextField: "text" in message,
+      hasCaptionField: "caption" in message,
+      hasForwardOrigin: "forward_origin" in message,
+      hasForwardDate: "forward_date" in message,
+    });
+
+    if (!isForwarded) {
       return;
     }
 
@@ -142,26 +200,20 @@ export function createTelegramBot() {
       ("caption" in message ? message.caption : undefined) ||
       "";
 
-    console.log("[telegram] received forwarded message", {
-      chatId: message.chat.id,
-      hasText: Boolean(text),
-      hasForwardOrigin: "forward_origin" in message,
-      hasForwardDate: "forward_date" in message,
-      isAutomaticForward:
-        "is_automatic_forward" in message && message.is_automatic_forward,
-    });
-
     const title =
       message.chat.title || message.chat.username || "Telegram bookmark";
 
     const capture = toCapturePayload({
+      message: message as unknown as Record<string, unknown>,
       text,
       timestampSeconds: message.date,
       title,
     });
 
     if (!capture) {
-      await ctx.reply("No URL found in that forwarded message.");
+      await ctx.reply(
+        "Could not extract a post URL or any links from that forwarded message.",
+      );
       return;
     }
 
@@ -237,6 +289,7 @@ export function createTelegramBot() {
         url: selection.capture.url,
         title: selection.capture.title,
         text: selection.capture.text,
+        additionalLinks: selection.capture.additionalLinks,
         tags: selection.capture.tags,
         capturedAt: selection.capture.capturedAt,
       });

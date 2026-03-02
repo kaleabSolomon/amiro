@@ -53,7 +53,7 @@ export const config = {
       env.TELEGRAM_ALLOWED_UPDATES.split(",")
         .map((value) => value.trim())
         .filter((value) => value.length > 0)
-        .concat(["callback_query"]),
+        .concat(["message", "channel_post", "callback_query"]),
     ),
   ],
   convexSiteUrl: env.AMIRO_CONVEX_SITE_URL,

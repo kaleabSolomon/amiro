@@ -144,6 +144,7 @@ export const getBookmarksForFolder = query({
       url: bookmark.url,
       title: bookmark.title,
       text: bookmark.text ?? "",
+      childLinks: bookmark.childLinks ?? [],
       tags: bookmark.tags,
       source: bookmark.source,
       capturedAt: bookmark.capturedAt,

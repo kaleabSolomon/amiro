@@ -183,18 +183,22 @@ export function DashboardMainPanel({
         ) : (
           <div className="grid gap-3">
             {bookmarks.map((bookmark) => (
-              <a
+              <div
                 key={bookmark.id}
-                href={bookmark.url}
-                target="_blank"
-                rel="noreferrer"
                 className="rounded-xl border border-border/80 bg-background p-4 transition-colors hover:bg-muted"
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
-                  <p className="line-clamp-1 font-medium text-sm">
+                  <a
+                    href={bookmark.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="line-clamp-1 font-medium text-sm hover:underline"
+                  >
                     {bookmark.title}
-                  </p>
-                  <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </a>
+                  <a href={bookmark.url} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </a>
                 </div>
                 <p className="line-clamp-1 text-muted-foreground text-xs">
                   {bookmark.url}
@@ -217,7 +221,27 @@ export function DashboardMainPanel({
                     </span>
                   ))}
                 </div>
-              </a>
+                {bookmark.childLinks.length > 0 ? (
+                  <details className="mt-3 rounded-md border border-border/70 bg-muted/30 p-2 text-xs">
+                    <summary className="cursor-pointer font-medium text-muted-foreground">
+                      Links in post ({bookmark.childLinks.length})
+                    </summary>
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      {bookmark.childLinks.map((link) => (
+                        <a
+                          key={link.url}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="line-clamp-1 text-primary hover:underline"
+                        >
+                          {link.title || link.url}
+                        </a>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
             ))}
           </div>
         )}

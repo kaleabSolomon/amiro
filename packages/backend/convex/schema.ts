@@ -44,6 +44,14 @@ export default defineSchema({
     url: v.string(),
     title: v.string(),
     text: v.optional(v.string()),
+    childLinks: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          title: v.optional(v.string()),
+        }),
+      ),
+    ),
     tags: v.array(v.string()),
     capturedAt: v.number(),
     lastSyncedAt: v.number(),

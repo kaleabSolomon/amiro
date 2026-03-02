@@ -16,6 +16,14 @@ const syncCaptureSchema = z.object({
   url: z.string().url(),
   title: z.string().min(1),
   text: z.string().optional(),
+  additionalLinks: z
+    .array(
+      z.object({
+        url: z.string().url(),
+        title: z.string().optional(),
+      }),
+    )
+    .optional(),
   tags: z.array(z.string()).default([]),
   capturedAt: z.string(),
 });
@@ -37,6 +45,14 @@ const telegramSyncSchema = z.object({
   url: z.string().url(),
   title: z.string().min(1),
   text: z.string().optional(),
+  additionalLinks: z
+    .array(
+      z.object({
+        url: z.string().url(),
+        title: z.string().optional(),
+      }),
+    )
+    .optional(),
   tags: z.array(z.string()).default([]),
   capturedAt: z.string(),
 });
@@ -124,6 +140,7 @@ http.route({
         url: parsed.data.url,
         title: parsed.data.title,
         text: parsed.data.text,
+        additionalLinks: parsed.data.additionalLinks,
         tags: parsed.data.tags,
         capturedAt: parsed.data.capturedAt,
       });
@@ -328,6 +345,7 @@ http.route({
           url: parsed.data.url,
           title: parsed.data.title,
           text: parsed.data.text,
+          additionalLinks: parsed.data.additionalLinks,
           tags: parsed.data.tags,
           capturedAt: parsed.data.capturedAt,
         },

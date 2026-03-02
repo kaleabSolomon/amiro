@@ -6,7 +6,8 @@ Telegram bot scaffold built with `grammy` for polling and webhook delivery, incl
 
 - `grammy` bot with `/start` and `/help` commands
 - `/start link_<token>` flow to link Telegram account to Amiro user
-- Message/channel text URL extraction
+- Forwarded post link as primary bookmark URL
+- In-post URLs captured as child links on the parent bookmark
 - Capture candidate normalization with default tags
 - Polling mode runner
 - Webhook mode runner with secret token verification
