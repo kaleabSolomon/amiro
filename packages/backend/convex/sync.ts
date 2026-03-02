@@ -81,6 +81,43 @@ function buildDefaultTags(args: {
   return [...tags];
 }
 
+function buildSearchDocument(args: {
+  source: "chrome" | "telegram" | "instagram" | "twitter";
+  url: string;
+  title: string;
+  text?: string;
+  tags: string[];
+  childLinks?: Array<{
+    url: string;
+    title?: string;
+    siteName?: string;
+    description?: string;
+  }>;
+}) {
+  const parts: string[] = [
+    args.title,
+    args.url,
+    args.text ?? "",
+    args.source,
+    `source:${args.source}`,
+  ];
+
+  for (const tag of args.tags) {
+    parts.push(tag, `tag:${tag}`);
+  }
+
+  for (const link of args.childLinks ?? []) {
+    parts.push(
+      link.url,
+      link.title ?? "",
+      link.siteName ?? "",
+      link.description ?? "",
+    );
+  }
+
+  return parts.join(" ").toLowerCase();
+}
+
 export const upsertCaptureFromExtension = internalMutation({
   args: {
     userId: v.string(),
@@ -128,6 +165,14 @@ export const upsertCaptureFromExtension = internalMutation({
           .filter((tag) => tag.length > 0),
       ),
     ];
+    const searchDocument = buildSearchDocument({
+      source: args.source,
+      url: args.url,
+      title: args.title,
+      text: args.text,
+      tags: mergedTags,
+      childLinks,
+    });
 
     const now = Date.now();
     const existing = await ctx.db
@@ -146,6 +191,7 @@ export const upsertCaptureFromExtension = internalMutation({
         title: args.title,
         text: args.text,
         childLinks,
+        searchDocument,
         tags: mergedTags,
         capturedAt: capturedAtMs,
         lastSyncedAt: now,
@@ -165,6 +211,7 @@ export const upsertCaptureFromExtension = internalMutation({
       title: args.title,
       text: args.text,
       childLinks,
+      searchDocument,
       tags: mergedTags,
       capturedAt: capturedAtMs,
       lastSyncedAt: now,

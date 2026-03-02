@@ -1,7 +1,6 @@
 "use client";
 
 import { FolderClosed } from "lucide-react";
-import { useMemo } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -25,39 +24,15 @@ export function DashboardFolderSidebar({
   selectedFolderId: string;
   onSelectFolder: (folderId: string) => void;
 }) {
-  const folderMap = useMemo(
-    () => new Map(folders.map((folder) => [folder.id, folder])),
-    [folders],
-  );
-
-  const folderEntries = useMemo(() => {
-    const getDepth = (folder: DashboardFolder) => {
-      let depth = 0;
-      let currentParentId = folder.parentId;
-
-      while (currentParentId) {
-        const parent = folderMap.get(currentParentId);
-        if (!parent) {
-          break;
-        }
-
-        depth += 1;
-        currentParentId = parent.parentId;
-      }
-
-      return depth;
-    };
-
-    return [...folders]
-      .sort((a, b) => {
-        if (a.parentId === b.parentId) {
-          return a.name.localeCompare(b.name);
-        }
-
-        return a.parentId ? 1 : -1;
-      })
-      .map((folder) => ({ folder, depth: getDepth(folder) }));
-  }, [folderMap, folders]);
+  const folderEntries = [...folders].sort((a, b) => {
+    if (a.id === "unfiled") {
+      return -1;
+    }
+    if (b.id === "unfiled") {
+      return 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
 
   return (
     <Sidebar>
@@ -69,12 +44,11 @@ export function DashboardFolderSidebar({
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {folderEntries.map(({ folder, depth }) => (
+              {folderEntries.map((folder) => (
                 <SidebarMenuItem key={folder.id}>
                   <SidebarMenuButton
                     isActive={selectedFolderId === folder.id}
                     onClick={() => onSelectFolder(folder.id)}
-                    style={{ paddingLeft: `${8 + depth * 14}px` }}
                   >
                     <FolderClosed className="h-4 w-4" />
                     <span>{folder.name}</span>

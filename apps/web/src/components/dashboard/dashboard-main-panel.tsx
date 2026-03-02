@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, FolderClosed, Hash, Plus, Search } from "lucide-react";
+import { ExternalLink, Hash, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,24 +14,27 @@ import type { DashboardBookmark, DashboardFolder } from "./types";
 export function DashboardMainPanel({
   selectedFolder,
   breadcrumbs,
-  childFolders,
   bookmarks,
   creatingFolder,
   onSelectFolder,
   onCreateFolder,
+  onDeleteBookmark,
   onOpenSearch,
 }: {
   selectedFolder: DashboardFolder;
   breadcrumbs: DashboardFolder[];
-  childFolders: DashboardFolder[];
   bookmarks: DashboardBookmark[];
   creatingFolder: boolean;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (name: string) => void;
+  onDeleteBookmark: (bookmarkId: string) => Promise<void>;
   onOpenSearch: () => void;
 }) {
   const [creatingMode, setCreatingMode] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [deletingBookmarkId, setDeletingBookmarkId] = useState<string | null>(
+    null,
+  );
 
   return (
     <div className="rounded-2xl border border-border/80 bg-card/70 p-5 shadow-xs backdrop-blur-sm">
@@ -135,45 +138,6 @@ export function DashboardMainPanel({
         ))}
       </div>
 
-      <div>
-        <p className="mb-3 font-medium text-sm">Subfolders</p>
-        {childFolders.length === 0 ? (
-          <div className="rounded-xl border border-border border-dashed p-6 text-center text-muted-foreground text-sm">
-            No subfolders in this folder yet.
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {childFolders.map((folder) => (
-              <button
-                key={folder.id}
-                type="button"
-                onClick={() => onSelectFolder(folder.id)}
-                className="rounded-xl border border-border/80 bg-background p-4 text-left transition-colors hover:bg-muted"
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="font-medium text-sm">{folder.name}</p>
-                  <FolderClosed className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <p className="text-muted-foreground text-xs">
-                  {folder.itemCount} items • updated{" "}
-                  {formatRelativeTime(folder.updatedAtMs)}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {folder.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       <div className="mt-8">
         <p className="mb-3 font-medium text-sm">Bookmarks</p>
         {bookmarks.length === 0 ? (
@@ -196,9 +160,30 @@ export function DashboardMainPanel({
                   >
                     {bookmark.title}
                   </a>
-                  <a href={bookmark.url} target="_blank" rel="noreferrer">
-                    <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  </a>
+                  <div className="flex items-center gap-1">
+                    <a href={bookmark.url} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </a>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={deletingBookmarkId === bookmark.id}
+                      onClick={async () => {
+                        setDeletingBookmarkId(bookmark.id);
+                        try {
+                          await onDeleteBookmark(bookmark.id);
+                        } finally {
+                          setDeletingBookmarkId((current) =>
+                            current === bookmark.id ? null : current,
+                          );
+                        }
+                      }}
+                      aria-label="Delete bookmark"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
                 </div>
                 <p className="line-clamp-1 text-muted-foreground text-xs">
                   {bookmark.url}

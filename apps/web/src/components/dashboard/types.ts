@@ -23,3 +23,13 @@ export type DashboardBookmark = {
   capturedAt: number;
   lastSyncedAt: number;
 };
+
+export type DashboardSearchBookmark = {
+  id: string;
+  title: string;
+  url: string;
+  source: "chrome" | "telegram" | "instagram" | "twitter";
+  tags: string[];
+  folderId: string | null;
+  folderName: string;
+};

@@ -153,6 +153,115 @@ export const getBookmarksForFolder = query({
   },
 });
 
+export const searchWorkspace = query({
+  args: {
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return { folders: [], bookmarks: [] };
+    }
+
+    const searchQuery = args.query.trim().toLowerCase();
+    if (!searchQuery) {
+      return { folders: [], bookmarks: [] };
+    }
+
+    const limit = Math.max(5, Math.min(args.limit ?? 30, 50));
+    const folders = await ctx.db
+      .query("folders")
+      .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+      .collect();
+
+    const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
+    const matchedFolders = folders
+      .filter((folder) => folder.name.toLowerCase().includes(searchQuery))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 12)
+      .map((folder) => ({
+        id: folder._id,
+        name: folder.name,
+      }));
+
+    const bookmarksFromSearch = await ctx.db
+      .query("syncedBookmarks")
+      .withSearchIndex("search_by_user_document", (q) =>
+        q.search("searchDocument", searchQuery).eq("userId", authUser._id),
+      )
+      .take(limit);
+
+    const legacyRecent = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_last_synced_at", (q) =>
+        q.eq("userId", authUser._id),
+      )
+      .order("desc")
+      .take(300);
+
+    const legacyMatches = legacyRecent.filter((bookmark) => {
+      const folderName = bookmark.folderId
+        ? (folderMap.get(bookmark.folderId)?.name ?? "")
+        : "unfiled";
+      const searchBlob = [
+        bookmark.title,
+        bookmark.url,
+        bookmark.text ?? "",
+        bookmark.source,
+        `source:${bookmark.source}`,
+        folderName,
+        ...bookmark.tags,
+        ...bookmark.tags.map((tag) => `tag:${tag}`),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return searchBlob.includes(searchQuery);
+    });
+
+    const matchedFolderIds = new Set(matchedFolders.map((folder) => folder.id));
+    const folderMatchBookmarks = (
+      await Promise.all(
+        [...matchedFolderIds].map((folderId) =>
+          ctx.db
+            .query("syncedBookmarks")
+            .withIndex("by_user_and_folder", (q) =>
+              q.eq("userId", authUser._id).eq("folderId", folderId),
+            )
+            .order("desc")
+            .take(8),
+        ),
+      )
+    ).flat();
+
+    const bookmarkById = new Map(
+      [...bookmarksFromSearch, ...legacyMatches, ...folderMatchBookmarks].map(
+        (bookmark) => [bookmark._id, bookmark],
+      ),
+    );
+
+    const bookmarks = [...bookmarkById.values()]
+      .sort((a, b) => b.lastSyncedAt - a.lastSyncedAt)
+      .slice(0, limit)
+      .map((bookmark) => ({
+        id: bookmark._id,
+        title: bookmark.title,
+        url: bookmark.url,
+        source: bookmark.source,
+        tags: bookmark.tags,
+        folderId: bookmark.folderId ?? null,
+        folderName: bookmark.folderId
+          ? (folderMap.get(bookmark.folderId)?.name ?? "Unknown folder")
+          : "Unfiled",
+      }));
+
+    return {
+      folders: matchedFolders,
+      bookmarks,
+    };
+  },
+});
+
 export const createFolder = mutation({
   args: {
     name: v.string(),
@@ -214,6 +323,22 @@ export const createFolderForUser = internalMutation({
     });
 
     return { id };
+  },
+});
+
+export const deleteBookmark = mutation({
+  args: {
+    bookmarkId: v.id("syncedBookmarks"),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const bookmark = await ctx.db.get(args.bookmarkId);
+    if (!bookmark || bookmark.userId !== authUser._id) {
+      throw new ConvexError("Bookmark not found.");
+    }
+
+    await ctx.db.delete(args.bookmarkId);
+    return { ok: true as const };
   },
 });
 

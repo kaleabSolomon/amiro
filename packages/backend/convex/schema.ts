@@ -54,6 +54,7 @@ export default defineSchema({
         }),
       ),
     ),
+    searchDocument: v.optional(v.string()),
     tags: v.array(v.string()),
     capturedAt: v.number(),
     lastSyncedAt: v.number(),
@@ -61,5 +62,9 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_and_source_and_url", ["userId", "source", "url"])
     .index("by_user_and_folder", ["userId", "folderId"])
-    .index("by_user_and_last_synced_at", ["userId", "lastSyncedAt"]),
+    .index("by_user_and_last_synced_at", ["userId", "lastSyncedAt"])
+    .searchIndex("search_by_user_document", {
+      searchField: "searchDocument",
+      filterFields: ["userId"],
+    }),
 });

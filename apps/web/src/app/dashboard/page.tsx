@@ -10,13 +10,16 @@ import {
   useQuery,
 } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
 import { DashboardFolderSidebar } from "@/components/dashboard/dashboard-folder-sidebar";
 import { DashboardMainPanel } from "@/components/dashboard/dashboard-main-panel";
-import type { DashboardFolder } from "@/components/dashboard/types";
+import type {
+  DashboardFolder,
+  DashboardSearchBookmark,
+} from "@/components/dashboard/types";
 import { AppShell } from "@/components/layout/app-shell";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
@@ -35,11 +38,20 @@ function FolderWorkspace() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const trimmedSearchQuery = searchQuery.trim();
+  const deferredSearchQuery = useDeferredValue(trimmedSearchQuery);
   const foldersQuery = useQuery(api.dashboard.getFolderTree);
   const bookmarks = useQuery(api.dashboard.getBookmarksForFolder, {
     folderId: selectedFolderId,
   });
+  const searchResults = useQuery(
+    api.dashboard.searchWorkspace,
+    paletteOpen && deferredSearchQuery
+      ? { query: deferredSearchQuery, limit: 30 }
+      : "skip",
+  );
   const createFolder = useMutation(api.dashboard.createFolder);
+  const deleteBookmark = useMutation(api.dashboard.deleteBookmark);
 
   const folders = useMemo<DashboardFolder[]>(() => {
     if (!foldersQuery || foldersQuery.length === 0) {
@@ -65,36 +77,32 @@ function FolderWorkspace() {
 
   const selectedFolder = folderMap.get(selectedFolderId) ?? folders[0];
 
-  const breadcrumbs = useMemo(() => {
-    const path: DashboardFolder[] = [];
-    let current: DashboardFolder | undefined = selectedFolder;
+  const breadcrumbs = useMemo(() => [selectedFolder], [selectedFolder]);
 
-    while (current) {
-      path.unshift(current);
-      current = current.parentId ? folderMap.get(current.parentId) : undefined;
-    }
-
-    return path;
-  }, [folderMap, selectedFolder]);
-
-  const childFolders = useMemo(
-    () => folders.filter((folder) => folder.parentId === selectedFolder.id),
-    [folders, selectedFolder.id],
-  );
-
-  const filteredFolders = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) {
+  const paletteFolders = useMemo(() => {
+    if (!deferredSearchQuery) {
       return folders;
     }
+    if (!searchResults) {
+      return [];
+    }
 
-    return folders.filter((folder) => {
-      return (
-        folder.name.toLowerCase().includes(query) ||
-        folder.tags.some((tag) => tag.toLowerCase().includes(query))
-      );
-    });
-  }, [folders, searchQuery]);
+    return searchResults.folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentId: null,
+      tags: [],
+      itemCount: 0,
+      updatedAtMs: null,
+    }));
+  }, [deferredSearchQuery, folders, searchResults]);
+
+  const paletteBookmarks = useMemo<DashboardSearchBookmark[]>(() => {
+    if (!deferredSearchQuery || !searchResults) {
+      return [];
+    }
+    return searchResults.bookmarks;
+  }, [deferredSearchQuery, searchResults]);
 
   useEffect(() => {
     if (!folderMap.has(selectedFolderId) && folders.length > 0) {
@@ -134,10 +142,6 @@ function FolderWorkspace() {
     try {
       const result = await createFolder({
         name: folderName.trim(),
-        parentFolderId:
-          selectedFolderId !== "unfiled"
-            ? (selectedFolderId as Id<"folders">)
-            : undefined,
       });
       setSelectedFolderId(result.id);
       toast.success("Folder created.");
@@ -148,6 +152,24 @@ function FolderWorkspace() {
     } finally {
       setCreatingFolder(false);
     }
+  };
+
+  const handleDeleteBookmark = async (bookmarkId: string) => {
+    try {
+      await deleteBookmark({
+        bookmarkId: bookmarkId as Id<"syncedBookmarks">,
+      });
+      toast.success("Bookmark deleted.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete bookmark.";
+      toast.error(message);
+    }
+  };
+
+  const openBookmark = (url: string) => {
+    window.open(url, "_blank", "noopener,noreferrer");
+    setPaletteOpen(false);
   };
 
   return (
@@ -163,11 +185,11 @@ function FolderWorkspace() {
           <DashboardMainPanel
             selectedFolder={selectedFolder}
             breadcrumbs={breadcrumbs}
-            childFolders={childFolders}
             bookmarks={bookmarks ?? []}
             creatingFolder={creatingFolder}
             onSelectFolder={selectFolder}
             onCreateFolder={handleCreateFolder}
+            onDeleteBookmark={handleDeleteBookmark}
             onOpenSearch={() => setPaletteOpen(true)}
           />
         </SidebarInset>
@@ -176,9 +198,12 @@ function FolderWorkspace() {
           open={paletteOpen}
           query={searchQuery}
           onQueryChange={setSearchQuery}
-          folders={filteredFolders}
+          loading={Boolean(deferredSearchQuery) && searchResults === undefined}
+          folders={paletteFolders}
+          bookmarks={paletteBookmarks}
           onClose={() => setPaletteOpen(false)}
           onSelectFolder={selectFolder}
+          onOpenBookmark={openBookmark}
         />
       </SidebarProvider>
     </section>
