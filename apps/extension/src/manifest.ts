@@ -23,12 +23,12 @@ const manifest: ManifestV3Export = {
     },
   ],
   commands: {
-    "capture-current-page": {
+    _execute_action: {
       suggested_key: {
         default: "Ctrl+Shift+Y",
         mac: "Command+Shift+Y",
       },
-      description: "Capture the current page into Amiro queue",
+      description: "Open Amiro Web Clipper popup",
     },
   },
 };

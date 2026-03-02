@@ -306,19 +306,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== "capture-current-page") {
-    return;
-  }
-
-  try {
-    const result = await captureCurrentTab();
-    await notifyCapture(result);
-  } catch (error) {
-    console.error("[amiro-extension] keyboard capture failed", error);
-  }
-});
-
 chrome.runtime.onMessage.addListener(
   (
     message: ExtensionMessage,
