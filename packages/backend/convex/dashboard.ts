@@ -1,6 +1,11 @@
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { authComponent } from "./auth";
 
 type FolderStats = {
@@ -338,5 +343,25 @@ export const completeTelegramLink = internalMutation({
       ok: true,
       userId: linkToken.userId,
     } as const;
+  },
+});
+
+export const getLinkedUserIdByTelegramUserId = internalQuery({
+  args: {
+    telegramUserId: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const connection = await ctx.db
+      .query("telegramConnections")
+      .withIndex("by_telegram_user_id", (q) =>
+        q.eq("telegramUserId", args.telegramUserId),
+      )
+      .unique();
+
+    if (!connection || connection.status !== "active") {
+      throw new ConvexError("Telegram account is not linked.");
+    }
+
+    return connection.userId;
   },
 });

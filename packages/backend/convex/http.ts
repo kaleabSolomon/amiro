@@ -27,12 +27,43 @@ const telegramLinkCompleteSchema = z.object({
   telegramUsername: z.string().optional(),
 });
 
+const telegramFoldersSchema = z.object({
+  telegramUserId: z.number().int(),
+});
+
+const telegramSyncSchema = z.object({
+  telegramUserId: z.number().int(),
+  folderId: z.string().optional(),
+  url: z.string().url(),
+  title: z.string().min(1),
+  text: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  capturedAt: z.string(),
+});
+
 const syncCorsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type,Authorization",
   "Content-Type": "application/json",
 };
+
+function unauthorizedBotResponse() {
+  return new Response(
+    JSON.stringify({ ok: false, error: "Unauthorized bot request." }),
+    { status: 401, headers: syncCorsHeaders },
+  );
+}
+
+function missingBotSecretResponse() {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "Server misconfigured: TELEGRAM_INTERNAL_SECRET missing.",
+    }),
+    { status: 500, headers: syncCorsHeaders },
+  );
+}
 
 http.route({
   path: "/api/extension/sync",
@@ -124,22 +155,13 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const internalSecret = process.env.TELEGRAM_INTERNAL_SECRET;
     if (!internalSecret) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "Server misconfigured: TELEGRAM_INTERNAL_SECRET missing.",
-        }),
-        { status: 500, headers: syncCorsHeaders },
-      );
+      return missingBotSecretResponse();
     }
 
     const authHeader = request.headers.get("Authorization");
     const expected = `Bearer ${internalSecret}`;
     if (authHeader !== expected) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Unauthorized bot request." }),
-        { status: 401, headers: syncCorsHeaders },
-      );
+      return unauthorizedBotResponse();
     }
 
     let payload: unknown;
@@ -182,6 +204,142 @@ http.route({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to complete link.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/telegram/folders",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const internalSecret = process.env.TELEGRAM_INTERNAL_SECRET;
+    if (!internalSecret) {
+      return missingBotSecretResponse();
+    }
+
+    const authHeader = request.headers.get("Authorization");
+    const expected = `Bearer ${internalSecret}`;
+    if (authHeader !== expected) {
+      return unauthorizedBotResponse();
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = telegramFoldersSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid folder request payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const userId = await ctx.runQuery(
+        internal.dashboard.getLinkedUserIdByTelegramUserId,
+        {
+          telegramUserId: parsed.data.telegramUserId,
+        },
+      );
+      const data = await ctx.runQuery(internal.sync.listFoldersForUser, {
+        userId,
+      });
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load folders.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/telegram/sync",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const internalSecret = process.env.TELEGRAM_INTERNAL_SECRET;
+    if (!internalSecret) {
+      return missingBotSecretResponse();
+    }
+
+    const authHeader = request.headers.get("Authorization");
+    const expected = `Bearer ${internalSecret}`;
+    if (authHeader !== expected) {
+      return unauthorizedBotResponse();
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = telegramSyncSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid sync payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const userId = await ctx.runQuery(
+        internal.dashboard.getLinkedUserIdByTelegramUserId,
+        {
+          telegramUserId: parsed.data.telegramUserId,
+        },
+      );
+
+      const result = await ctx.runMutation(
+        internal.sync.upsertCaptureFromExtension,
+        {
+          userId,
+          source: "telegram",
+          folderId: parsed.data.folderId as Id<"folders"> | undefined,
+          url: parsed.data.url,
+          title: parsed.data.title,
+          text: parsed.data.text,
+          tags: parsed.data.tags,
+          capturedAt: parsed.data.capturedAt,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data: result }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to sync capture.";
       return new Response(JSON.stringify({ ok: false, error: message }), {
         status: 400,
         headers: syncCorsHeaders,

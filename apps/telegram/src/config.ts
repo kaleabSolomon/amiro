@@ -19,7 +19,7 @@ const envSchema = z
     TELEGRAM_ALLOWED_UPDATES: z
       .string()
       .optional()
-      .default("message,channel_post"),
+      .default("message,channel_post,callback_query"),
     AMIRO_CONVEX_SITE_URL: z.string().url(),
     AMIRO_TELEGRAM_INTERNAL_SECRET: z.string().min(1),
     AMIRO_TELEGRAM_DEFAULT_TAGS: z
@@ -48,9 +48,14 @@ export const config = {
   webhookSecret: env.TELEGRAM_WEBHOOK_SECRET,
   webhookPath: env.TELEGRAM_WEBHOOK_PATH,
   port: env.TELEGRAM_PORT,
-  allowedUpdates: env.TELEGRAM_ALLOWED_UPDATES.split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0),
+  allowedUpdates: [
+    ...new Set(
+      env.TELEGRAM_ALLOWED_UPDATES.split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+        .concat(["callback_query"]),
+    ),
+  ],
   convexSiteUrl: env.AMIRO_CONVEX_SITE_URL,
   internalSecret: env.AMIRO_TELEGRAM_INTERNAL_SECRET,
   defaultTags: env.AMIRO_TELEGRAM_DEFAULT_TAGS.split(",")
