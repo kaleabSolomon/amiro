@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist_Mono } from "next/font/google";
 
 import "../index.css";
 import Providers from "@/components/providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { safeGetToken } from "@/lib/auth-server";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
 });
 
@@ -31,7 +31,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${fraunces.variable} ${geistMono.variable} antialiased`}
       >
         <TooltipProvider>
           <Providers initialToken={token}>{children}</Providers>

@@ -37,12 +37,7 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
       <nav
         className={`mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 transition-all duration-300 ${isScrolled ? "py-4" : "py-6"}`}
       >
-        <Link
-          href="/"
-          className="inline-flex rounded-md border border-(--landing-border) bg-(--landing-surface) px-3 py-1.5 font-semibold text-(--landing-ink) text-sm tracking-tight"
-        >
-          Amiro
-        </Link>
+        <Link href="/">Amiro</Link>
         <div className="hidden items-center gap-5 md:flex">
           {SECTION_LINKS.map((link) => (
             <Link

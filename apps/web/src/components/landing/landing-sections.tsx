@@ -97,9 +97,15 @@ export function LandingWhatWeDoSection() {
             key={item.title}
             className={
               idx % 2 === 0
-                ? "rounded-2xl border border-[var(--landing-accent)] bg-[var(--landing-accent)] p-6 shadow-[0_22px_50px_-26px_rgba(54,125,63,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
-                : "rounded-2xl border border-[var(--landing-border)] bg-[var(--landing-panel)] p-6 shadow-[0_22px_50px_-28px_rgba(19,30,24,0.62)] ring-1 ring-black/10 transition-transform duration-300 hover:-translate-y-0.5"
+                ? "rounded-2xl border border-[var(--landing-accent)] p-6 shadow-[0_22px_50px_-26px_rgba(54,125,63,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
+                : "rounded-2xl border border-[var(--landing-border)] p-6 shadow-[0_22px_50px_-28px_rgba(19,30,24,0.62)] ring-1 ring-black/10 transition-transform duration-300 hover:-translate-y-0.5"
             }
+            style={{
+              backgroundImage:
+                idx % 2 === 0
+                  ? "var(--landing-card-green-gradient)"
+                  : "var(--landing-card-dark-gradient)",
+            }}
           >
             <h3
               className={
@@ -140,9 +146,15 @@ export function LandingHowItWorksSection() {
             key={item.step}
             className={
               idx % 2 === 0
-                ? "rounded-2xl border border-[var(--landing-border)] bg-[var(--landing-panel)] p-6 shadow-[0_22px_50px_-28px_rgba(19,30,24,0.62)] ring-1 ring-black/10 transition-transform duration-300 hover:-translate-y-0.5"
-                : "rounded-2xl border border-[var(--landing-accent)] bg-[var(--landing-accent)] p-6 shadow-[0_22px_50px_-26px_rgba(54,125,63,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
+                ? "rounded-2xl border border-[var(--landing-border)] p-6 shadow-[0_22px_50px_-28px_rgba(19,30,24,0.62)] ring-1 ring-black/10 transition-transform duration-300 hover:-translate-y-0.5"
+                : "rounded-2xl border border-[var(--landing-accent)] p-6 shadow-[0_22px_50px_-26px_rgba(54,125,63,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
             }
+            style={{
+              backgroundImage:
+                idx % 2 === 0
+                  ? "var(--landing-card-dark-gradient)"
+                  : "var(--landing-card-green-gradient)",
+            }}
           >
             <p
               className={

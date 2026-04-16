@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useRef } from "react";
 // import { LandingNodesAnimation } from "./landing-nodes-animation";
 import { AnimatedBeam, Circle, Icons } from "@/components/ui/animated-beam";
+import amero from "../../../assets/logos/amero.png";
 import { LandingButtonLink } from "./landing-button-link";
 
 const _VALUE_PROPS = [
@@ -63,8 +65,8 @@ function AnimatedBeamDemo() {
 
         {/* Center */}
         <div className="flex flex-row items-center justify-center">
-          <Circle ref={centerRef} className="size-20">
-            <Icons.code />
+          <Circle ref={centerRef} className="size-23 p-0">
+            <Image src={amero} alt="Amiro" width={200} height={200} />
           </Circle>
         </div>
 

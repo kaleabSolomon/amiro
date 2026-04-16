@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap");
+
 /* ── Amiro Design Tokens (Light) ───────────────────────────── */
 :root {
   color-scheme: light dark;
@@ -20,7 +22,7 @@
   --ring: oklch(0.6 0.08 153);
   --radius: 0.625rem;
 
-  font-family: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+  font-family: "Fraunces", serif;
 }
 
 /* ── Amiro Design Tokens (Dark — system) ──────────────────── */
