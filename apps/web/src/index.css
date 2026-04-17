@@ -52,12 +52,12 @@
   --landing-card-green-gradient: linear-gradient(
     135deg,
     oklch(0.58 0.11 153) 50%,
-    oklch(0.5 0.13 153) 100%
+    oklch(0.4 0.18 153) 100%
   );
   --landing-card-dark-gradient: linear-gradient(
     135deg,
     oklch(0.98 0.01 154) 50%,
-    oklch(0.93 0.02 154) 100%
+    oklch(0.8 0.08 154) 100%
   );
 }
 
@@ -108,12 +108,12 @@
   --landing-card-green-gradient: linear-gradient(
     135deg,
     oklch(0.63 0.1 153) 50%,
-    oklch(0.55 0.12 153) 100%
+    oklch(0.42 0.2 153) 100%
   );
   --landing-card-dark-gradient: linear-gradient(
     135deg,
     oklch(0.28 0.02 155) 50%,
-    oklch(0.34 0.03 155) 100%
+    oklch(0.5 0.08 155) 100%
   );
 }
 

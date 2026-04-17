@@ -2,10 +2,10 @@
 
 import { useConvexAuth } from "convex/react";
 import { CheckCircle2, LoaderCircle, MailCheck, XCircle } from "lucide-react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import ForgotPasswordForm from "@/components/forgot-password-form";
 import { LandingShell } from "@/components/landing/landing-shell";
 import ResetPasswordForm from "@/components/reset-password-form";
@@ -13,6 +13,7 @@ import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import amero from "../../../assets/logos/amero.png";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -253,7 +254,7 @@ export default function AuthPageInner() {
     <LandingShell hideAuth>
       <div className="mx-auto flex w-full max-w-5xl flex-1 items-center justify-center px-4 py-8 lg:py-16">
         <div className="grid min-h-[600px] w-full overflow-hidden rounded-[2.5rem] border border-(--landing-border)/80 bg-(--landing-surface) shadow-(--landing-muted-shadow) lg:min-h-[700px] lg:grid-cols-[1.2fr_1fr] lg:p-3">
-          <div className="relative flex h-full flex-col overflow-y-auto rounded-3xl bg-background px-6 py-8 lg:px-12">
+          <div className="relative flex h-full flex-col overflow-y-auto rounded-3xl px-6 py-8 lg:px-12">
             <div className="mb-8 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-4 w-4 rounded-full bg-primary" />
@@ -417,7 +418,9 @@ export default function AuthPageInner() {
 
           <div className="relative hidden w-full overflow-hidden rounded-3xl bg-primary p-12 text-primary-foreground lg:block">
             <div className="absolute top-12 left-12 z-10">
-              <div className="mb-4 h-10 w-10 rounded-xl bg-white" />
+              <div className="mb-4 h-10 w-10 rounded-xl bg-white">
+                <Image src={amero} alt="Logo" width={40} height={40} />
+              </div>
               <h2 className="font-semibold text-lg tracking-tight">AMIRO</h2>
               <p className="mt-2 max-w-sm text-primary-foreground/80 text-sm">
                 Organizing your knowledge has never been easier.

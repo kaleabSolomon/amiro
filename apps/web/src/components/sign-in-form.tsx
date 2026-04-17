@@ -132,7 +132,7 @@ export default function SignInForm({
             <span className="w-full border-border/60 border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-4 text-muted-foreground/70">
+            <span className="bg-(--landing-surface) px-4 text-muted-foreground/70">
               OR
             </span>
           </div>
