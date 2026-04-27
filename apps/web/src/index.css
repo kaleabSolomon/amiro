@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.98 0.06 155);
+  --background: oklch(97.396% 0.0164 157.27);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -37,7 +37,7 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --landing-bg: oklch(0.98 0.06 155);
+  --landing-bg: oklch(97.396% 0.0164 157.27);
   --landing-grid: oklch(0.5 0.03 155 / 11%);
   --landing-glow-a: oklch(0.86 0.13 165 / 0.06);
   --landing-glow-b: oklch(0.9 0.02 190 / 55%);
@@ -178,4 +178,170 @@
   .landing-canvas {
     background-color: var(--landing-bg);
   }
+  .card-elevated {
+    background:
+      linear-gradient(180deg, oklch(1 0 0 / 0.025), oklch(1 0 0 / 0)),
+      var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    background: var(--accent);
+    color: var(--muted-foreground);
+    border: 1px solid var(--border);
+    transition: all 150ms ease;
+  }
+
+  .tag-chip:hover {
+    color: var(--foreground);
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+
+  .tag-chip-mint {
+    background: oklch(0.86 0.13 165 / 0.1);
+    color: var(--mint);
+    border-color: oklch(0.86 0.13 165 / 0.25);
+  }
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -12px;
+  }
+}
+
+.animate-float {
+  animation: float-y 6s ease-in-out infinite;
+}
+
+/* Pulse traveling along a stroked path from outer node to center */
+@keyframes path-pulse {
+  0% {
+    stroke-dashoffset: 200;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+/* Soft node ping when a pulse arrives */
+@keyframes node-ping {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 oklch(0.86 0.13 165 / 0);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 10px oklch(0.86 0.13 165 / 0);
+  }
+  10% {
+    box-shadow: 0 0 0 0 oklch(0.86 0.13 165 / 0.5);
+  }
+}
+
+/* Grid background */
+.bg-grid-faint {
+  background-image:
+    linear-gradient(to right, oklch(1 0 0 / 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(1 0 0 / 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.light .bg-grid-faint {
+  background-image:
+    linear-gradient(to right, oklch(0.22 0.01 80 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.22 0.01 80 / 0.06) 1px, transparent 1px);
+}
+
+/* Dotted background — slightly more characterful than grid */
+.bg-dots-faint {
+  background-image: radial-gradient(oklch(1 0 0 / 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.light .bg-dots-faint {
+  background-image: radial-gradient(
+    oklch(0.22 0.01 80 / 0.12) 1px,
+    transparent 1px
+  );
+}
+
+/* Radial fade mask — fades edges of decorative bg layers */
+.mask-radial-fade {
+  -webkit-mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 40%,
+    #000 40%,
+    transparent 80%
+  );
+  mask-image: radial-gradient(
+    ellipse 70% 60% at 50% 40%,
+    #000 40%,
+    transparent 80%
+  );
+}
+
+/* Slow drift for aurora blobs */
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate3d(2%, -3%, 0) scale(1.08);
+    opacity: 1;
+  }
+}
+.animate-aurora {
+  animation: aurora-drift 14s ease-in-out infinite;
+}
+
+@keyframes aurora-drift-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate3d(-3%, 2%, 0) scale(1);
+    opacity: 1;
+  }
+}
+.animate-aurora-2 {
+  animation: aurora-drift-2 18s ease-in-out infinite;
+}
+
+/* Conic shimmer rotating slowly behind hero */
+@keyframes conic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-conic {
+  animation: conic-spin 30s linear infinite;
+}
+
+/* Subtle noise overlay (SVG-based, no asset needed) */
+.bg-noise {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.5'/></svg>");
 }
