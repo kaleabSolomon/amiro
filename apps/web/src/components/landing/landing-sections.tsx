@@ -1,4 +1,5 @@
-import { LandingButtonLink } from "./landing-button-link";
+import Link from "next/link";
+import { Button } from "../ui/button";
 import { LandingSection } from "./landing-section";
 
 const WHAT_WE_DO = [
@@ -224,13 +225,14 @@ export function LandingPricingSection() {
                 </li>
               ))}
             </ul>
-            <LandingButtonLink
-              href="/dashboard?mode=signup"
-              emphasis={idx === 0 ? "secondary" : "primary"}
-              className="mt-6 w-full"
-            >
-              {plan.cta}
-            </LandingButtonLink>
+            <Link href="/dashboard?mode=signup">
+              <Button
+                variant={idx === 0 ? "secondary" : "default"}
+                className="mt-6 w-full"
+              >
+                {plan.cta}
+              </Button>
+            </Link>
           </article>
         ))}
       </div>
@@ -283,16 +285,14 @@ export function LandingBottomCtaSection() {
       description="Create your account and start shaping your knowledge profile."
     >
       <div className="flex flex-wrap gap-3">
-        <LandingButtonLink href="/dashboard?mode=signup" className="min-w-40">
-          Start Free
-        </LandingButtonLink>
-        <LandingButtonLink
-          href="/dashboard?mode=signin"
-          emphasis="secondary"
-          className="min-w-40"
-        >
-          I have an account
-        </LandingButtonLink>
+        <Link href="/auth?mode=signup">
+          <Button className="min-w-40">Start Free</Button>
+        </Link>
+        <Link href="/auth?mode=signin">
+          <Button variant="secondary" className="min-w-40">
+            I have an account
+          </Button>
+        </Link>
       </div>
     </LandingSection>
   );

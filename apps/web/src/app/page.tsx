@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { LandingHero } from "@/components/landing/landing-hero";
+import { Hero } from "@/components/landing/hero";
 import {
   LandingBottomCtaSection,
   LandingFaqSection,
@@ -20,7 +20,7 @@ export default async function Home() {
 
   return (
     <LandingShell>
-      <LandingHero />
+      <Hero />
       <LandingWhatWeDoSection />
       <LandingHowItWorksSection />
       <LandingPricingSection />

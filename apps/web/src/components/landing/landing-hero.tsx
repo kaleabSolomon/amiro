@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRef } from "react";
 // import { LandingNodesAnimation } from "./landing-nodes-animation";
 import { AnimatedBeam, Circle, Icons } from "@/components/ui/animated-beam";
-import amero from "../../../assets/logos/amero.png";
+import amiro from "../../../assets/logos/amiro.png";
 import { LandingButtonLink } from "./landing-button-link";
 
 const _VALUE_PROPS = [
@@ -65,8 +65,8 @@ function AnimatedBeamDemo() {
 
         {/* Center */}
         <div className="flex flex-row items-center justify-center">
-          <Circle ref={centerRef} className="size-23 p-0">
-            <Image src={amero} alt="Amiro" width={200} height={200} />
+          <Circle ref={centerRef} className="size-23 p-4">
+            <Image src={amiro} alt="Amiro" />
           </Circle>
         </div>
 
@@ -144,6 +144,10 @@ function AnimatedBeamDemo() {
 export function LandingHero() {
   return (
     <section className="mx-auto grid w-full max-w-7xl gap-10 px-6 pt-12 pb-16 lg:grid-cols-[1.5fr_1fr] lg:items-center">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute top-0 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,oklch(0.86_0.13_165/0.18),transparent_60%)] blur-2xl" />
+        {/* <div className="absolute right-[-10%] bottom-[-30%] h-[400px] w-[600px] rounded-full bg-[radial-gradient(ellipse_at_center,oklch(0.65_0.18_320/0.12),transparent_60%)] blur-2xl" /> */}
+      </div>
       <div>
         <p className="mb-5 inline-flex rounded-full border border-(--landing-border) bg-(--landing-surface) px-3 py-1 font-medium text-(--landing-ink) text-xs tracking-wide">
           Personal Knowledge Mirror
