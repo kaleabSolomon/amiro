@@ -13,10 +13,8 @@ export function LandingShell({
 }) {
   return (
     <div className="landing-canvas min-h-screen flex-col">
-      <main className="relative z-10 flex-1">
-        <LandingNav hideAuth={hideAuth} />
-        {children}
-      </main>
+      <LandingNav hideAuth={hideAuth} />
+      <main className="relative flex-1">{children}</main>
       <SiteFooter className="relative z-10 border-(--landing-border)/70 border-t" />
     </div>
   );

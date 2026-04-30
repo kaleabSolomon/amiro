@@ -29,15 +29,9 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full font-sans transition-all duration-300 ${
-        isScrolled
-          ? "border-(--landing-border)/10 border-b bg-background/40"
-          : "border-transparent bg-transparent"
+      className={`sticky top-4 z-50 mx-auto w-[calc(100%-2rem)] max-w-6xl rounded-2xl border border-white/30 bg-green-800/10 shadow-lg backdrop-blur-2xl transition-all duration-300 dark:border-white/10 dark:bg-green-950/40 ${
+        isScrolled ? "top-2 translate-y-0 shadow-xl" : "top-4"
       }`}
-      style={{
-        backdropFilter: isScrolled ? "blur(14px) saturate(125%)" : "none",
-        WebkitBackdropFilter: isScrolled ? "blur(14px) saturate(125%)" : "none",
-      }}
     >
       <nav
         className={`mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 transition-all duration-300 ${isScrolled ? "py-4" : "py-6"}`}

@@ -5,14 +5,12 @@ import { Button } from "@/components/ui/button";
 export function Hero() {
   return (
     <section className="relative overflow-hidden border-border/60 border-b">
+      {/* Layered ambient backdrop */}
       <div className="pointer-events-none absolute inset-0">
-        {/* existing glow */}
-        <div className="absolute top-0 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,oklch(0.86_0.13_165/0.18),transparent_60%)] blur-2xl" />
-        <div className="absolute right-[-10%] bottom-[-30%] h-[400px] w-[600px] rounded-full bg-[radial-gradient(ellipse_at_center,oklch(0.65_0.18_320/0.12),transparent_60%)] blur-2xl" />
-
-        {/* added layers */}
+        {/* faint grid with radial fade */}
         <div className="mask-radial-fade absolute inset-0 bg-grid-faint opacity-70" />
 
+        {/* slow rotating conic shimmer */}
         <div className="absolute top-1/2 left-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 opacity-[0.35] mix-blend-screen">
           <div
             className="h-full w-full animate-conic"
@@ -24,15 +22,20 @@ export function Hero() {
           />
         </div>
 
+        {/* aurora blobs */}
         <div className="absolute top-[-10%] left-1/2 h-[560px] w-[1000px] -translate-x-1/2 animate-aurora rounded-full bg-[radial-gradient(ellipse_at_center,oklch(0.86_0.13_165/0.28),transparent_60%)] blur-3xl" />
         <div className="absolute right-[-15%] bottom-[-30%] h-[480px] w-[700px] animate-aurora-2 rounded-full bg-[radial-gradient(ellipse_at_center,oklch(0.65_0.18_320/0.22),transparent_60%)] blur-3xl" />
         <div className="absolute top-[30%] left-[-10%] h-[360px] w-[520px] animate-aurora rounded-full bg-[radial-gradient(ellipse_at_center,oklch(0.7_0.14_220/0.16),transparent_60%)] blur-3xl" />
 
+        {/* fine noise overlay for texture */}
         <div className="absolute inset-0 bg-noise opacity-[0.07] mix-blend-overlay" />
+
+        {/* bottom fade into page */}
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-background" />
       </div>
 
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-6 py-24 lg:grid-cols-12 lg:py-32">
+        {/* Left: copy */}
         <div className="lg:col-span-6">
           <div className="mb-5 inline-flex items-center gap-2">
             <span className="tag-chip tag-chip-mint">
@@ -57,7 +60,7 @@ export function Hero() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/">
+            <Link href="/dashboard">
               <Button
                 size="lg"
                 className="group h-11 gap-1.5 bg-primary px-5 text-primary-foreground hover:bg-primary/90"
@@ -93,6 +96,7 @@ export function Hero() {
           </div>
         </div>
 
+        {/* Right: animated cards */}
         <div className="lg:col-span-6">
           <FloatingCards />
         </div>
