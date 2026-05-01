@@ -54,14 +54,11 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
           <ModeToggle />
           {!hideAuth && (
             <>
-              <Link href="/auth?mode=signin">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Sign in
-                </Button>
+              <Link
+                href="/auth?mode=signin"
+                className="cursor-pointer text-muted-foreground text-xs transition-colors hover:text-foreground"
+              >
+                Sign in
               </Link>
 
               <CustomTooltip>

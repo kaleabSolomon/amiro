@@ -4,19 +4,19 @@ import { LandingSection } from "./landing-section";
 
 const WHAT_WE_DO = [
   {
-    title: "Summarize",
+    title: "Save with intent",
     description:
-      "Every saved page becomes a concise factual summary with key points you can scan fast.",
+      "Tag, describe, and file links the moment you find them. Your future self will thank you.",
   },
   {
-    title: "Organize",
+    title: "Organize beautifully",
     description:
-      "Amiro tags and categorizes each bookmark so your feed stays structured and searchable.",
+      "Folders, smart views, and a dashboard that's a pleasure to look at every day.",
   },
   {
-    title: "Reflect",
+    title: "Share with anyone",
     description:
-      "Your profile evolves over time to show what topics are becoming more important to you.",
+      "Make a folder public, send the link, and let people save its contents in one click.",
   },
 ] as const;
 
@@ -89,8 +89,8 @@ export function LandingWhatWeDoSection() {
     <LandingSection
       id="what-we-do"
       eyebrow="What We Do"
-      title="A smarter layer between reading and remembering."
-      description="Amiro gives structure to the things you consume so your knowledge compounds over time."
+      title="A bookmark home, not a junk drawer."
+      description="Most bookmark tools are clipboards. Amiro is a calm, well-designed place where the links you collect actually become useful."
     >
       <div className="grid gap-4 md:grid-cols-3">
         {WHAT_WE_DO.map((item, idx) => (

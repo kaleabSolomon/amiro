@@ -73,7 +73,7 @@ export function Hero() {
               <Button
                 size="lg"
                 variant="outline"
-                className="h-11 border-border bg-surface/60 px-5 text-foreground hover:bg-accent"
+                className="h-11 border-border bg-background/60 px-5 text-foreground hover:bg-accent"
               >
                 See features
               </Button>
@@ -142,15 +142,15 @@ const sampleCards = [
 
 function FloatingCards() {
   return (
-    <div className="relative h-[460px] w-full">
+    <div className="relative h-[400px] w-full">
       {/* soft inner mat */}
-      <div className="absolute inset-0 rounded-3xl border border-border/60 bg-gradient-to-br from-surface/40 to-transparent" />
+      <div className="absolute inset-0 rounded-3xl border border-border/60 bg-linear-to-br from-background/60 to-background/20" />
 
       {sampleCards.map((c, i) => {
         const positions = [
           "top-4 left-2 sm:left-6 rotate-[-4deg]",
-          "top-16 right-4 sm:right-8 rotate-[3deg]",
-          "bottom-24 left-6 sm:left-12 rotate-[2deg]",
+          "top-20 right-4 sm:right-8 rotate-[3deg]",
+          "bottom-28 left-6 sm:left-12 rotate-[2deg]",
           "bottom-6 right-2 sm:right-10 rotate-[-3deg]",
         ];
         const delays = ["0s", "0.6s", "1.2s", "1.8s"];
@@ -180,7 +180,7 @@ function MiniCard({
   visibility,
 }: (typeof sampleCards)[number]) {
   return (
-    <div className="card-elevated p-3.5 shadow-[0_20px_60px_-20px_oklch(0_0_0/0.6)]">
+    <div className="card-elevated bg-background p-3.5 shadow-[0_20px_60px_-20px_oklch(0_0_0/0.6)]">
       <div className="flex items-center gap-2">
         <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border bg-muted/60 font-semibold text-[10px] text-muted-foreground uppercase">
           {domain[0]}

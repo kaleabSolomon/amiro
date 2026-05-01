@@ -57,7 +57,7 @@
   --landing-card-dark-gradient: linear-gradient(
     135deg,
     oklch(0.98 0.01 154) 50%,
-    oklch(0.8 0.08 154) 100%
+    oklch(89.882% 0.05474 155.043) 100%
   );
 }
 
@@ -113,7 +113,7 @@
   --landing-card-dark-gradient: linear-gradient(
     135deg,
     oklch(0.28 0.02 155) 50%,
-    oklch(0.5 0.08 155) 100%
+    oklch(32.948% 0.06747 152.992) 100%
   );
 }
 
@@ -181,7 +181,7 @@
   .card-elevated {
     background:
       linear-gradient(180deg, oklch(1 0 0 / 0.025), oklch(1 0 0 / 0)),
-      var(--surface);
+      var(--background);
     border: 1px solid var(--border);
     border-radius: var(--radius-xl);
   }
