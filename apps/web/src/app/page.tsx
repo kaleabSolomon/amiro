@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 
-import { Hero } from "@/components/landing/hero";
+import { LandingFaqSection } from "@/components/landing/faq-section";
 import {
-  LandingBottomCtaSection,
-  LandingFaqSection,
   LandingHowItWorksSection,
-  LandingPricingSection,
   LandingWhatWeDoSection,
-} from "@/components/landing/landing-sections";
+} from "@/components/landing/features-section";
+import { Hero } from "@/components/landing/hero";
+import { Integrations } from "@/components/landing/integrations-sections";
 import { LandingShell } from "@/components/landing/landing-shell";
 import { safeGetToken } from "@/lib/auth-server";
 
@@ -23,9 +22,9 @@ export default async function Home() {
       <Hero />
       <LandingWhatWeDoSection />
       <LandingHowItWorksSection />
-      <LandingPricingSection />
+      <Integrations />
+      {/* <LandingPricingSection /> */}
       <LandingFaqSection />
-      <LandingBottomCtaSection />
     </LandingShell>
   );
 }

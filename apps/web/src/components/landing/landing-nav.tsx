@@ -14,7 +14,9 @@ import {
 
 const SECTION_LINKS = [
   { href: "/#what-we-do", label: "What we do" },
-  { href: "/#pricing", label: "Pricing" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#integrations", label: "Integrations" },
+  // { href: "/#pricing", label: "Pricing" },
   { href: "/#faq", label: "FAQ" },
 ] satisfies ReadonlyArray<{ href: Route; label: string }>;
 

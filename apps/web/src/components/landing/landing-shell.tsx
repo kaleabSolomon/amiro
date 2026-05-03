@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { SiteFooter } from "@/components/layout/site-footer";
+import { Footer } from "@/components/layout/site-footer";
 
 import { LandingNav } from "./landing-nav";
 
@@ -15,7 +15,7 @@ export function LandingShell({
     <div className="landing-canvas min-h-screen flex-col">
       <LandingNav hideAuth={hideAuth} />
       <main className="relative flex-1">{children}</main>
-      <SiteFooter className="relative z-10 border-(--landing-border)/70 border-t" />
+      <Footer />
     </div>
   );
 }

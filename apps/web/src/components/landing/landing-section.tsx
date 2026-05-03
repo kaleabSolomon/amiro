@@ -30,7 +30,7 @@ export function LandingSection({
             {eyebrow}
           </p>
         ) : null}
-        <h2 className="text-balance font-semibold text-3xl text-[var(--landing-ink)] tracking-tight sm:text-4xl">
+        <h2 className="text-balance font-serif text-3xl text-[var(--landing-ink)] tracking-tight sm:text-5xl">
           {title}
         </h2>
         {description ? (
