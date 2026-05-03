@@ -21,6 +21,9 @@
   --accent-foreground: oklch(0.24 0.03 153);
   --destructive: oklch(0.58 0.22 27);
   --border: oklch(0.922 0 0);
+  --border-strong: oklch(0.22 0.01 80 / 0.18);
+  --mint: oklch(0.62 0.13 165);
+  --mint-foreground: oklch(0.99 0.005 165);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.6 0.08 153);
   --chart-1: oklch(0.809 0.105 251.813);
@@ -47,6 +50,8 @@
   --landing-ink: oklch(0.24 0.03 152);
   --landing-subtle-ink: oklch(0.44 0.03 152);
   --landing-accent: oklch(0.58 0.11 153);
+  --surface: oklch(1 0 0);
+  --surface-elevated: oklch(0.99 0.003 80);
   --landing-accent-foreground: oklch(0.98 0.005 140);
   --landing-muted-shadow: oklch(0.68 0.03 153 / 20%);
   --landing-card-green-gradient: linear-gradient(
@@ -78,6 +83,9 @@
   --accent-foreground: oklch(0.94 0.01 153);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
+  --border-strong: oklch(1 0 0 / 0.14);
+  --mint: oklch(0.86 0.13 165);
+  --mint-foreground: oklch(0.2 0.04 165);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.62 0.08 153);
   --chart-1: oklch(0.809 0.105 251.813);
@@ -103,6 +111,8 @@
   --landing-ink: oklch(0.95 0.01 153);
   --landing-subtle-ink: oklch(0.78 0.02 153);
   --landing-accent: oklch(0.63 0.1 153);
+  --surface: oklch(0.2 0.008 80);
+  --surface-elevated: oklch(0.23 0.009 80);
   --landing-accent-foreground: oklch(0.2 0.02 150);
   --landing-muted-shadow: oklch(0.07 0.01 155 / 45%);
   --landing-card-green-gradient: linear-gradient(
@@ -137,6 +147,11 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-mint: var(--mint);
+  --color-mint-foreground: var(--mint-foreground);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -175,6 +190,14 @@
 }
 
 @layer components {
+  .card-elevated {
+    background:
+      linear-gradient(180deg, oklch(1 0 0 / 0.025), oklch(1 0 0 / 0)),
+      var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+
   .landing-canvas {
     background-color: var(--landing-bg);
   }

@@ -33,7 +33,7 @@ export function LandingFaqSection() {
             className="group/item relative flex cursor-pointer flex-col rounded-lg border border-(--landing-border) bg-(--landing-panel) px-4 py-4 transition-all duration-300 hover:border-(--landing-accent) hover:opacity-100! group-hover/list:opacity-50"
           >
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-(--landing-ink) text-sm transition-colors duration-300 group-hover/item:text-(--landing-foreground)">
+              <span className="font-semibold text-(--landing-ink) text-sm transition-colors duration-300">
                 {item.question}
               </span>
               <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-(--landing-accent) transition-all duration-300 group-hover/item:animate-pulse group-hover/item:shadow-[0_0_8px_var(--landing-accent)]" />
