@@ -5,11 +5,18 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ModeToggle } from "@/components/mode-toggle";
-import { LandingButtonLink } from "./landing-button-link";
+import { Button } from "../ui/button";
+import {
+  CustomTooltip,
+  CustomTooltipContent,
+  CustomTooltipTrigger,
+} from "../ui/custom-tooltip";
 
 const SECTION_LINKS = [
   { href: "/#what-we-do", label: "What we do" },
-  { href: "/#pricing", label: "Pricing" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#integrations", label: "Integrations" },
+  // { href: "/#pricing", label: "Pricing" },
   { href: "/#faq", label: "FAQ" },
 ] satisfies ReadonlyArray<{ href: Route; label: string }>;
 
@@ -24,20 +31,16 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
-        isScrolled
-          ? "border-(--landing-border)/10 border-b bg-background/40"
-          : "border-transparent bg-transparent"
+      className={`sticky top-4 z-50 mx-auto w-[calc(100%-2rem)] max-w-6xl rounded-2xl border border-white/30 bg-green-800/10 shadow-lg backdrop-blur-2xl transition-all duration-300 dark:border-white/10 dark:bg-green-950/40 ${
+        isScrolled ? "top-2 translate-y-0 shadow-xl" : "top-4"
       }`}
-      style={{
-        backdropFilter: isScrolled ? "blur(14px) saturate(125%)" : "none",
-        WebkitBackdropFilter: isScrolled ? "blur(14px) saturate(125%)" : "none",
-      }}
     >
       <nav
         className={`mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 transition-all duration-300 ${isScrolled ? "py-4" : "py-6"}`}
       >
-        <Link href="/">Amiro</Link>
+        <Link className="font-serif text-2xl" href="/">
+          Amiro
+        </Link>
         <div className="hidden items-center gap-5 md:flex">
           {SECTION_LINKS.map((link) => (
             <Link
@@ -50,21 +53,32 @@ export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
           ))}
         </div>
         <div className="flex items-center gap-3">
+          <ModeToggle />
           {!hideAuth && (
             <>
-              <LandingButtonLink
+              <Link
                 href="/auth?mode=signin"
-                emphasis="secondary"
-                className="h-10 px-4"
+                className="cursor-pointer text-muted-foreground text-xs transition-colors hover:text-foreground"
               >
                 Sign in
-              </LandingButtonLink>
-              <LandingButtonLink href="/auth?mode=signup" className="h-10 px-4">
-                Sign up
-              </LandingButtonLink>
+              </Link>
+
+              <CustomTooltip>
+                <CustomTooltipTrigger>
+                  <Button
+                    size="sm"
+                    disabled
+                    // className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    Get The App
+                  </Button>
+                </CustomTooltipTrigger>
+                <CustomTooltipContent>
+                  <p>Mobile app will be available soon.</p>
+                </CustomTooltipContent>
+              </CustomTooltip>
             </>
           )}
-          <ModeToggle />
         </div>
       </nav>
     </header>

@@ -1,19 +1,26 @@
 import type { Metadata } from "next";
 
-import { Fraunces, Geist_Mono } from "next/font/google";
+import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 
 import "../index.css";
 import Providers from "@/components/providers";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { CustomTooltipProvider } from "@/components/ui/custom-tooltip";
 import { safeGetToken } from "@/lib/auth-server";
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
@@ -29,13 +36,15 @@ export default async function RootLayout({
 }>) {
   const token = await safeGetToken();
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${fraunces.variable} ${geistMono.variable} antialiased`}
-      >
-        <TooltipProvider>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="antialiased">
+        <CustomTooltipProvider delay={100} closeDelay={600}>
           <Providers initialToken={token}>{children}</Providers>
-        </TooltipProvider>
+        </CustomTooltipProvider>
       </body>
     </html>
   );

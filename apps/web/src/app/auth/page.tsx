@@ -13,7 +13,7 @@ import SignInForm from "@/components/sign-in-form";
 import SignUpForm from "@/components/sign-up-form";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
-import amero from "../../../assets/logos/amero.png";
+import amiro from "../../../assets/logos/amiro.png";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -418,8 +418,8 @@ export default function AuthPageInner() {
 
           <div className="relative hidden w-full overflow-hidden rounded-3xl bg-primary p-12 text-primary-foreground lg:block">
             <div className="absolute top-12 left-12 z-10">
-              <div className="mb-4 h-10 w-10 rounded-xl bg-white">
-                <Image src={amero} alt="Logo" width={40} height={40} />
+              <div className="mb-4 h-10 w-10 rounded-xl bg-white p-1">
+                <Image src={amiro} alt="Logo" />
               </div>
               <h2 className="font-semibold text-lg tracking-tight">AMIRO</h2>
               <p className="mt-2 max-w-sm text-primary-foreground/80 text-sm">

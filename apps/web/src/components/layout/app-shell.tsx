@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { AppNav } from "./app-nav";
-import { SiteFooter } from "./site-footer";
+import { Footer } from "./site-footer";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -10,7 +10,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AppNav />
         {children}
       </main>
-      <SiteFooter className="border-t" />
+      <Footer />
     </div>
   );
 }
