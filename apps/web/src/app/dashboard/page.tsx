@@ -33,6 +33,16 @@ function RedirectToAuth() {
   return null;
 }
 
+function RedirectToCompleteProfile() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/auth?mode=complete-profile");
+  }, [router]);
+
+  return null;
+}
+
 function FolderWorkspace() {
   const [selectedFolderId, setSelectedFolderId] = useState("unfiled");
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -211,12 +221,22 @@ function FolderWorkspace() {
 }
 
 export default function DashboardPage() {
+  const currentUser = useQuery(api.auth.getCurrentUser);
+
   return (
     <>
       <Authenticated>
-        <AppShell>
-          <FolderWorkspace />
-        </AppShell>
+        {currentUser === undefined ? (
+          <div className="flex min-h-svh items-center justify-center">
+            <div className="text-muted-foreground text-sm">Loading...</div>
+          </div>
+        ) : currentUser && !currentUser.username ? (
+          <RedirectToCompleteProfile />
+        ) : (
+          <AppShell>
+            <FolderWorkspace />
+          </AppShell>
+        )}
       </Authenticated>
       <Unauthenticated>
         <RedirectToAuth />

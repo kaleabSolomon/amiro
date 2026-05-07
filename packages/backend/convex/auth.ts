@@ -1,6 +1,7 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth";
+import { username } from "better-auth/plugins";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
@@ -63,6 +64,7 @@ function createAuth(ctx: GenericCtx<DataModel>) {
         authConfig,
         jwksRotateOnTokenGenerationError: true,
       }),
+      username(),
     ],
   });
 }

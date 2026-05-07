@@ -29,7 +29,7 @@ export default function SignInForm({
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/dashboard",
+        callbackURL: "/auth?mode=complete-profile",
       });
     } catch {
       toast.error("Google sign in failed. Please try again.");
@@ -39,7 +39,7 @@ export default function SignInForm({
 
   const form = useForm({
     defaultValues: {
-      email: "",
+      identifier: "",
       password: "",
     },
     onSubmit: async ({ value }) => {
@@ -47,37 +47,69 @@ export default function SignInForm({
         "amiro_last_remember_me",
         String(keepLoggedIn),
       );
-      await authClient.signIn.email(
+      const identifier = value.identifier.trim();
+      const isEmail =
+        identifier.includes("@") && z.email().safeParse(identifier).success;
+
+      const handlers = {
+        onSuccess: () => {
+          router.push("/dashboard");
+          toast.success("Sign in successful");
+        },
+        onError: (error: {
+          error: { message?: string; statusText?: string };
+        }) => {
+          const message =
+            error.error.message || error.error.statusText || "Sign in failed.";
+          if (
+            message.toLowerCase().includes("email") &&
+            message.toLowerCase().includes("verify")
+          ) {
+            toast.error(
+              "Please verify your email first. We sent you a new verification link.",
+            );
+            return;
+          }
+          toast.error(message);
+        },
+      };
+
+      if (isEmail) {
+        await authClient.signIn.email(
+          {
+            email: identifier,
+            password: value.password,
+            rememberMe: keepLoggedIn,
+            callbackURL: "/dashboard",
+          },
+          handlers,
+        );
+        return;
+      }
+
+      await authClient.signIn.username(
         {
-          email: value.email,
+          username: identifier,
           password: value.password,
           rememberMe: keepLoggedIn,
           callbackURL: "/dashboard",
         },
-        {
-          onSuccess: () => {
-            router.push("/dashboard");
-            toast.success("Sign in successful");
-          },
-          onError: (error) => {
-            const message = error.error.message || error.error.statusText;
-            if (
-              message.toLowerCase().includes("email") &&
-              message.toLowerCase().includes("verify")
-            ) {
-              toast.error(
-                "Please verify your email first. We sent you a new verification link.",
-              );
-              return;
-            }
-            toast.error(message);
-          },
-        },
+        handlers,
       );
     },
     validators: {
       onSubmit: z.object({
-        email: z.email("Invalid email address"),
+        identifier: z
+          .string()
+          .trim()
+          .min(3, "Email or username must be at least 3 characters")
+          .refine(
+            (value) =>
+              value.includes("@")
+                ? z.email().safeParse(value).success
+                : /^[a-zA-Z0-9_.]+$/.test(value),
+            "Enter a valid email or username",
+          ),
         password: z.string().min(8, "Password must be at least 8 characters"),
       }),
     },
@@ -146,25 +178,28 @@ export default function SignInForm({
           }}
           className="space-y-4"
         >
-          <form.Field name="email">
+          <form.Field name="identifier">
             {(field) => (
               <div className="space-y-1.5">
                 <Label
                   htmlFor={field.name}
                   className="font-medium text-muted-foreground text-xs"
                 >
-                  Email Address *
+                  Email or Username *
                 </Label>
                 <div className="relative">
                   <Input
                     id={field.name}
                     name={field.name}
-                    type="email"
-                    placeholder="hello@example.com"
+                    type="text"
+                    placeholder="hello@example.com or jane_doe"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                     className="h-11 rounded-lg border border-input px-4 pl-10 shadow-xs"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
                   <svg
                     className="absolute top-3 left-3 h-5 w-5 text-muted-foreground/50"
