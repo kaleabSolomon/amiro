@@ -54,6 +54,8 @@ function FolderWorkspace() {
   const bookmarks = useQuery(api.dashboard.getBookmarksForFolder, {
     folderId: selectedFolderId,
   });
+  const foldersLoading = foldersQuery === undefined;
+  const bookmarksLoading = bookmarks === undefined;
   const searchResults = useQuery(
     api.dashboard.searchWorkspace,
     paletteOpen && deferredSearchQuery
@@ -188,6 +190,7 @@ function FolderWorkspace() {
         <DashboardFolderSidebar
           folders={folders}
           selectedFolderId={selectedFolder.id}
+          isLoading={foldersLoading}
           onSelectFolder={selectFolder}
         />
 
@@ -196,6 +199,7 @@ function FolderWorkspace() {
             selectedFolder={selectedFolder}
             breadcrumbs={breadcrumbs}
             bookmarks={bookmarks ?? []}
+            bookmarksLoading={bookmarksLoading}
             creatingFolder={creatingFolder}
             onSelectFolder={selectFolder}
             onCreateFolder={handleCreateFolder}

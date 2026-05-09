@@ -1,19 +1,59 @@
 "use client";
 
 import { ExternalLink, Hash, Plus, Search, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { DashboardBreadcrumbs } from "./dashboard-breadcrumbs";
 import { formatRelativeTime } from "./time";
 import type { DashboardBookmark, DashboardFolder } from "./types";
 
+const BOOKMARK_SKELETONS = [
+  "bookmark-skeleton-1",
+  "bookmark-skeleton-2",
+  "bookmark-skeleton-3",
+];
+
+function BookmarkSkeletonList() {
+  return (
+    <div className="grid gap-3">
+      {BOOKMARK_SKELETONS.map((skeletonId) => (
+        <div
+          key={skeletonId}
+          className="rounded-xl border border-border/80 bg-background p-4"
+        >
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-3/5" />
+              <Skeleton className="h-3 w-4/5" />
+            </div>
+            <div className="flex gap-1">
+              <Skeleton className="h-7 w-7" />
+              <Skeleton className="h-7 w-7" />
+            </div>
+          </div>
+          <Skeleton className="mb-2 h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
+          <div className="mt-3 flex gap-2">
+            <Skeleton className="h-5 w-16 rounded-md" />
+            <Skeleton className="h-5 w-14 rounded-md" />
+            <Skeleton className="h-5 w-20 rounded-md" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function DashboardMainPanel({
   selectedFolder,
   breadcrumbs,
   bookmarks,
+  bookmarksLoading = false,
+  bookmarksLoadingFallback,
   creatingFolder,
   onSelectFolder,
   onCreateFolder,
@@ -23,6 +63,8 @@ export function DashboardMainPanel({
   selectedFolder: DashboardFolder;
   breadcrumbs: DashboardFolder[];
   bookmarks: DashboardBookmark[];
+  bookmarksLoading?: boolean;
+  bookmarksLoadingFallback?: ReactNode;
   creatingFolder: boolean;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (name: string) => void;
@@ -134,7 +176,9 @@ export function DashboardMainPanel({
 
       <div className="mt-8">
         <p className="mb-3 font-medium text-sm">Bookmarks</p>
-        {bookmarks.length === 0 ? (
+        {bookmarksLoading ? (
+          (bookmarksLoadingFallback ?? <BookmarkSkeletonList />)
+        ) : bookmarks.length === 0 ? (
           <div className="rounded-xl border border-border border-dashed p-6 text-center text-muted-foreground text-sm">
             No bookmarks in this folder yet.
           </div>

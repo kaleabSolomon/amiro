@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock, FolderClosed, Share } from "lucide-react";
+import type { ReactNode } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,18 +14,31 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import UserMenu from "../user-menu";
 import type { DashboardFolder } from "./types";
 
+const WORKSPACE_FOLDER_SKELETONS = [
+  "workspace-folder-skeleton-1",
+  "workspace-folder-skeleton-2",
+  "workspace-folder-skeleton-3",
+  "workspace-folder-skeleton-4",
+  "workspace-folder-skeleton-5",
+];
+
 export function DashboardFolderSidebar({
   folders,
   selectedFolderId,
+  isLoading = false,
+  loadingFallback,
   onSelectFolder,
 }: {
   folders: DashboardFolder[];
   selectedFolderId: string;
+  isLoading?: boolean;
+  loadingFallback?: ReactNode;
   onSelectFolder: (folderId: string) => void;
 }) {
   const folderEntries = [...folders].sort((a, b) => {
@@ -86,21 +100,33 @@ export function DashboardFolderSidebar({
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {folderEntries.map((folder) => (
-                <SidebarMenuItem key={folder.id}>
-                  <SidebarMenuButton
-                    isActive={selectedFolderId === folder.id}
-                    onClick={() => onSelectFolder(folder.id)}
-                    tooltip={folder.name}
-                  >
-                    <FolderClosed className="h-4 w-4" />
-                    <span>{folder.name}</span>
-                  </SidebarMenuButton>
-                  <SidebarMenuBadge>{folder.itemCount}</SidebarMenuBadge>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+            {isLoading ? (
+              (loadingFallback ?? (
+                <SidebarMenu>
+                  {WORKSPACE_FOLDER_SKELETONS.map((skeletonId) => (
+                    <SidebarMenuItem key={skeletonId}>
+                      <SidebarMenuSkeleton showIcon />
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              ))
+            ) : (
+              <SidebarMenu>
+                {folderEntries.map((folder) => (
+                  <SidebarMenuItem key={folder.id}>
+                    <SidebarMenuButton
+                      isActive={selectedFolderId === folder.id}
+                      onClick={() => onSelectFolder(folder.id)}
+                      tooltip={folder.name}
+                    >
+                      <FolderClosed className="h-4 w-4" />
+                      <span>{folder.name}</span>
+                    </SidebarMenuButton>
+                    <SidebarMenuBadge>{folder.itemCount}</SidebarMenuBadge>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
