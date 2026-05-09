@@ -2,7 +2,7 @@
 
 import { api } from "@amiro/backend/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { Monitor, Moon, Save, Sun } from "lucide-react";
+import { Monitor, Moon, Save, Sparkles, Sun } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
@@ -101,17 +101,20 @@ export default function UserMenu() {
     <Sheet>
       <SheetTrigger
         render={
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="rounded-full"
-            aria-label="Open settings"
-          />
+          <div className="flex cursor-pointer items-center gap-2 rounded-md p-2 transition-colors hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-linear-to-br from-primary to-secondary font-semibold text-primary-foreground text-xs">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center gap-1 font-medium text-xs">
+                <span className="truncate">{user?.name}</span>
+                <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+              </div>
+              <div className="text-[11px] text-muted-foreground">Free plan</div>
+            </div>
+          </div>
         }
-      >
-        <span className="font-semibold text-xs">{initials}</span>
-      </SheetTrigger>
+      />
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Settings</SheetTitle>

@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-import UserMenu from "@/components/user-menu";
-
 export function AppNav() {
   return (
     <nav className="border-b">
@@ -12,7 +10,6 @@ export function AppNav() {
         >
           Amiro
         </Link>
-        <UserMenu />
       </div>
     </nav>
   );

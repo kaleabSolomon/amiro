@@ -27,6 +27,7 @@ export default function SignInForm({
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     try {
+      // TODO: after deployment check if there's flickering or we slightly show the complete-profile page for users already with username.
       await authClient.signIn.social({
         provider: "google",
         callbackURL: "/auth?mode=complete-profile",
