@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Hash, Plus, Search, Trash2 } from "lucide-react";
+import { ExternalLink, Hash, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,6 @@ export function DashboardMainPanel({
   onSelectFolder,
   onCreateFolder,
   onDeleteBookmark,
-  onOpenSearch,
 }: {
   selectedFolder: DashboardFolder;
   breadcrumbs: DashboardFolder[];
@@ -69,7 +68,6 @@ export function DashboardMainPanel({
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (name: string) => void;
   onDeleteBookmark: (bookmarkId: string) => Promise<void>;
-  onOpenSearch: () => void;
 }) {
   const [creatingMode, setCreatingMode] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -79,27 +77,6 @@ export function DashboardMainPanel({
 
   return (
     <div className="rounded-2xl border border-border/80 bg-card/70 p-5 shadow-xs backdrop-blur-sm">
-      <div className="mb-5 min-w-[260px] flex-1">
-        <div className="relative">
-          <Search className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
-          <button
-            type="button"
-            onClick={onOpenSearch}
-            className="absolute top-1.5 right-2 inline-flex items-center rounded-md border border-border bg-muted px-2 py-1 font-medium text-[11px] text-muted-foreground"
-          >
-            <span className="hidden sm:inline">Ctrl/Cmd</span>
-            <span className="sm:hidden">⌘</span>
-            <span className="ml-1">K</span>
-          </button>
-          <Input
-            readOnly
-            onClick={onOpenSearch}
-            className="h-11 cursor-pointer border-border/80 bg-background pr-20 pl-9"
-            placeholder="Search folders and tags..."
-          />
-        </div>
-      </div>
-
       <DashboardBreadcrumbs
         folders={breadcrumbs}
         selectedFolderId={selectedFolder.id}
