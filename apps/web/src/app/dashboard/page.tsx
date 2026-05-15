@@ -10,16 +10,14 @@ import {
   useQuery,
 } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
 import {
   DashboardProvider,
   useDashboard,
 } from "@/components/dashboard/dashboard-context";
 import { DashboardMainPanel } from "@/components/dashboard/dashboard-main-panel";
-import type { DashboardSearchBookmark } from "@/components/dashboard/types";
 import { AppShell } from "@/components/layout/app-shell";
 
 function RedirectToAuth() {
@@ -43,14 +41,9 @@ function RedirectToCompleteProfile() {
 }
 
 function FolderWorkspace() {
-  const { selectedFolderId, selectFolder, folders, foldersLoading } =
-    useDashboard();
+  const { selectedFolderId, selectFolder, folders } = useDashboard();
 
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
-  const trimmedSearchQuery = searchQuery.trim();
-  const deferredSearchQuery = useDeferredValue(trimmedSearchQuery);
 
   const folderMap = useMemo(
     () => new Map(folders.map((folder) => [folder.id, folder])),
@@ -65,62 +58,8 @@ function FolderWorkspace() {
   });
   const bookmarksLoading = bookmarks === undefined;
 
-  const searchResults = useQuery(
-    api.dashboard.searchWorkspace,
-    paletteOpen && deferredSearchQuery
-      ? { query: deferredSearchQuery, limit: 30 }
-      : "skip",
-  );
   const createFolder = useMutation(api.dashboard.createFolder);
   const deleteBookmark = useMutation(api.dashboard.deleteBookmark);
-
-  const paletteFolders = useMemo(() => {
-    if (!deferredSearchQuery) {
-      return folders;
-    }
-    if (!searchResults) {
-      return [];
-    }
-
-    return searchResults.folders.map((folder) => ({
-      id: folder.id,
-      name: folder.name,
-      parentId: null,
-      tags: [],
-      itemCount: 0,
-      updatedAtMs: null,
-    }));
-  }, [deferredSearchQuery, folders, searchResults]);
-
-  const paletteBookmarks = useMemo<DashboardSearchBookmark[]>(() => {
-    if (!deferredSearchQuery || !searchResults) {
-      return [];
-    }
-    return searchResults.bookmarks;
-  }, [deferredSearchQuery, searchResults]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const isShortcut = (event.metaKey || event.ctrlKey) && event.key === "k";
-      if (isShortcut) {
-        event.preventDefault();
-        setPaletteOpen(true);
-      }
-
-      if (event.key === "Escape") {
-        setPaletteOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  const handleSelectFolder = (folderId: string) => {
-    selectFolder(folderId);
-    setPaletteOpen(false);
-    setSearchQuery("");
-  };
 
   const handleCreateFolder = async (folderName: string) => {
     if (creatingFolder) {
@@ -156,38 +95,19 @@ function FolderWorkspace() {
     }
   };
 
-  const openBookmark = (url: string) => {
-    window.open(url, "_blank", "noopener,noreferrer");
-    setPaletteOpen(false);
-  };
-
   return (
-    <>
-      <section className="mx-auto w-full max-w-6xl px-6 py-8">
-        <DashboardMainPanel
-          selectedFolder={selectedFolder}
-          breadcrumbs={breadcrumbs}
-          bookmarks={bookmarks ?? []}
-          bookmarksLoading={bookmarksLoading}
-          creatingFolder={creatingFolder}
-          onSelectFolder={handleSelectFolder}
-          onCreateFolder={handleCreateFolder}
-          onDeleteBookmark={handleDeleteBookmark}
-        />
-      </section>
-
-      <DashboardCommandPalette
-        open={paletteOpen}
-        query={searchQuery}
-        onQueryChange={setSearchQuery}
-        loading={Boolean(deferredSearchQuery) && searchResults === undefined}
-        folders={paletteFolders}
-        bookmarks={paletteBookmarks}
-        onClose={() => setPaletteOpen(false)}
-        onSelectFolder={handleSelectFolder}
-        onOpenBookmark={openBookmark}
+    <section className="mx-auto w-full max-w-6xl px-6 py-8">
+      <DashboardMainPanel
+        selectedFolder={selectedFolder}
+        breadcrumbs={breadcrumbs}
+        bookmarks={bookmarks ?? []}
+        bookmarksLoading={bookmarksLoading}
+        creatingFolder={creatingFolder}
+        onSelectFolder={selectFolder}
+        onCreateFolder={handleCreateFolder}
+        onDeleteBookmark={handleDeleteBookmark}
       />
-    </>
+    </section>
   );
 }
 

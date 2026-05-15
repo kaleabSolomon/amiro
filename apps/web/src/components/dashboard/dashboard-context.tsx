@@ -5,19 +5,33 @@ import { useQuery } from "convex/react";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
 } from "react";
 
-import type { DashboardFolder } from "./types";
+import type { DashboardFolder, DashboardSearchBookmark } from "./types";
+
+interface CommandPaletteState {
+  open: boolean;
+  query: string;
+  loading: boolean;
+  folders: DashboardFolder[];
+  bookmarks: DashboardSearchBookmark[];
+  setOpen: (open: boolean) => void;
+  setQuery: (query: string) => void;
+  onSelectFolder: (folderId: string) => void;
+  onOpenBookmark: (url: string) => void;
+}
 
 interface DashboardContextValue {
   selectedFolderId: string;
   selectFolder: (folderId: string) => void;
   folders: DashboardFolder[];
   foldersLoading: boolean;
+  commandPalette: CommandPaletteState;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -64,9 +78,100 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [folderMap, folders, selectedFolderId]);
 
-  const selectFolder = (folderId: string) => {
+  const selectFolder = useCallback((folderId: string) => {
     setSelectedFolderId(folderId);
-  };
+  }, []);
+
+  // ─── Command palette state ────────────────────────────────
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const trimmedSearchQuery = searchQuery.trim();
+
+  const searchResults = useQuery(
+    api.dashboard.searchWorkspace,
+    paletteOpen && trimmedSearchQuery
+      ? { query: trimmedSearchQuery, limit: 30 }
+      : "skip",
+  );
+
+  const paletteFolders = useMemo(() => {
+    if (!trimmedSearchQuery) {
+      return folders;
+    }
+    if (!searchResults) {
+      return [];
+    }
+    return searchResults.folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentId: null,
+      tags: [],
+      itemCount: 0,
+      updatedAtMs: null,
+    }));
+  }, [trimmedSearchQuery, folders, searchResults]);
+
+  const paletteBookmarks = useMemo<DashboardSearchBookmark[]>(() => {
+    if (!trimmedSearchQuery || !searchResults) {
+      return [];
+    }
+    return searchResults.bookmarks;
+  }, [trimmedSearchQuery, searchResults]);
+
+  const handlePaletteSelectFolder = useCallback(
+    (folderId: string) => {
+      selectFolder(folderId);
+      setPaletteOpen(false);
+      setSearchQuery("");
+    },
+    [selectFolder],
+  );
+
+  const handleOpenBookmark = useCallback((url: string) => {
+    window.open(url, "_blank", "noopener,noreferrer");
+    setPaletteOpen(false);
+  }, []);
+
+  // Keyboard shortcut
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isShortcut = (event.metaKey || event.ctrlKey) && event.key === "k";
+      if (isShortcut) {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+      if (event.key === "Escape") {
+        setPaletteOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const commandPalette = useMemo<CommandPaletteState>(
+    () => ({
+      open: paletteOpen,
+      query: searchQuery,
+      loading: Boolean(trimmedSearchQuery) && searchResults === undefined,
+      folders: paletteFolders,
+      bookmarks: paletteBookmarks,
+      setOpen: setPaletteOpen,
+      setQuery: setSearchQuery,
+      onSelectFolder: handlePaletteSelectFolder,
+      onOpenBookmark: handleOpenBookmark,
+    }),
+    [
+      paletteOpen,
+      searchQuery,
+      trimmedSearchQuery,
+      searchResults,
+      paletteFolders,
+      paletteBookmarks,
+      handlePaletteSelectFolder,
+      handleOpenBookmark,
+    ],
+  );
 
   const value = useMemo<DashboardContextValue>(
     () => ({
@@ -74,8 +179,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       selectFolder,
       folders,
       foldersLoading,
+      commandPalette,
     }),
-    [selectedFolderId, folders, foldersLoading],
+    [selectedFolderId, selectFolder, folders, foldersLoading, commandPalette],
   );
 
   return (

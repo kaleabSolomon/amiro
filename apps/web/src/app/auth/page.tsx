@@ -5,7 +5,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { CheckCircle2, LoaderCircle, MailCheck, XCircle } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import CompleteUsernameForm from "@/components/complete-username-form";
 import ForgotPasswordForm from "@/components/forgot-password-form";
@@ -19,7 +19,7 @@ import amiro from "../../../assets/logos/amiro.png";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
-export default function AuthPageInner() {
+function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -502,5 +502,19 @@ export default function AuthPageInner() {
         </div>
       </div>
     </LandingShell>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-svh items-center justify-center">
+          <div className="text-muted-foreground text-sm">Loading...</div>
+        </div>
+      }
+    >
+      <AuthPageInner />
+    </Suspense>
   );
 }

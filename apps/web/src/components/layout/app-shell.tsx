@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useDashboard } from "@/components/dashboard/dashboard-context";
 import { DashboardFolderSidebar } from "@/components/dashboard/dashboard-folder-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-
 import { AppNav } from "./app-nav";
 import { Footer } from "./site-footer";
 
