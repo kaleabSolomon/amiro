@@ -7,14 +7,12 @@ import {
   Eye,
   Hash,
   Lock,
-  Plus,
   Star,
   Trash2,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { formatRelativeTime } from "./time";
@@ -89,9 +87,6 @@ export function DashboardMainPanel({
   bookmarks,
   bookmarksLoading = false,
   bookmarksLoadingFallback,
-  creatingFolder,
-  onSelectFolder,
-  onCreateFolder,
   onDeleteBookmark,
 }: {
   selectedFolder: DashboardFolder;
@@ -99,13 +94,8 @@ export function DashboardMainPanel({
   bookmarks: DashboardBookmark[];
   bookmarksLoading?: boolean;
   bookmarksLoadingFallback?: ReactNode;
-  creatingFolder: boolean;
-  onSelectFolder: (folderId: string) => void;
-  onCreateFolder: (name: string) => void;
   onDeleteBookmark: (bookmarkId: string) => Promise<void>;
 }) {
-  const [creatingMode, setCreatingMode] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
   const [deletingBookmarkId, setDeletingBookmarkId] = useState<string | null>(
     null,
   );
@@ -137,6 +127,9 @@ export function DashboardMainPanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <h1 className="mb-4 font-serif text-5xl tracking-tight">
+              <span className="mr-3 align-middle text-4xl">
+                {selectedFolder.icon ?? "📁"}
+              </span>
               {selectedFolder.name}
             </h1>
 
@@ -162,53 +155,8 @@ export function DashboardMainPanel({
             <Button type="button" variant="outline" size="sm">
               Share
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setCreatingMode((prev) => !prev)}
-              disabled={creatingFolder}
-            >
-              <Plus className="h-4 w-4" />
-              New folder
-            </Button>
           </div>
         </div>
-
-        {creatingMode ? (
-          <form
-            className="mt-3 flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!newFolderName.trim()) {
-                return;
-              }
-              onCreateFolder(newFolderName.trim());
-              setNewFolderName("");
-              setCreatingMode(false);
-            }}
-          >
-            <Input
-              value={newFolderName}
-              onChange={(event) => setNewFolderName(event.target.value)}
-              placeholder="Folder name"
-              className="h-9"
-            />
-            <Button type="submit" size="sm" disabled={creatingFolder}>
-              Create
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setCreatingMode(false);
-                setNewFolderName("");
-              }}
-            >
-              Cancel
-            </Button>
-          </form>
-        ) : null}
       </header>
 
       {/* ─── Bookmarks section ─────────────────────────────── */}

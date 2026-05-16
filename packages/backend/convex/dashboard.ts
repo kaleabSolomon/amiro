@@ -80,6 +80,7 @@ export const getFolderTree = query({
       return {
         id: folder._id,
         name: folder.name,
+        icon: folder.icon,
         parentId: folder.parentFolderId ?? null,
         itemCount: stats?.itemCount ?? 0,
         updatedAtMs: stats?.updatedAtMs ?? null,
@@ -91,6 +92,7 @@ export const getFolderTree = query({
     const unfiled = {
       id: "unfiled",
       name: "Unfiled",
+      icon: "📥",
       parentId: null,
       itemCount: unfiledStats?.itemCount ?? 0,
       updatedAtMs: unfiledStats?.updatedAtMs ?? null,
@@ -265,6 +267,7 @@ export const searchWorkspace = query({
 export const createFolder = mutation({
   args: {
     name: v.string(),
+    icon: v.optional(v.string()),
     parentFolderId: v.optional(v.id("folders")),
   },
   handler: async (ctx, args) => {
@@ -285,6 +288,7 @@ export const createFolder = mutation({
     const id = await ctx.db.insert("folders", {
       userId: authUser._id,
       name,
+      icon: args.icon?.trim() || undefined,
       parentFolderId: args.parentFolderId,
       createdAt: now,
       updatedAt: now,
@@ -298,6 +302,7 @@ export const createFolderForUser = internalMutation({
   args: {
     userId: v.string(),
     name: v.string(),
+    icon: v.optional(v.string()),
     parentFolderId: v.optional(v.id("folders")),
   },
   handler: async (ctx, args) => {
@@ -317,6 +322,7 @@ export const createFolderForUser = internalMutation({
     const id = await ctx.db.insert("folders", {
       userId: args.userId,
       name,
+      icon: args.icon?.trim() || undefined,
       parentFolderId: args.parentFolderId,
       createdAt: now,
       updatedAt: now,

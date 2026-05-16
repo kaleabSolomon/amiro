@@ -10,7 +10,7 @@ import {
   useQuery,
 } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 
 import {
@@ -41,9 +41,7 @@ function RedirectToCompleteProfile() {
 }
 
 function FolderWorkspace() {
-  const { selectedFolderId, selectFolder, folders } = useDashboard();
-
-  const [creatingFolder, setCreatingFolder] = useState(false);
+  const { selectedFolderId, folders } = useDashboard();
 
   const folderMap = useMemo(
     () => new Map(folders.map((folder) => [folder.id, folder])),
@@ -58,29 +56,7 @@ function FolderWorkspace() {
   });
   const bookmarksLoading = bookmarks === undefined;
 
-  const createFolder = useMutation(api.dashboard.createFolder);
   const deleteBookmark = useMutation(api.dashboard.deleteBookmark);
-
-  const handleCreateFolder = async (folderName: string) => {
-    if (creatingFolder) {
-      return;
-    }
-
-    setCreatingFolder(true);
-    try {
-      const result = await createFolder({
-        name: folderName.trim(),
-      });
-      selectFolder(result.id);
-      toast.success("Folder created.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create folder.";
-      toast.error(message);
-    } finally {
-      setCreatingFolder(false);
-    }
-  };
 
   const handleDeleteBookmark = async (bookmarkId: string) => {
     try {
@@ -102,9 +78,6 @@ function FolderWorkspace() {
         breadcrumbs={breadcrumbs}
         bookmarks={bookmarks ?? []}
         bookmarksLoading={bookmarksLoading}
-        creatingFolder={creatingFolder}
-        onSelectFolder={selectFolder}
-        onCreateFolder={handleCreateFolder}
         onDeleteBookmark={handleDeleteBookmark}
       />
     </section>

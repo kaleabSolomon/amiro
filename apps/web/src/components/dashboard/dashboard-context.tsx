@@ -55,6 +55,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         {
           id: "unfiled",
           name: "Unfiled",
+          icon: "📥",
           parentId: null,
           tags: [],
           itemCount: 0,

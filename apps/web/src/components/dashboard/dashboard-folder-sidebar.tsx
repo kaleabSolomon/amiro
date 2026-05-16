@@ -1,7 +1,8 @@
 "use client";
 
-import { Clock, FolderClosed, Share } from "lucide-react";
+import { Clock, FolderClosed, Plus, Share } from "lucide-react";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -18,6 +19,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import UserMenu from "../user-menu";
+import { NewFolderDialog } from "./new-folder-dialog";
 import type { DashboardFolder } from "./types";
 
 const WORKSPACE_FOLDER_SKELETONS = [
@@ -33,13 +35,17 @@ export function DashboardFolderSidebar({
   selectedFolderId,
   isLoading = false,
   loadingFallback,
+  creatingFolder = false,
   onSelectFolder,
+  onCreateFolder,
 }: {
   folders: DashboardFolder[];
   selectedFolderId: string;
   isLoading?: boolean;
   loadingFallback?: ReactNode;
+  creatingFolder?: boolean;
   onSelectFolder: (folderId: string) => void;
+  onCreateFolder: (input: { name: string; icon: string }) => Promise<void>;
 }) {
   const folderEntries = [...folders].sort((a, b) => {
     if (a.id === "unfiled") {
@@ -98,7 +104,24 @@ export function DashboardFolderSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+          <div className="flex items-center justify-between pr-2">
+            <SidebarGroupLabel>Folders</SidebarGroupLabel>
+            <NewFolderDialog
+              creating={creatingFolder}
+              onCreateFolder={onCreateFolder}
+              trigger={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-sidebar-foreground/50 hover:text-sidebar-foreground group-data-[collapsible=icon]:hidden"
+                  aria-label="Create folder"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              }
+            />
+          </div>
           <SidebarGroupContent>
             {isLoading ? (
               (loadingFallback ?? (
@@ -119,7 +142,13 @@ export function DashboardFolderSidebar({
                       onClick={() => onSelectFolder(folder.id)}
                       tooltip={folder.name}
                     >
-                      <FolderClosed className="h-4 w-4" />
+                      {folder.icon ? (
+                        <span className="flex h-4 w-4 items-center justify-center text-sm leading-none">
+                          {folder.icon}
+                        </span>
+                      ) : (
+                        <FolderClosed className="h-4 w-4" />
+                      )}
                       <span>{folder.name}</span>
                     </SidebarMenuButton>
                     <SidebarMenuBadge>{folder.itemCount}</SidebarMenuBadge>

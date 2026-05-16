@@ -1,6 +1,7 @@
 export type DashboardFolder = {
   id: string;
   name: string;
+  icon?: string;
   parentId: string | null;
   tags: string[];
   itemCount: number;

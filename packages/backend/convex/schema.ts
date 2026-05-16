@@ -26,6 +26,7 @@ export default defineSchema({
   folders: defineTable({
     userId: v.string(),
     name: v.string(),
+    icon: v.optional(v.string()),
     parentFolderId: v.optional(v.id("folders")),
     createdAt: v.number(),
     updatedAt: v.number(),
