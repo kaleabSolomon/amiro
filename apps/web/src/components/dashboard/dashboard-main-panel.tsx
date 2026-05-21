@@ -1,5 +1,8 @@
 "use client";
 
+import { api } from "@amiro/backend/convex/_generated/api";
+import type { Id } from "@amiro/backend/convex/_generated/dataModel";
+import { useMutation } from "convex/react";
 import {
   ArrowUpDown,
   ChevronDown,
@@ -7,11 +10,14 @@ import {
   Eye,
   Hash,
   Lock,
+  Plus,
   Star,
   Trash2,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
+import { toast } from "sonner";
 
+import { NewBookmarkDialog } from "@/components/dashboard/new-bookmark-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -103,6 +109,10 @@ export function DashboardMainPanel({
   const [sortBy, setSortBy] = useState<SortOption>("Recent");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
+  const createBookmark = useMutation(api.sync.createBookmark);
+
+  const [creatingBookmark, setCreatingBookmark] = useState(false);
+
   /* Collect unique tags from bookmarks for the filter bar */
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -152,6 +162,31 @@ export function DashboardMainPanel({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <NewBookmarkDialog
+              creating={creatingBookmark}
+              onCreateBookmark={async (input) => {
+                setCreatingBookmark(true);
+                try {
+                  await createBookmark({
+                    url: input.url,
+                    folderId:
+                      selectedFolder.id === "unfiled"
+                        ? undefined
+                        : (selectedFolder.id as Id<"folders">),
+                    visibility: input.visibility,
+                  });
+                  toast.success("Bookmark saved");
+                } finally {
+                  setCreatingBookmark(false);
+                }
+              }}
+              trigger={
+                <Button type="button" className="gap-1.5">
+                  <Plus className="h-4 w-4" />
+                  New bookmark
+                </Button>
+              }
+            />
             <Button type="button" variant="outline" size="sm">
               Share
             </Button>

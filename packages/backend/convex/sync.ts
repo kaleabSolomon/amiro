@@ -1,5 +1,8 @@
 import { ConvexError, v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery, mutation } from "./_generated/server";
+import { authComponent } from "./auth";
 
 const sourceValidator = v.union(
   v.literal("chrome"),
@@ -275,5 +278,43 @@ export const listBookmarksForUserFolder = internalQuery({
       source: bookmark.source,
       capturedAt: bookmark.capturedAt,
     }));
+  },
+});
+
+export const createBookmark = mutation({
+  args: {
+    url: v.string(),
+    folderId: v.optional(v.id("folders")),
+    visibility: v.optional(v.string()), // Just for show for now
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ id: Id<"syncedBookmarks">; status: "created" | "updated" }> => {
+    const authUser = await authComponent.getAuthUser(ctx);
+
+    // For manual creation, we use a simple title and no text/child links for now.
+    // In a real app, we might want to fetch the page title/metadata.
+    const url = args.url.trim();
+    if (!url) {
+      throw new ConvexError("URL is required.");
+    }
+
+    let title = url;
+    try {
+      title = new URL(url).hostname;
+    } catch {
+      // fallback to url if invalid
+    }
+
+    return ctx.runMutation(internal.sync.upsertCaptureFromExtension, {
+      userId: authUser._id,
+      source: "chrome", // Manual bookmarks use chrome source for now
+      folderId: args.folderId,
+      url,
+      title,
+      tags: [],
+      capturedAt: new Date().toISOString(),
+    });
   },
 });

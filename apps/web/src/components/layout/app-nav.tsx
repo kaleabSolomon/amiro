@@ -1,15 +1,19 @@
 "use client";
 
-import { Bell, Plus, User } from "lucide-react";
+import { api } from "@amiro/backend/convex/_generated/api";
+import { useMutation } from "convex/react";
+import { Bell, FolderPlus, Plus, User } from "lucide-react";
 import Link from "next/link";
-
+import { toast } from "sonner";
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
 import { useDashboard } from "@/components/dashboard/dashboard-context";
+import { NewFolderDialog } from "@/components/dashboard/new-folder-dialog";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 
 export function AppNav() {
   const { commandPalette } = useDashboard();
+  const createFolder = useMutation(api.dashboard.createFolder);
 
   return (
     <nav className="sticky top-0 z-40 border-foreground-muted/20 border-b bg-background/80 backdrop-blur-md">
@@ -36,11 +40,22 @@ export function AppNav() {
             <span className="hidden sm:inline">My profile</span>
           </Link>
 
-          <Button size="sm" className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New bookmark</span>
-            <span className="sm:hidden">New</span>
-          </Button>
+          <NewFolderDialog
+            onCreateFolder={async (input) => {
+              await createFolder({
+                name: input.name,
+                icon: input.icon,
+              });
+              toast.success("Folder created");
+            }}
+            trigger={
+              <Button size="sm" className="gap-1.5">
+                <FolderPlus className="h-4 w-4" />
+                <span className="hidden sm:inline">New folder</span>
+                <span className="sm:hidden">Folder</span>
+              </Button>
+            }
+          />
 
           <ModeToggle />
 
