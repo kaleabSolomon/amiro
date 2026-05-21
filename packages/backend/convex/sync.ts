@@ -10,6 +10,7 @@ const sourceValidator = v.union(
   v.literal("instagram"),
   v.literal("twitter"),
 );
+const visibilityValidator = v.union(v.literal("private"), v.literal("public"));
 
 function normalizeTag(tag: string) {
   return tag.trim().toLowerCase().replace(/\s+/g, "-");
@@ -141,6 +142,7 @@ export const upsertCaptureFromExtension = internalMutation({
     ),
     tags: v.array(v.string()),
     capturedAt: v.string(),
+    visibility: v.optional(visibilityValidator),
   },
   handler: async (ctx, args) => {
     const capturedAtMs = Date.parse(args.capturedAt);
@@ -191,6 +193,7 @@ export const upsertCaptureFromExtension = internalMutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         folderId: args.folderId,
+        visibility: args.visibility ?? existing.visibility ?? "private",
         title: args.title,
         text: args.text,
         childLinks,
@@ -210,6 +213,7 @@ export const upsertCaptureFromExtension = internalMutation({
       userId: args.userId,
       source: args.source,
       folderId: args.folderId,
+      visibility: args.visibility ?? "private",
       url: args.url,
       title: args.title,
       text: args.text,
@@ -285,7 +289,7 @@ export const createBookmark = mutation({
   args: {
     url: v.string(),
     folderId: v.optional(v.id("folders")),
-    visibility: v.optional(v.string()), // Just for show for now
+    visibility: v.optional(visibilityValidator),
   },
   handler: async (
     ctx,
@@ -311,6 +315,7 @@ export const createBookmark = mutation({
       userId: authUser._id,
       source: "chrome", // Manual bookmarks use chrome source for now
       folderId: args.folderId,
+      visibility: args.visibility,
       url,
       title,
       tags: [],

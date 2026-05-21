@@ -45,7 +45,11 @@ export function DashboardFolderSidebar({
   loadingFallback?: ReactNode;
   creatingFolder?: boolean;
   onSelectFolder: (folderId: string) => void;
-  onCreateFolder: (input: { name: string; icon: string }) => Promise<void>;
+  onCreateFolder: (input: {
+    name: string;
+    icon: string;
+    visibility: "private" | "public";
+  }) => Promise<void>;
 }) {
   const folderEntries = [...folders].sort((a, b) => {
     if (a.id === "unfiled") {

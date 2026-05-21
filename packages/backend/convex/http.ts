@@ -75,6 +75,7 @@ const telegramSyncSchema = z.object({
 
 const extensionCreateFolderSchema = z.object({
   name: z.string().min(1),
+  visibility: z.enum(["private", "public"]).optional(),
   parentFolderId: z.string().optional(),
 });
 
@@ -615,6 +616,7 @@ http.route({
         {
           userId: authUser._id,
           name: parsed.data.name,
+          visibility: parsed.data.visibility,
           parentFolderId: parsed.data.parentFolderId as
             | Id<"folders">
             | undefined,

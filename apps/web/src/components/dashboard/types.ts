@@ -2,6 +2,7 @@ export type DashboardFolder = {
   id: string;
   name: string;
   icon?: string;
+  visibility: "private" | "public";
   parentId: string | null;
   tags: string[];
   itemCount: number;
@@ -21,6 +22,7 @@ export type DashboardBookmark = {
   }>;
   tags: string[];
   source: "chrome" | "telegram" | "instagram" | "twitter";
+  visibility: "private" | "public";
   capturedAt: number;
   lastSyncedAt: number;
 };

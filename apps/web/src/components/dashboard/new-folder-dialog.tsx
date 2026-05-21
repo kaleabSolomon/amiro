@@ -28,7 +28,11 @@ const FOLDER_ICONS = ["📁", "⭐", "💡", "📚", "🎨", "💼", "🔖", "�
 type Props = {
   trigger: ReactElement;
   creating?: boolean;
-  onCreateFolder: (input: { name: string; icon: string }) => Promise<void>;
+  onCreateFolder: (input: {
+    name: string;
+    icon: string;
+    visibility: "private" | "public";
+  }) => Promise<void>;
 };
 
 export function NewFolderDialog({
@@ -54,6 +58,7 @@ export function NewFolderDialog({
       await onCreateFolder({
         name: trimmedName,
         icon: trimmedIcon,
+        visibility,
       });
     } catch {
       return;

@@ -20,9 +20,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const handleCreateFolder = async ({
     name,
     icon,
+    visibility,
   }: {
     name: string;
     icon: string;
+    visibility: "private" | "public";
   }) => {
     if (creatingFolder) {
       return;
@@ -33,6 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       const result = await createFolder({
         name,
         icon,
+        visibility,
       });
       selectFolder(result.id);
       toast.success("Folder created.");

@@ -56,6 +56,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           id: "unfiled",
           name: "Unfiled",
           icon: "📥",
+          visibility: "private",
           parentId: null,
           tags: [],
           itemCount: 0,
@@ -105,6 +106,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return searchResults.folders.map((folder) => ({
       id: folder.id,
       name: folder.name,
+      visibility: "private" as const,
       parentId: null,
       tags: [],
       itemCount: 0,

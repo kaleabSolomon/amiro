@@ -28,7 +28,7 @@ type Props = {
   creating?: boolean;
   onCreateBookmark: (input: {
     url: string;
-    visibility: string;
+    visibility: "private" | "public";
   }) => Promise<void>;
 };
 

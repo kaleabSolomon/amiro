@@ -2,7 +2,7 @@
 
 import { api } from "@amiro/backend/convex/_generated/api";
 import { useMutation } from "convex/react";
-import { Bell, FolderPlus, Plus, User } from "lucide-react";
+import { Bell, FolderPlus, User } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
@@ -45,6 +45,7 @@ export function AppNav() {
               await createFolder({
                 name: input.name,
                 icon: input.icon,
+                visibility: input.visibility,
               });
               toast.success("Folder created");
             }}

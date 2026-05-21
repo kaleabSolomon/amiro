@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ExternalLink,
   Eye,
+  Globe2,
   Hash,
   Lock,
   Plus,
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import { NewBookmarkDialog } from "@/components/dashboard/new-bookmark-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 import { formatRelativeTime } from "./time";
 import type { DashboardBookmark, DashboardFolder } from "./types";
@@ -86,6 +88,44 @@ function BookmarkSkeletonList() {
   );
 }
 
+function VisibilityToggle({
+  active,
+  icon: Icon,
+  label,
+  compact = false,
+  disabled = false,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  compact?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
+        compact && "px-2",
+        active
+          ? "bg-accent text-foreground"
+          : "text-muted-foreground hover:text-foreground",
+        disabled && "cursor-not-allowed opacity-45 hover:text-muted-foreground",
+      )}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+    >
+      <Icon className="h-3 w-3" />
+      {compact ? null : label}
+    </button>
+  );
+}
+
 /* ─── Main component ──────────────────────────────────────── */
 
 export function DashboardMainPanel({
@@ -110,6 +150,12 @@ export function DashboardMainPanel({
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   const createBookmark = useMutation(api.sync.createBookmark);
+  const updateFolderVisibility = useMutation(
+    api.dashboard.updateFolderVisibility,
+  );
+  const updateBookmarkVisibility = useMutation(
+    api.dashboard.updateBookmarkVisibility,
+  );
 
   const [creatingBookmark, setCreatingBookmark] = useState(false);
 
@@ -130,6 +176,9 @@ export function DashboardMainPanel({
     return bookmarks.filter((b) => b.tags.includes(activeTag));
   }, [bookmarks, activeTag]);
 
+  const folderIsPublic = selectedFolder.visibility === "public";
+  const folderVisibilityLocked = selectedFolder.id === "unfiled";
+
   return (
     <div>
       {/* Header section */}
@@ -145,7 +194,8 @@ export function DashboardMainPanel({
 
             <p className="mt-1 text-muted-foreground text-sm">
               {selectedFolder.itemCount} saved items · updated{" "}
-              {formatRelativeTime(selectedFolder.updatedAtMs)} · 🔒 Private
+              {formatRelativeTime(selectedFolder.updatedAtMs)} ·{" "}
+              {folderIsPublic ? "🌐 Public" : "🔒 Private"}
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -162,6 +212,56 @@ export function DashboardMainPanel({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
+              <VisibilityToggle
+                active={!folderIsPublic}
+                icon={Lock}
+                label="Private"
+                disabled={folderVisibilityLocked}
+                onClick={async () => {
+                  if (folderVisibilityLocked || !folderIsPublic) {
+                    return;
+                  }
+                  try {
+                    await updateFolderVisibility({
+                      folderId: selectedFolder.id as Id<"folders">,
+                      visibility: "private",
+                    });
+                    toast.success("Folder is now private.");
+                  } catch (error) {
+                    const message =
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update folder visibility.";
+                    toast.error(message);
+                  }
+                }}
+              />
+              <VisibilityToggle
+                active={folderIsPublic}
+                icon={Globe2}
+                label="Public"
+                disabled={folderVisibilityLocked}
+                onClick={async () => {
+                  if (folderVisibilityLocked || folderIsPublic) {
+                    return;
+                  }
+                  try {
+                    await updateFolderVisibility({
+                      folderId: selectedFolder.id as Id<"folders">,
+                      visibility: "public",
+                    });
+                    toast.success("Folder is now public.");
+                  } catch (error) {
+                    const message =
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to update folder visibility.";
+                    toast.error(message);
+                  }
+                }}
+              />
+            </div>
             <NewBookmarkDialog
               creating={creatingBookmark}
               onCreateBookmark={async (input) => {
@@ -176,6 +276,13 @@ export function DashboardMainPanel({
                     visibility: input.visibility,
                   });
                   toast.success("Bookmark saved");
+                } catch (error) {
+                  const message =
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to save bookmark.";
+                  toast.error(message);
+                  throw error;
                 } finally {
                   setCreatingBookmark(false);
                 }
@@ -187,7 +294,12 @@ export function DashboardMainPanel({
                 </Button>
               }
             />
-            <Button type="button" variant="outline" size="sm">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!folderIsPublic}
+            >
               Share
             </Button>
           </div>
@@ -293,7 +405,8 @@ export function DashboardMainPanel({
                 const domain = getDomain(bookmark.url);
                 const letter = getLetterAvatar(bookmark.url);
                 const { views, stars } = getFakeStats(bookmark.id);
-                const isPrivate = bookmark.source !== "chrome";
+                const bookmarkIsPublic = bookmark.visibility === "public";
+                const bookmarkToggleDisabled = !folderIsPublic;
 
                 return (
                   <div
@@ -317,12 +430,74 @@ export function DashboardMainPanel({
                         >
                           {bookmark.title}
                         </a>
-                        {isPrivate ? (
+                        {bookmarkIsPublic ? (
+                          <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                        ) : (
                           <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-                        ) : null}
+                        )}
 
                         {/* Hover-reveal action icons */}
                         <div className="ml-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <div className="flex items-center rounded-md border border-border bg-background/80 p-0.5">
+                            <VisibilityToggle
+                              active={!bookmarkIsPublic}
+                              icon={Lock}
+                              label="Private bookmark"
+                              compact
+                              disabled={bookmarkToggleDisabled}
+                              onClick={async () => {
+                                if (
+                                  bookmarkToggleDisabled ||
+                                  !bookmarkIsPublic
+                                ) {
+                                  return;
+                                }
+                                try {
+                                  await updateBookmarkVisibility({
+                                    bookmarkId:
+                                      bookmark.id as Id<"syncedBookmarks">,
+                                    visibility: "private",
+                                  });
+                                  toast.success("Bookmark is now private.");
+                                } catch (error) {
+                                  const message =
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Failed to update bookmark visibility.";
+                                  toast.error(message);
+                                }
+                              }}
+                            />
+                            <VisibilityToggle
+                              active={bookmarkIsPublic}
+                              icon={Globe2}
+                              label="Public bookmark"
+                              compact
+                              disabled={bookmarkToggleDisabled}
+                              onClick={async () => {
+                                if (
+                                  bookmarkToggleDisabled ||
+                                  bookmarkIsPublic
+                                ) {
+                                  return;
+                                }
+                                try {
+                                  await updateBookmarkVisibility({
+                                    bookmarkId:
+                                      bookmark.id as Id<"syncedBookmarks">,
+                                    visibility: "public",
+                                  });
+                                  toast.success("Bookmark is now public.");
+                                } catch (error) {
+                                  const message =
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Failed to update bookmark visibility.";
+                                  toast.error(message);
+                                }
+                              }}
+                            />
+                          </div>
                           <a
                             href={bookmark.url}
                             target="_blank"

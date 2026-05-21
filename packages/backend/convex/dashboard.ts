@@ -14,6 +14,8 @@ type FolderStats = {
   tagCounts: Map<string, number>;
 };
 
+const visibilityValidator = v.union(v.literal("private"), v.literal("public"));
+
 function getOrCreateStats(map: Map<string, FolderStats>, key: string) {
   const existing = map.get(key);
   if (existing) {
@@ -81,6 +83,7 @@ export const getFolderTree = query({
         id: folder._id,
         name: folder.name,
         icon: folder.icon,
+        visibility: folder.visibility ?? "private",
         parentId: folder.parentFolderId ?? null,
         itemCount: stats?.itemCount ?? 0,
         updatedAtMs: stats?.updatedAtMs ?? null,
@@ -93,6 +96,7 @@ export const getFolderTree = query({
       id: "unfiled",
       name: "Unfiled",
       icon: "📥",
+      visibility: "private" as const,
       parentId: null,
       itemCount: unfiledStats?.itemCount ?? 0,
       updatedAtMs: unfiledStats?.updatedAtMs ?? null,
@@ -149,6 +153,7 @@ export const getBookmarksForFolder = query({
       childLinks: bookmark.childLinks ?? [],
       tags: bookmark.tags,
       source: bookmark.source,
+      visibility: bookmark.visibility ?? "private",
       capturedAt: bookmark.capturedAt,
       lastSyncedAt: bookmark.lastSyncedAt,
     }));
@@ -268,6 +273,7 @@ export const createFolder = mutation({
   args: {
     name: v.string(),
     icon: v.optional(v.string()),
+    visibility: v.optional(visibilityValidator),
     parentFolderId: v.optional(v.id("folders")),
   },
   handler: async (ctx, args) => {
@@ -289,6 +295,7 @@ export const createFolder = mutation({
       userId: authUser._id,
       name,
       icon: args.icon?.trim() || undefined,
+      visibility: args.visibility ?? "private",
       parentFolderId: args.parentFolderId,
       createdAt: now,
       updatedAt: now,
@@ -303,6 +310,7 @@ export const createFolderForUser = internalMutation({
     userId: v.string(),
     name: v.string(),
     icon: v.optional(v.string()),
+    visibility: v.optional(visibilityValidator),
     parentFolderId: v.optional(v.id("folders")),
   },
   handler: async (ctx, args) => {
@@ -323,6 +331,7 @@ export const createFolderForUser = internalMutation({
       userId: args.userId,
       name,
       icon: args.icon?.trim() || undefined,
+      visibility: args.visibility ?? "private",
       parentFolderId: args.parentFolderId,
       createdAt: now,
       updatedAt: now,
@@ -345,6 +354,70 @@ export const deleteBookmark = mutation({
 
     await ctx.db.delete(args.bookmarkId);
     return { ok: true as const };
+  },
+});
+
+export const updateFolderVisibility = mutation({
+  args: {
+    folderId: v.id("folders"),
+    visibility: visibilityValidator,
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || folder.userId !== authUser._id) {
+      throw new ConvexError("Folder not found.");
+    }
+
+    await ctx.db.patch(folder._id, {
+      visibility: args.visibility,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      id: folder._id,
+      visibility: args.visibility,
+    };
+  },
+});
+
+export const updateBookmarkVisibility = mutation({
+  args: {
+    bookmarkId: v.id("syncedBookmarks"),
+    visibility: visibilityValidator,
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const bookmark = await ctx.db.get(args.bookmarkId);
+    if (!bookmark || bookmark.userId !== authUser._id) {
+      throw new ConvexError("Bookmark not found.");
+    }
+
+    if (bookmark.folderId) {
+      const folder = await ctx.db.get(bookmark.folderId);
+      if (!folder || folder.userId !== authUser._id) {
+        throw new ConvexError("Folder not found.");
+      }
+      if ((folder.visibility ?? "private") !== "public") {
+        throw new ConvexError(
+          "Bookmark visibility can only be changed inside a public folder.",
+        );
+      }
+    } else {
+      throw new ConvexError(
+        "Bookmark visibility can only be changed inside a public folder.",
+      );
+    }
+
+    await ctx.db.patch(bookmark._id, {
+      visibility: args.visibility,
+      lastSyncedAt: Date.now(),
+    });
+
+    return {
+      id: bookmark._id,
+      visibility: args.visibility,
+    };
   },
 });
 
