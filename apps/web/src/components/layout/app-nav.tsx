@@ -1,7 +1,7 @@
 "use client";
 
 import { api } from "@amiro/backend/convex/_generated/api";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Bell, FolderPlus, User } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -14,6 +14,10 @@ import { Button } from "@/components/ui/button";
 export function AppNav() {
   const { commandPalette } = useDashboard();
   const createFolder = useMutation(api.dashboard.createFolder);
+  const currentUser = useQuery(api.auth.getCurrentUser);
+  const profileHref = currentUser?.username
+    ? `/profile/${currentUser.username}`
+    : "/dashboard";
 
   return (
     <nav className="sticky top-0 z-40 border-foreground-muted/20 border-b bg-background/80 backdrop-blur-md">
@@ -33,7 +37,7 @@ export function AppNav() {
 
         <div className="flex shrink-0 items-center gap-1">
           <Link
-            href="/dashboard"
+            href={profileHref}
             className="inline-flex items-center gap-2 rounded-md px-2 py-2 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground sm:px-3"
           >
             <User className="h-4 w-4" />

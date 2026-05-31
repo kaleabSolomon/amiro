@@ -31,6 +31,7 @@ interface DashboardContextValue {
   selectFolder: (folderId: string) => void;
   folders: DashboardFolder[];
   foldersLoading: boolean;
+  recentCount: number;
   commandPalette: CommandPaletteState;
 }
 
@@ -47,6 +48,9 @@ export function useDashboard() {
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedFolderId, setSelectedFolderId] = useState("unfiled");
   const foldersQuery = useQuery(api.dashboard.getFolderTree);
+  const recentCountQuery = useQuery(api.dashboard.getRecentBookmarkCount, {
+    days: 7,
+  });
   const foldersLoading = foldersQuery === undefined;
 
   const folders = useMemo<DashboardFolder[]>(() => {
@@ -75,6 +79,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Auto-correct if selected folder no longer exists
   useEffect(() => {
+    if (selectedFolderId === "recent") {
+      return;
+    }
     if (!folderMap.has(selectedFolderId) && folders.length > 0) {
       setSelectedFolderId(folders[0].id);
     }
@@ -182,9 +189,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       selectFolder,
       folders,
       foldersLoading,
+      recentCount: recentCountQuery ?? 0,
       commandPalette,
     }),
-    [selectedFolderId, selectFolder, folders, foldersLoading, commandPalette],
+    [
+      selectedFolderId,
+      selectFolder,
+      folders,
+      foldersLoading,
+      recentCountQuery,
+      commandPalette,
+    ],
   );
 
   return (

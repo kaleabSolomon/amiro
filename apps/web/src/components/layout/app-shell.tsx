@@ -12,8 +12,13 @@ import { AppNav } from "./app-nav";
 import { Footer } from "./site-footer";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { folders, selectedFolderId, foldersLoading, selectFolder } =
-    useDashboard();
+  const {
+    folders,
+    selectedFolderId,
+    foldersLoading,
+    recentCount,
+    selectFolder,
+  } = useDashboard();
   const createFolder = useMutation(api.dashboard.createFolder);
   const [creatingFolder, setCreatingFolder] = useState(false);
 
@@ -55,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         folders={folders}
         selectedFolderId={selectedFolderId}
         isLoading={foldersLoading}
+        recentCount={recentCount}
         creatingFolder={creatingFolder}
         onSelectFolder={selectFolder}
         onCreateFolder={handleCreateFolder}

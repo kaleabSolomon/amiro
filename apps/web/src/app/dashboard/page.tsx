@@ -18,6 +18,7 @@ import {
   useDashboard,
 } from "@/components/dashboard/dashboard-context";
 import { DashboardMainPanel } from "@/components/dashboard/dashboard-main-panel";
+import type { DashboardFolder } from "@/components/dashboard/types";
 import { AppShell } from "@/components/layout/app-shell";
 
 function RedirectToAuth() {
@@ -48,12 +49,31 @@ function FolderWorkspace() {
     [folders],
   );
 
-  const selectedFolder = folderMap.get(selectedFolderId) ?? folders[0];
+  const selectedFolder: DashboardFolder =
+    selectedFolderId === "recent"
+      ? {
+          id: "recent",
+          name: "Recent",
+          icon: "🕘",
+          visibility: "private",
+          parentId: null,
+          tags: [],
+          itemCount: 0,
+          updatedAtMs: null,
+        }
+      : (folderMap.get(selectedFolderId) ?? folders[0]);
   const breadcrumbs = useMemo(() => [selectedFolder], [selectedFolder]);
 
-  const bookmarks = useQuery(api.dashboard.getBookmarksForFolder, {
-    folderId: selectedFolderId,
-  });
+  const folderBookmarks = useQuery(
+    api.dashboard.getBookmarksForFolder,
+    selectedFolderId === "recent" ? "skip" : { folderId: selectedFolderId },
+  );
+  const recentBookmarks = useQuery(
+    api.dashboard.getRecentBookmarks,
+    selectedFolderId === "recent" ? { days: 7, limit: 120 } : "skip",
+  );
+  const bookmarks =
+    selectedFolderId === "recent" ? recentBookmarks : folderBookmarks;
   const bookmarksLoading = bookmarks === undefined;
 
   const deleteBookmark = useMutation(api.dashboard.deleteBookmark);

@@ -35,6 +35,7 @@ export function DashboardFolderSidebar({
   selectedFolderId,
   isLoading = false,
   loadingFallback,
+  recentCount = 0,
   creatingFolder = false,
   onSelectFolder,
   onCreateFolder,
@@ -43,6 +44,7 @@ export function DashboardFolderSidebar({
   selectedFolderId: string;
   isLoading?: boolean;
   loadingFallback?: ReactNode;
+  recentCount?: number;
   creatingFolder?: boolean;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (input: {
@@ -89,7 +91,7 @@ export function DashboardFolderSidebar({
                   <Clock className="h-4 w-4 text-sidebar-foreground/40" />
                   <span>Recent</span>
                 </SidebarMenuButton>
-                <SidebarMenuBadge>10</SidebarMenuBadge>
+                <SidebarMenuBadge>{recentCount}</SidebarMenuBadge>
               </SidebarMenuItem>
             </SidebarMenu>
             <SidebarMenu>

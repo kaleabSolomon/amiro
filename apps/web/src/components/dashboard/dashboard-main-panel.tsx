@@ -6,6 +6,8 @@ import { useMutation } from "convex/react";
 import {
   ArrowUpDown,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Eye,
   Globe2,
@@ -54,6 +56,46 @@ function getFakeStats(id: string): { views: number; stars: number } {
 
 const SORT_OPTIONS = ["Recent", "Most viewed", "Most saved"] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
+const RECENT_PAGE_SIZE = 20;
+
+function getDayKey(timestamp: number) {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function formatDayHeading(timestamp: number) {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (getDayKey(timestamp) === getDayKey(today.getTime())) {
+    return "Today";
+  }
+  if (getDayKey(timestamp) === getDayKey(yesterday.getTime())) {
+    return "Yesterday";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function groupBookmarksByDay(bookmarks: DashboardBookmark[]) {
+  const groups = new Map<string, DashboardBookmark[]>();
+
+  for (const bookmark of bookmarks) {
+    const key = getDayKey(bookmark.lastSyncedAt);
+    groups.set(key, [...(groups.get(key) ?? []), bookmark]);
+  }
+
+  return [...groups.entries()].map(([key, items]) => ({
+    key,
+    label: formatDayHeading(items[0]?.lastSyncedAt ?? Date.now()),
+    bookmarks: items,
+  }));
+}
 
 /* ─── Skeletons ───────────────────────────────────────────── */
 
@@ -148,6 +190,7 @@ export function DashboardMainPanel({
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("Recent");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [recentPage, setRecentPage] = useState(1);
 
   const createBookmark = useMutation(api.sync.createBookmark);
   const updateFolderVisibility = useMutation(
@@ -176,8 +219,192 @@ export function DashboardMainPanel({
     return bookmarks.filter((b) => b.tags.includes(activeTag));
   }, [bookmarks, activeTag]);
 
+  const isRecentView = selectedFolder.id === "recent";
   const folderIsPublic = selectedFolder.visibility === "public";
   const folderVisibilityLocked = selectedFolder.id === "unfiled";
+  const displayedItemCount = isRecentView
+    ? bookmarks.length
+    : selectedFolder.itemCount;
+  const displayedUpdatedAtMs = isRecentView
+    ? (bookmarks[0]?.lastSyncedAt ?? null)
+    : selectedFolder.updatedAtMs;
+  const recentPageCount = Math.max(
+    1,
+    Math.ceil(filteredBookmarks.length / RECENT_PAGE_SIZE),
+  );
+  const safeRecentPage = Math.min(recentPage, recentPageCount);
+  const visibleBookmarks = isRecentView
+    ? filteredBookmarks.slice(
+        (safeRecentPage - 1) * RECENT_PAGE_SIZE,
+        safeRecentPage * RECENT_PAGE_SIZE,
+      )
+    : filteredBookmarks;
+  const recentBookmarkGroups = useMemo(
+    () => groupBookmarksByDay(visibleBookmarks),
+    [visibleBookmarks],
+  );
+
+  function renderBookmarkRow(bookmark: DashboardBookmark) {
+    const domain = getDomain(bookmark.url);
+    const letter = getLetterAvatar(bookmark.url);
+    const { views, stars } = getFakeStats(bookmark.id);
+    const bookmarkIsPublic = bookmark.visibility === "public";
+    const bookmarkToggleDisabled = isRecentView
+      ? bookmark.folderVisibility !== "public"
+      : !folderIsPublic;
+
+    return (
+      <div
+        key={bookmark.id}
+        className="group flex items-start gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground text-sm">
+          {letter}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <a
+              href={bookmark.url}
+              target="_blank"
+              rel="noreferrer"
+              className="line-clamp-1 font-semibold text-foreground text-sm transition-colors hover:text-primary"
+            >
+              {bookmark.title}
+            </a>
+            {bookmarkIsPublic ? (
+              <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+            ) : (
+              <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+            )}
+
+            <div className="ml-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="flex items-center rounded-md border border-border bg-background/80 p-0.5">
+                <VisibilityToggle
+                  active={!bookmarkIsPublic}
+                  icon={Lock}
+                  label="Private bookmark"
+                  compact
+                  disabled={bookmarkToggleDisabled}
+                  onClick={async () => {
+                    if (bookmarkToggleDisabled || !bookmarkIsPublic) {
+                      return;
+                    }
+                    try {
+                      await updateBookmarkVisibility({
+                        bookmarkId: bookmark.id as Id<"syncedBookmarks">,
+                        visibility: "private",
+                      });
+                      toast.success("Bookmark is now private.");
+                    } catch (error) {
+                      const message =
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to update bookmark visibility.";
+                      toast.error(message);
+                    }
+                  }}
+                />
+                <VisibilityToggle
+                  active={bookmarkIsPublic}
+                  icon={Globe2}
+                  label="Public bookmark"
+                  compact
+                  disabled={bookmarkToggleDisabled}
+                  onClick={async () => {
+                    if (bookmarkToggleDisabled || bookmarkIsPublic) {
+                      return;
+                    }
+                    try {
+                      await updateBookmarkVisibility({
+                        bookmarkId: bookmark.id as Id<"syncedBookmarks">,
+                        visibility: "public",
+                      });
+                      toast.success("Bookmark is now public.");
+                    } catch (error) {
+                      const message =
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to update bookmark visibility.";
+                      toast.error(message);
+                    }
+                  }}
+                />
+              </div>
+              <a
+                href={bookmark.url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Open link"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+              <button
+                type="button"
+                disabled={deletingBookmarkId === bookmark.id}
+                onClick={async () => {
+                  setDeletingBookmarkId(bookmark.id);
+                  try {
+                    await onDeleteBookmark(bookmark.id);
+                  } finally {
+                    setDeletingBookmarkId((current) =>
+                      current === bookmark.id ? null : current,
+                    );
+                  }
+                }}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Delete bookmark"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <p className="mt-0.5 font-mono text-muted-foreground text-xs">
+            {domain}
+          </p>
+
+          {isRecentView && bookmark.folderName ? (
+            <p className="mt-1 text-muted-foreground text-xs">
+              {bookmark.folderName}
+            </p>
+          ) : null}
+
+          {bookmark.text ? (
+            <p className="mt-1.5 line-clamp-1 text-muted-foreground/80 text-sm">
+              {bookmark.text}
+            </p>
+          ) : null}
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {bookmark.tags.slice(0, 4).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-muted/80 px-2 py-0.5 font-medium text-[11px] text-muted-foreground"
+              >
+                # {tag}
+              </span>
+            ))}
+            <span className="text-[11px] text-muted-foreground/60">
+              {formatRelativeTime(bookmark.capturedAt)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-4 pt-0.5 text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs">
+            <Eye className="h-3.5 w-3.5" />
+            {views}
+          </span>
+          <span className="flex items-center gap-1 text-xs">
+            <Star className="h-3.5 w-3.5" />
+            {stars}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -193,9 +420,11 @@ export function DashboardMainPanel({
             </h1>
 
             <p className="mt-1 text-muted-foreground text-sm">
-              {selectedFolder.itemCount} saved items · updated{" "}
-              {formatRelativeTime(selectedFolder.updatedAtMs)} ·{" "}
-              {folderIsPublic ? "🌐 Public" : "🔒 Private"}
+              {displayedItemCount} saved items · updated{" "}
+              {formatRelativeTime(displayedUpdatedAtMs)}
+              {isRecentView
+                ? " · last 7 days"
+                : ` · ${folderIsPublic ? "🌐 Public" : "🔒 Private"}`}
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -211,105 +440,109 @@ export function DashboardMainPanel({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
-              <VisibilityToggle
-                active={!folderIsPublic}
-                icon={Lock}
-                label="Private"
-                disabled={folderVisibilityLocked}
-                onClick={async () => {
-                  if (folderVisibilityLocked || !folderIsPublic) {
-                    return;
-                  }
+          {!isRecentView ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
+                <VisibilityToggle
+                  active={!folderIsPublic}
+                  icon={Lock}
+                  label="Private"
+                  disabled={folderVisibilityLocked}
+                  onClick={async () => {
+                    if (folderVisibilityLocked || !folderIsPublic) {
+                      return;
+                    }
+                    try {
+                      await updateFolderVisibility({
+                        folderId: selectedFolder.id as Id<"folders">,
+                        visibility: "private",
+                      });
+                      toast.success("Folder is now private.");
+                    } catch (error) {
+                      const message =
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to update folder visibility.";
+                      toast.error(message);
+                    }
+                  }}
+                />
+                <VisibilityToggle
+                  active={folderIsPublic}
+                  icon={Globe2}
+                  label="Public"
+                  disabled={folderVisibilityLocked}
+                  onClick={async () => {
+                    if (folderVisibilityLocked || folderIsPublic) {
+                      return;
+                    }
+                    try {
+                      await updateFolderVisibility({
+                        folderId: selectedFolder.id as Id<"folders">,
+                        visibility: "public",
+                      });
+                      toast.success("Folder is now public.");
+                    } catch (error) {
+                      const message =
+                        error instanceof Error
+                          ? error.message
+                          : "Failed to update folder visibility.";
+                      toast.error(message);
+                    }
+                  }}
+                />
+              </div>
+              <NewBookmarkDialog
+                creating={creatingBookmark}
+                onCreateBookmark={async (input) => {
+                  setCreatingBookmark(true);
                   try {
-                    await updateFolderVisibility({
-                      folderId: selectedFolder.id as Id<"folders">,
-                      visibility: "private",
+                    await createBookmark({
+                      url: input.url,
+                      folderId:
+                        selectedFolder.id === "unfiled"
+                          ? undefined
+                          : (selectedFolder.id as Id<"folders">),
+                      visibility: input.visibility,
                     });
-                    toast.success("Folder is now private.");
+                    toast.success("Bookmark saved");
                   } catch (error) {
                     const message =
                       error instanceof Error
                         ? error.message
-                        : "Failed to update folder visibility.";
+                        : "Failed to save bookmark.";
                     toast.error(message);
+                    throw error;
+                  } finally {
+                    setCreatingBookmark(false);
                   }
                 }}
-              />
-              <VisibilityToggle
-                active={folderIsPublic}
-                icon={Globe2}
-                label="Public"
-                disabled={folderVisibilityLocked}
-                onClick={async () => {
-                  if (folderVisibilityLocked || folderIsPublic) {
-                    return;
-                  }
-                  try {
-                    await updateFolderVisibility({
-                      folderId: selectedFolder.id as Id<"folders">,
-                      visibility: "public",
-                    });
-                    toast.success("Folder is now public.");
-                  } catch (error) {
-                    const message =
-                      error instanceof Error
-                        ? error.message
-                        : "Failed to update folder visibility.";
-                    toast.error(message);
-                  }
-                }}
-              />
-            </div>
-            <NewBookmarkDialog
-              creating={creatingBookmark}
-              onCreateBookmark={async (input) => {
-                setCreatingBookmark(true);
-                try {
-                  await createBookmark({
-                    url: input.url,
-                    folderId:
-                      selectedFolder.id === "unfiled"
-                        ? undefined
-                        : (selectedFolder.id as Id<"folders">),
-                    visibility: input.visibility,
-                  });
-                  toast.success("Bookmark saved");
-                } catch (error) {
-                  const message =
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to save bookmark.";
-                  toast.error(message);
-                  throw error;
-                } finally {
-                  setCreatingBookmark(false);
+                trigger={
+                  <Button type="button" className="gap-1.5">
+                    <Plus className="h-4 w-4" />
+                    New bookmark
+                  </Button>
                 }
-              }}
-              trigger={
-                <Button type="button" className="gap-1.5">
-                  <Plus className="h-4 w-4" />
-                  New bookmark
-                </Button>
-              }
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!folderIsPublic}
-            >
-              Share
-            </Button>
-          </div>
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!folderIsPublic}
+              >
+                Share
+              </Button>
+            </div>
+          ) : null}
         </div>
       </header>
 
       {/* ─── Bookmarks section ─────────────────────────────── */}
       <div className="mt-8">
         <p className="mb-4 font-medium text-muted-foreground text-sm">
-          Bookmarks in {selectedFolder.name}
+          {isRecentView
+            ? "Recent bookmarks from the last 7 days"
+            : `Bookmarks in ${selectedFolder.name}`}
         </p>
 
         {bookmarksLoading ? (
@@ -330,7 +563,10 @@ export function DashboardMainPanel({
               <div className="flex flex-wrap items-center gap-2 overflow-x-auto">
                 <button
                   type="button"
-                  onClick={() => setActiveTag(null)}
+                  onClick={() => {
+                    setActiveTag(null);
+                    setRecentPage(1);
+                  }}
                   className={`rounded-full px-3 py-1 font-medium text-xs transition-colors ${
                     activeTag === null
                       ? "bg-foreground text-background"
@@ -343,7 +579,10 @@ export function DashboardMainPanel({
                   <button
                     key={tag}
                     type="button"
-                    onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                    onClick={() => {
+                      setActiveTag(activeTag === tag ? null : tag);
+                      setRecentPage(1);
+                    }}
                     className={`rounded-full px-3 py-1 font-medium text-xs transition-colors ${
                       activeTag === tag
                         ? "bg-foreground text-background"
@@ -399,178 +638,69 @@ export function DashboardMainPanel({
               </div>
             </div>
 
-            {/* ─── Bookmark list ───────────────────────── */}
-            <div className="divide-y divide-border/40">
-              {filteredBookmarks.map((bookmark) => {
-                const domain = getDomain(bookmark.url);
-                const letter = getLetterAvatar(bookmark.url);
-                const { views, stars } = getFakeStats(bookmark.id);
-                const bookmarkIsPublic = bookmark.visibility === "public";
-                const bookmarkToggleDisabled = !folderIsPublic;
-
-                return (
-                  <div
-                    key={bookmark.id}
-                    className="group flex items-start gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
+            {isRecentView ? (
+              <div>
+                {recentBookmarkGroups.map((group, index) => (
+                  <section
+                    key={group.key}
+                    className={cn(index > 0 && "border-border/60 border-t")}
                   >
-                    {/* Letter avatar */}
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground text-sm">
-                      {letter}
-                    </div>
-
-                    {/* Content */}
-                    <div className="min-w-0 flex-1">
-                      {/* Title row */}
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={bookmark.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="line-clamp-1 font-semibold text-foreground text-sm transition-colors hover:text-primary"
-                        >
-                          {bookmark.title}
-                        </a>
-                        {bookmarkIsPublic ? (
-                          <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-                        ) : (
-                          <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-                        )}
-
-                        {/* Hover-reveal action icons */}
-                        <div className="ml-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                          <div className="flex items-center rounded-md border border-border bg-background/80 p-0.5">
-                            <VisibilityToggle
-                              active={!bookmarkIsPublic}
-                              icon={Lock}
-                              label="Private bookmark"
-                              compact
-                              disabled={bookmarkToggleDisabled}
-                              onClick={async () => {
-                                if (
-                                  bookmarkToggleDisabled ||
-                                  !bookmarkIsPublic
-                                ) {
-                                  return;
-                                }
-                                try {
-                                  await updateBookmarkVisibility({
-                                    bookmarkId:
-                                      bookmark.id as Id<"syncedBookmarks">,
-                                    visibility: "private",
-                                  });
-                                  toast.success("Bookmark is now private.");
-                                } catch (error) {
-                                  const message =
-                                    error instanceof Error
-                                      ? error.message
-                                      : "Failed to update bookmark visibility.";
-                                  toast.error(message);
-                                }
-                              }}
-                            />
-                            <VisibilityToggle
-                              active={bookmarkIsPublic}
-                              icon={Globe2}
-                              label="Public bookmark"
-                              compact
-                              disabled={bookmarkToggleDisabled}
-                              onClick={async () => {
-                                if (
-                                  bookmarkToggleDisabled ||
-                                  bookmarkIsPublic
-                                ) {
-                                  return;
-                                }
-                                try {
-                                  await updateBookmarkVisibility({
-                                    bookmarkId:
-                                      bookmark.id as Id<"syncedBookmarks">,
-                                    visibility: "public",
-                                  });
-                                  toast.success("Bookmark is now public.");
-                                } catch (error) {
-                                  const message =
-                                    error instanceof Error
-                                      ? error.message
-                                      : "Failed to update bookmark visibility.";
-                                  toast.error(message);
-                                }
-                              }}
-                            />
-                          </div>
-                          <a
-                            href={bookmark.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            aria-label="Open link"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                          <button
-                            type="button"
-                            disabled={deletingBookmarkId === bookmark.id}
-                            onClick={async () => {
-                              setDeletingBookmarkId(bookmark.id);
-                              try {
-                                await onDeleteBookmark(bookmark.id);
-                              } finally {
-                                setDeletingBookmarkId((current) =>
-                                  current === bookmark.id ? null : current,
-                                );
-                              }
-                            }}
-                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                            aria-label="Delete bookmark"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Domain */}
-                      <p className="mt-0.5 font-mono text-muted-foreground text-xs">
-                        {domain}
+                    <div className="bg-background/60 px-5 py-3">
+                      <p className="font-medium text-muted-foreground text-xs uppercase tracking-[0.16em]">
+                        {group.label}
                       </p>
-
-                      {/* Description */}
-                      {bookmark.text ? (
-                        <p className="mt-1.5 line-clamp-1 text-muted-foreground/80 text-sm">
-                          {bookmark.text}
-                        </p>
-                      ) : null}
-
-                      {/* Tags + time */}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {bookmark.tags.slice(0, 4).map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-muted/80 px-2 py-0.5 font-medium text-[11px] text-muted-foreground"
-                          >
-                            # {tag}
-                          </span>
-                        ))}
-                        <span className="text-[11px] text-muted-foreground/60">
-                          {formatRelativeTime(bookmark.capturedAt)}
-                        </span>
-                      </div>
                     </div>
-
-                    {/* Stats (right side) */}
-                    <div className="flex shrink-0 items-center gap-4 pt-0.5 text-muted-foreground">
-                      <span className="flex items-center gap-1 text-xs">
-                        <Eye className="h-3.5 w-3.5" />
-                        {views}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs">
-                        <Star className="h-3.5 w-3.5" />
-                        {stars}
-                      </span>
+                    <div className="divide-y divide-border/40">
+                      {group.bookmarks.map((bookmark) =>
+                        renderBookmarkRow(bookmark),
+                      )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="divide-y divide-border/40">
+                {visibleBookmarks.map((bookmark) =>
+                  renderBookmarkRow(bookmark),
+                )}
+              </div>
+            )}
+
+            {isRecentView && recentPageCount > 1 ? (
+              <div className="flex items-center justify-between border-border/60 border-t px-5 py-3">
+                <p className="text-muted-foreground text-xs">
+                  Page {safeRecentPage} of {recentPageCount}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={safeRecentPage === 1}
+                    onClick={() =>
+                      setRecentPage((page) => Math.max(1, page - 1))
+                    }
+                    aria-label="Previous recent page"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={safeRecentPage === recentPageCount}
+                    onClick={() =>
+                      setRecentPage((page) =>
+                        Math.min(recentPageCount, page + 1),
+                      )
+                    }
+                    aria-label="Next recent page"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

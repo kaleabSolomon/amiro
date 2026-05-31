@@ -38,6 +38,37 @@ function topTags(tagCounts: Map<string, number>, limit = 4) {
     .map(([tag]) => tag);
 }
 
+function mapBookmark(bookmark: {
+  _id: Id<"syncedBookmarks">;
+  url: string;
+  title: string;
+  text?: string;
+  childLinks?: Array<{
+    url: string;
+    title?: string;
+    siteName?: string;
+    description?: string;
+  }>;
+  tags: string[];
+  source: "chrome" | "telegram" | "instagram" | "twitter";
+  visibility?: "private" | "public";
+  capturedAt: number;
+  lastSyncedAt: number;
+}) {
+  return {
+    id: bookmark._id,
+    url: bookmark.url,
+    title: bookmark.title,
+    text: bookmark.text ?? "",
+    childLinks: bookmark.childLinks ?? [],
+    tags: bookmark.tags,
+    source: bookmark.source,
+    visibility: bookmark.visibility ?? "private",
+    capturedAt: bookmark.capturedAt,
+    lastSyncedAt: bookmark.lastSyncedAt,
+  };
+}
+
 function generateLinkToken() {
   return `tg_${crypto.randomUUID().replaceAll("-", "")}`;
 }
@@ -121,12 +152,14 @@ export const getBookmarksForFolder = query({
       args.folderId === "unfiled"
         ? undefined
         : (args.folderId as Id<"folders">);
+    let targetFolderVisibility: "private" | "public" = "private";
 
     if (targetFolderId) {
       const folder = await ctx.db.get(targetFolderId);
       if (!folder || folder.userId !== authUser._id) {
         throw new ConvexError("Folder not found.");
       }
+      targetFolderVisibility = folder.visibility ?? "private";
     }
 
     const docs = !targetFolderId
@@ -146,17 +179,78 @@ export const getBookmarksForFolder = query({
           .collect();
 
     return docs.map((bookmark) => ({
-      id: bookmark._id,
-      url: bookmark.url,
-      title: bookmark.title,
-      text: bookmark.text ?? "",
-      childLinks: bookmark.childLinks ?? [],
-      tags: bookmark.tags,
-      source: bookmark.source,
-      visibility: bookmark.visibility ?? "private",
-      capturedAt: bookmark.capturedAt,
-      lastSyncedAt: bookmark.lastSyncedAt,
+      ...mapBookmark(bookmark),
+      folderVisibility: targetFolderVisibility,
     }));
+  },
+});
+
+export const getRecentBookmarks = query({
+  args: {
+    days: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return [];
+    }
+
+    const days = Math.max(1, Math.min(args.days ?? 7, 31));
+    const limit = Math.max(1, Math.min(args.limit ?? 100, 200));
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    const [folders, bookmarks] = await Promise.all([
+      ctx.db
+        .query("folders")
+        .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+        .collect(),
+      ctx.db
+        .query("syncedBookmarks")
+        .withIndex("by_user_and_last_synced_at", (q) =>
+          q.eq("userId", authUser._id).gte("lastSyncedAt", since),
+        )
+        .order("desc")
+        .take(limit),
+    ]);
+
+    const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
+
+    return bookmarks.map((bookmark) => {
+      const folder = bookmark.folderId
+        ? folderMap.get(bookmark.folderId)
+        : undefined;
+
+      return {
+        ...mapBookmark(bookmark),
+        folderId: bookmark.folderId ?? null,
+        folderName: folder?.name ?? "Unfiled",
+        folderVisibility: folder?.visibility ?? "private",
+      };
+    });
+  },
+});
+
+export const getRecentBookmarkCount = query({
+  args: {
+    days: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return 0;
+    }
+
+    const days = Math.max(1, Math.min(args.days ?? 7, 31));
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+    const bookmarks = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_last_synced_at", (q) =>
+        q.eq("userId", authUser._id).gte("lastSyncedAt", since),
+      )
+      .take(1000);
+
+    return bookmarks.length;
   },
 });
 
