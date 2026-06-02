@@ -3,6 +3,7 @@
 import { api } from "@amiro/backend/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { Bell, FolderPlus, User } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 import { toast } from "sonner";
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
@@ -16,7 +17,7 @@ export function AppNav() {
   const createFolder = useMutation(api.dashboard.createFolder);
   const currentUser = useQuery(api.auth.getCurrentUser);
   const profileHref = currentUser?.username
-    ? `/profile/${currentUser.username}`
+    ? (`/profile/${currentUser.username}` as Route)
     : "/dashboard";
 
   return (

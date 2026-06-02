@@ -4,18 +4,14 @@ import { api } from "@amiro/backend/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import {
   Calendar,
-  ChevronLeft,
+  Copy,
   Eye,
-  Globe,
-  Laptop,
+  Globe2,
   Link2,
   LogOut,
-  MapPin,
+  Monitor,
   Moon,
   Save,
-  Settings,
-  Share2,
-  Smartphone,
   Star,
   Sun,
   UserPlus,
@@ -24,18 +20,58 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { use, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 
-function getInitials(name?: string) {
-  if (!name) return "U";
+type ProfileFolder = {
+  id: string;
+  name: string;
+  icon?: string;
+  visibility: "private" | "public";
+  itemCount: number;
+};
+
+type ProfileBookmark = {
+  id: string;
+  url: string;
+  title: string;
+  text: string;
+  tags: string[];
+  capturedAt: number;
+  lastSyncedAt: number;
+  folderId: string | null;
+  folderName: string;
+  visibility: "private" | "public";
+  source: "chrome" | "telegram" | "instagram" | "twitter";
+};
+
+type Session = {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: number;
+  expiresAt: number;
+};
+
+type ConnectedSource = {
+  source: string;
+  count: number;
+};
+
+function getInitials(name?: string | null) {
+  if (!name) {
+    return "U";
+  }
+
   const parts = name.trim().split(/\s+/).slice(0, 2);
   return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "U";
 }
 
-function getDomain(url: string): string {
+function getDomain(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
@@ -43,9 +79,8 @@ function getDomain(url: string): string {
   }
 }
 
-function getLetterAvatar(url: string): string {
-  const domain = getDomain(url);
-  return domain.charAt(0).toUpperCase();
+function getLetterAvatar(url: string) {
+  return getDomain(url).charAt(0).toUpperCase();
 }
 
 function getFakeStats(id: string): { views: number; stars: number } {
@@ -53,9 +88,30 @@ function getFakeStats(id: string): { views: number; stars: number } {
   for (let i = 0; i < id.length; i++) {
     hash = (hash * 31 + id.charCodeAt(i)) | 0;
   }
-  const views = Math.abs(hash % 450) + 5;
-  const stars = Math.abs((hash >> 8) % 80);
-  return { views, stars };
+  return {
+    views: Math.abs(hash % 450) + 5,
+    stars: Math.abs((hash >> 8) % 80),
+  };
+}
+
+function formatJoinedDate(timestamp?: number) {
+  if (!timestamp) {
+    return "Recently";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(timestamp));
+}
+
+function formatSessionDate(timestamp: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
 }
 
 export default function ProfilePage({
@@ -67,26 +123,19 @@ export default function ProfilePage({
   const router = useRouter();
   const { theme, setTheme } = useTheme();
 
-  // 1. Fetch public profile data
-  const profileData = useQuery(api.profile.getProfileByUsername, {
-    username,
-  });
-
-  // 2. Fetch owner-specific info if matching
-  const currentUser = useQuery(api.auth.getCurrentUser);
-  const sessions = useQuery(api.auth.getActiveSessions) ?? [];
-  const connectedSources = useQuery(api.dashboard.getConnectedSources) ?? [];
+  const profileData = useQuery(api.profile.getProfileByUsername, { username });
+  const sessions = (useQuery(api.auth.getActiveSessions) ?? []) as Session[];
+  const connectedSources = (useQuery(api.dashboard.getConnectedSources) ??
+    []) as ConnectedSource[];
   const telegramConnection = useQuery(
     api.dashboard.getTelegramConnectionStatus,
   );
 
-  // Mutations
   const updateProfile = useMutation(api.auth.updateProfile);
   const createTelegramLinkToken = useMutation(
     api.dashboard.createTelegramLinkToken,
   );
 
-  // Local state
   const [activeFolderFilter, setActiveFolderFilter] = useState<string | null>(
     null,
   );
@@ -94,17 +143,16 @@ export default function ProfilePage({
   const [savingProfile, setSavingProfile] = useState(false);
   const [creatingTelegramToken, setCreatingTelegramToken] = useState(false);
 
-  useEffect(() => {
-    if (profileData?.isOwner && profileData.user.name) {
-      setDisplayName(profileData.user.name);
-    }
-  }, [profileData?.isOwner, profileData?.user.name]);
-
-  // Derived variables
   const isOwner = profileData?.isOwner ?? false;
   const profileUser = profileData?.user;
-  const folders = profileData?.folders ?? [];
-  const bookmarks = profileData?.bookmarks ?? [];
+  const folders = (profileData?.folders ?? []) as ProfileFolder[];
+  const bookmarks = (profileData?.bookmarks ?? []) as ProfileBookmark[];
+
+  useEffect(() => {
+    if (profileUser?.name) {
+      setDisplayName(profileUser.name);
+    }
+  }, [profileUser?.name]);
 
   const initials = useMemo(
     () => getInitials(profileUser?.name),
@@ -112,67 +160,35 @@ export default function ProfilePage({
   );
 
   const filteredBookmarks = useMemo(() => {
-    if (!activeFolderFilter) return bookmarks;
-    return bookmarks.filter((b) => b.folderId === activeFolderFilter);
+    if (!activeFolderFilter) {
+      return bookmarks;
+    }
+    return bookmarks.filter(
+      (bookmark) => bookmark.folderId === activeFolderFilter,
+    );
   }, [bookmarks, activeFolderFilter]);
 
-  if (profileData === undefined) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background">
-        <div className="animate-pulse font-medium text-muted-foreground text-sm">
-          Loading profile...
-        </div>
-      </div>
-    );
-  }
-
-  // Not Found State
-  if (profileData === null) {
-    return (
-      <div className="flex min-h-svh flex-col items-center justify-center bg-background bg-dots-faint px-4 text-center">
-        <div className="card-elevated relative w-full max-w-md space-y-6 overflow-hidden bg-card/45 p-8 backdrop-blur-md sm:p-10">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 text-destructive">
-            <UserPlus className="h-6 w-6 rotate-45" />
-          </div>
-          <div className="space-y-2">
-            <h1 className="font-medium font-serif text-3xl text-foreground">
-              Profile Not Found
-            </h1>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              The user{" "}
-              <span className="font-mono font-semibold text-foreground">
-                @{username}
-              </span>{" "}
-              could not be found. Please check the spelling or URL and try
-              again.
-            </p>
-          </div>
-          <div className="pt-2">
-            <Button
-              className="w-full"
-              onClick={() => router.push("/dashboard")}
-            >
-              Back to Dashboard
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const publicFolders = folders.filter(
+    (folder) => folder.visibility === "public",
+  );
+  const publicBookmarks = bookmarks.filter(
+    (bookmark) => bookmark.visibility === "public",
+  );
 
   const handleSaveProfile = async () => {
     if (!displayName.trim()) {
       toast.error("Name cannot be empty.");
       return;
     }
+
     setSavingProfile(true);
     try {
       await updateProfile({ name: displayName.trim() });
       toast.success("Profile updated.");
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update profile.",
-      );
+      const message =
+        error instanceof Error ? error.message : "Failed to update profile.";
+      toast.error(message);
     } finally {
       setSavingProfile(false);
     }
@@ -191,202 +207,157 @@ export default function ProfilePage({
       }
       toast.success("Open Telegram to finish linking.");
     } catch (error) {
-      toast.error(
+      const message =
         error instanceof Error
           ? error.message
-          : "Failed to create Telegram link token.",
-      );
+          : "Failed to create Telegram link token.";
+      toast.error(message);
     } finally {
       setCreatingTelegramToken(false);
     }
   };
 
-  const handleShareProfile = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
-    toast.success("Profile link copied to clipboard!");
+  const handleShareProfile = async () => {
+    await navigator.clipboard.writeText(window.location.href);
+    toast.success("Profile link copied.");
   };
 
-  const handleSaveBookmark = (url: string) => {
-    navigator.clipboard.writeText(url);
-    toast.success("Bookmark URL copied to clipboard!");
+  const handleCopyBookmark = async (url: string) => {
+    await navigator.clipboard.writeText(url);
+    toast.success("Bookmark link copied.");
   };
 
-  // Mock joined date fallback
-  const joinedDate = profileUser?.createdAt
-    ? new Date(profileUser.createdAt).toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      })
-    : "March 2024";
+  if (profileData === undefined) {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm">Loading profile...</div>
+      </div>
+    );
+  }
+
+  if (profileData === null) {
+    return (
+      <main className="flex min-h-svh items-center justify-center bg-background px-4">
+        <section className="w-full max-w-md rounded-lg border border-border bg-card p-8 text-center">
+          <h1 className="font-serif text-3xl text-foreground">
+            Profile not found
+          </h1>
+          <p className="mt-2 text-muted-foreground text-sm">
+            No Amiro profile exists for @{username}.
+          </p>
+          <Button className="mt-6" onClick={() => router.push("/dashboard")}>
+            Dashboard
+          </Button>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background bg-dots-faint px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl space-y-12">
-        {/* Navigation back if logged in */}
-        {currentUser && (
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => router.push("/dashboard")}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Dashboard
-            </Button>
-            {isOwner && (
-              <span className="rounded-full border border-mint/25 bg-mint/10 px-3 py-1 font-medium text-mint text-xs">
-                Viewing your own profile
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* ─── Profile Card ─── */}
-        <section className="card-elevated relative space-y-6 overflow-hidden bg-card/45 p-6 backdrop-blur-md sm:space-y-8 sm:p-8">
-          <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-            <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
-              {/* Initials Avatar */}
-              <div className="grid h-24 w-24 shrink-0 place-items-center rounded-2xl border border-white/5 bg-linear-to-br from-primary to-secondary font-semibold text-4xl text-primary-foreground shadow-lg sm:h-28 sm:w-28">
-                {initials}
-              </div>
-              <div className="space-y-2">
-                <h1 className="font-medium font-serif text-3xl text-foreground tracking-tight sm:text-4xl">
-                  {profileUser?.name}
-                </h1>
-                <p className="font-medium text-mint text-sm tracking-wide">
-                  @{profileUser?.username}
-                </p>
-                <p className="max-w-xl text-muted-foreground text-sm leading-relaxed">
-                  Design engineer collecting the good corners of the web. Mostly
-                  interfaces, OKLCH, and weird tools.
-                </p>
-
-                {/* Meta details */}
-                <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1 text-muted-foreground/80 text-xs">
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3.5 w-3.5" />
-                    Berlin
-                  </span>
-                  <a
-                    href="https://anya.studio"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 transition-colors hover:text-foreground"
-                  >
-                    <Link2 className="h-3.5 w-3.5" />
-                    anya.studio
-                  </a>
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" />
-                    Joined {joinedDate}
-                  </span>
+    <main className="min-h-svh bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-6xl space-y-10">
+        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+          <div className="bg-[radial-gradient(circle_at_22%_0%,oklch(0.62_0.13_165_/_0.18),transparent_34%),radial-gradient(circle_at_82%_10%,oklch(0.58_0.11_340_/_0.12),transparent_30%)] p-6 sm:p-8">
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg border border-border/60 bg-linear-to-br from-mint/80 to-muted font-serif text-3xl text-background shadow-sm">
+                  {initials}
+                </div>
+                <div className="min-w-0">
+                  <h1 className="font-serif text-4xl tracking-normal sm:text-5xl">
+                    {profileUser?.name}
+                  </h1>
+                  <p className="mt-1 font-mono text-muted-foreground text-sm">
+                    @{profileUser?.username}
+                  </p>
                 </div>
               </div>
+
+              <div className="flex gap-2 md:pt-8">
+                {!isOwner ? (
+                  <Button type="button" variant="secondary" size="sm">
+                    <UserPlus className="h-4 w-4" />
+                    Follow
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => router.push("/dashboard")}
+                  >
+                    Dashboard
+                  </Button>
+                )}
+                <Button type="button" size="sm" onClick={handleShareProfile}>
+                  <Link2 className="h-4 w-4" />
+                  Share profile
+                </Button>
+              </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="flex w-full gap-2 md:w-auto">
-              <Button
-                variant="outline"
-                className="flex-1 gap-1.5 text-xs md:flex-none"
-              >
-                <UserPlus className="h-4 w-4" />
-                Follow
-              </Button>
-              <Button
-                onClick={handleShareProfile}
-                className="flex-1 gap-1.5 bg-mint font-semibold text-mint-foreground text-xs hover:opacity-90 md:flex-none"
-              >
-                <Share2 className="h-4 w-4" />
-                Share profile
-              </Button>
-            </div>
-          </div>
+            <p className="mt-6 max-w-3xl text-foreground/90 text-sm leading-6">
+              {isOwner
+                ? "This is your public Amiro profile. Public folders and public bookmarks are visible to other people."
+                : `${profileUser?.name} is collecting and sharing public bookmarks on Amiro.`}
+            </p>
 
-          {/* Sub-stats Grid */}
-          <div className="grid grid-cols-2 gap-4 border-border/30 border-t pt-4 sm:grid-cols-4">
-            <div className="rounded-xl border border-border/30 bg-muted/15 p-4 text-center transition-all hover:bg-muted/25 sm:text-left">
-              <p className="font-bold text-2xl text-foreground tracking-tight">
-                1,284
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground uppercase tracking-wider">
-                Followers
-              </p>
+            <div className="mt-5 flex flex-wrap items-center gap-4 text-muted-foreground text-xs">
+              <span className="inline-flex items-center gap-1.5">
+                <Globe2 className="h-3.5 w-3.5" />
+                Amiro profile
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" />
+                Joined {formatJoinedDate(profileUser?.createdAt)}
+              </span>
             </div>
-            <div className="rounded-xl border border-border/30 bg-muted/15 p-4 text-center transition-all hover:bg-muted/25 sm:text-left">
-              <p className="font-bold text-2xl text-foreground tracking-tight">
-                162
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground uppercase tracking-wider">
-                Following
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/30 bg-muted/15 p-4 text-center transition-all hover:bg-muted/25 sm:text-left">
-              <p className="font-bold text-2xl text-foreground tracking-tight">
-                {bookmarks.length}
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground uppercase tracking-wider">
-                Public Bookmarks
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/30 bg-muted/15 p-4 text-center transition-all hover:bg-muted/25 sm:text-left">
-              <p className="font-bold text-2xl text-foreground tracking-tight">
-                {folders.length}
-              </p>
-              <p className="mt-1 text-[10px] text-muted-foreground uppercase tracking-wider">
-                Public Folders
-              </p>
+
+            <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatTile label="Followers" value="0" />
+              <StatTile label="Following" value="0" />
+              <StatTile
+                label="Public bookmarks"
+                value={publicBookmarks.length}
+              />
+              <StatTile label="Public folders" value={publicFolders.length} />
             </div>
           </div>
         </section>
 
-        {/* ─── Public Folders ─── */}
         <section className="space-y-4">
-          <div className="flex items-end justify-between">
-            <h2 className="font-serif text-2xl text-foreground">
-              Public folders
-            </h2>
-            <span className="font-medium text-muted-foreground text-xs">
-              {folders.length} shared
-            </span>
-          </div>
-
+          <SectionHeading
+            title={isOwner ? "Folders" : "Public folders"}
+            meta={`${folders.length} shared`}
+          />
           {folders.length === 0 ? (
-            <div className="rounded-2xl border border-border/40 border-dashed bg-card/10 p-8 text-center text-muted-foreground text-sm">
-              No public folders shared yet.
-            </div>
+            <EmptyPanel text="No public folders shared yet." />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-3">
               {folders.map((folder) => {
-                const isActive = activeFolderFilter === folder.id;
+                const active = activeFolderFilter === folder.id;
                 return (
                   <button
-                    type="button"
                     key={folder.id}
+                    type="button"
                     onClick={() =>
-                      setActiveFolderFilter(isActive ? null : folder.id)
+                      setActiveFolderFilter(active ? null : folder.id)
                     }
-                    className={`cursor-pointer rounded-2xl border p-5 text-left transition-all duration-300 ${
-                      isActive
-                        ? "scale-[1.02] border-mint bg-mint/5 shadow-md shadow-mint/5"
-                        : "border-border/60 bg-card/30 hover:border-mint/40 hover:bg-card/45"
-                    }`}
+                    className={cn(
+                      "rounded-lg border bg-card p-5 text-left transition-colors hover:border-mint/40 hover:bg-muted/30",
+                      active ? "border-mint bg-mint/5" : "border-border",
+                    )}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-mint/10 text-base text-mint leading-none">
-                        {folder.icon}
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="grid h-9 w-9 place-items-center rounded-md bg-mint/10 text-mint">
+                        {folder.icon ?? "F"}
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-mint/20 bg-mint/5 px-2 py-0.5 text-[10px] text-mint">
-                        <Globe className="h-2.5 w-2.5" />
-                        public
-                      </span>
+                      <VisibilityPill visibility={folder.visibility} />
                     </div>
-                    <h3 className="mt-4 truncate font-semibold text-base text-foreground">
+                    <h2 className="mt-5 line-clamp-1 font-serif text-xl">
                       {folder.name}
-                    </h3>
-                    <p className="mt-1 text-muted-foreground text-xs">
+                    </h2>
+                    <p className="mt-1 text-muted-foreground text-sm">
                       {folder.itemCount} bookmarks
                     </p>
                   </button>
@@ -396,216 +367,119 @@ export default function ProfilePage({
           )}
         </section>
 
-        {/* ─── Public Bookmarks ─── */}
         <section className="space-y-4">
-          <div className="flex items-end justify-between">
-            <h2 className="font-serif text-2xl text-foreground">
-              Public bookmarks
-            </h2>
-            <span className="font-medium text-muted-foreground text-xs">
-              {filteredBookmarks.length} visible · private items hidden
-            </span>
-          </div>
-
+          <SectionHeading
+            title={isOwner ? "Bookmarks" : "Public bookmarks"}
+            meta={`${filteredBookmarks.length} visible`}
+          />
           {filteredBookmarks.length === 0 ? (
-            <div className="rounded-2xl border border-border/40 border-dashed bg-card/10 p-8 text-center text-muted-foreground text-sm">
-              {activeFolderFilter
-                ? "No public bookmarks in this folder."
-                : "No public bookmarks shared yet."}
-            </div>
+            <EmptyPanel
+              text={
+                activeFolderFilter
+                  ? "No visible bookmarks in this folder."
+                  : "No public bookmarks shared yet."
+              }
+            />
           ) : (
-            <div className="space-y-4">
-              {filteredBookmarks.map((bookmark) => {
-                const { views, stars } = getFakeStats(bookmark.id);
-                const domain = getDomain(bookmark.url);
-                const letter = getLetterAvatar(bookmark.url);
-
-                return (
-                  <div
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <div className="divide-y divide-border/70">
+                {filteredBookmarks.map((bookmark) => (
+                  <BookmarkRow
                     key={bookmark.id}
-                    className="group flex flex-col gap-4 rounded-2xl border border-border/40 bg-card/25 p-5 transition-all duration-300 hover:border-border/80 hover:bg-card/45 sm:flex-row"
-                  >
-                    {/* Circle initials icon */}
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground text-sm">
-                      {letter}
-                    </div>
-
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <a
-                          href={bookmark.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-semibold text-base text-foreground transition-colors hover:text-primary"
-                        >
-                          {bookmark.title}
-                        </a>
-                        <Globe className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-                        <span className="rounded border border-border/30 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                          {domain}
-                        </span>
-                      </div>
-
-                      {bookmark.text ? (
-                        <p className="line-clamp-2 text-muted-foreground/90 text-sm leading-relaxed">
-                          {bookmark.text}
-                        </p>
-                      ) : null}
-
-                      {/* Tags & Time */}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        {bookmark.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-0.5 rounded-full border border-border/50 bg-muted/65 px-2 py-0.5 font-medium text-[10px] text-muted-foreground"
-                          >
-                            # {tag}
-                          </span>
-                        ))}
-                        <span className="font-mono text-[10px] text-muted-foreground/50">
-                          {new Date(bookmark.capturedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Stats & Actions */}
-                    <div className="flex shrink-0 items-center justify-between gap-4 border-border/30 border-t pt-3 sm:flex-col sm:items-end sm:justify-start sm:border-t-0 sm:pt-0">
-                      <div className="flex items-center gap-4 text-muted-foreground">
-                        <span className="flex items-center gap-1 text-xs">
-                          <Eye className="h-3.5 w-3.5" />
-                          {views}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs">
-                          <Star className="h-3.5 w-3.5" />
-                          {stars}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSaveBookmark(bookmark.url)}
-                        className="text-xs transition-all hover:bg-mint/10 hover:text-mint"
-                      >
-                        Save →
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
+                    bookmark={bookmark}
+                    onCopy={() => handleCopyBookmark(bookmark.url)}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </section>
 
-        {/* ─── Owner Controls Section (If viewing own profile) ─── */}
-        {isOwner && (
-          <section className="space-y-6 border-border/40 border-t pt-6">
-            <div className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-mint" />
-              <h2 className="font-serif text-2xl text-foreground">
-                Manage Integrations & Settings
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {/* Left Side: Profile info & Theme */}
-              <div className="space-y-6">
-                {/* Profile Edit Panel */}
-                <div className="space-y-4 rounded-2xl border border-border/40 bg-card/30 p-5">
-                  <h3 className="border-border/20 border-b pb-2 font-semibold text-foreground text-sm">
-                    Profile settings
-                  </h3>
-                  <div className="space-y-2">
-                    <Label htmlFor="profile-name">Display Name</Label>
+        {isOwner ? (
+          <section className="grid gap-4 border-border border-t pt-8 lg:grid-cols-[1fr_1.2fr]">
+            <div className="space-y-4">
+              <SectionHeading title="Profile settings" meta="Owner only" />
+              <div className="rounded-lg border border-border bg-card p-5">
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="profile-name">Name</Label>
                     <Input
                       id="profile-name"
                       value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
+                      onChange={(event) => setDisplayName(event.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="profile-email">Email Address</Label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="profile-email">Email</Label>
                     <Input
                       id="profile-email"
                       value={profileUser?.email ?? ""}
                       disabled
-                      className="bg-muted/30"
                     />
                   </div>
                   <Button
+                    type="button"
                     size="sm"
-                    className="mt-2 gap-1.5"
                     onClick={handleSaveProfile}
                     disabled={savingProfile}
                   >
                     <Save className="h-4 w-4" />
-                    {savingProfile ? "Saving..." : "Save details"}
+                    {savingProfile ? "Saving..." : "Save profile"}
                   </Button>
-                </div>
-
-                {/* Appearance switcher */}
-                <div className="space-y-3 rounded-2xl border border-border/40 bg-card/30 p-5">
-                  <h3 className="border-border/20 border-b pb-2 font-semibold text-foreground text-sm">
-                    Appearance
-                  </h3>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={theme === "light" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setTheme("light")}
-                    >
-                      <Sun className="mr-1.5 h-4 w-4" />
-                      Light
-                    </Button>
-                    <Button
-                      variant={theme === "dark" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setTheme("dark")}
-                    >
-                      <Moon className="mr-1.5 h-4 w-4" />
-                      Dark
-                    </Button>
-                    <Button
-                      variant={theme === "system" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setTheme("system")}
-                    >
-                      <Laptop className="mr-1.5 h-4 w-4" />
-                      System
-                    </Button>
-                  </div>
                 </div>
               </div>
 
-              {/* Right Side: Connections & Active Sessions */}
-              <div className="space-y-6">
-                {/* Connected Apps */}
-                <div className="space-y-4 rounded-2xl border border-border/40 bg-card/30 p-5">
-                  <h3 className="border-border/20 border-b pb-2 font-semibold text-foreground text-sm">
-                    Connected integrations
-                  </h3>
+              <div className="rounded-lg border border-border bg-card p-5">
+                <p className="mb-3 font-medium text-sm">Theme</p>
+                <div className="flex flex-wrap gap-2">
+                  <ThemeButton
+                    active={theme === "light"}
+                    onClick={() => setTheme("light")}
+                    icon={Sun}
+                    label="Light"
+                  />
+                  <ThemeButton
+                    active={theme === "dark"}
+                    onClick={() => setTheme("dark")}
+                    icon={Moon}
+                    label="Dark"
+                  />
+                  <ThemeButton
+                    active={theme === "system"}
+                    onClick={() => setTheme("system")}
+                    icon={Monitor}
+                    label="System"
+                  />
+                </div>
+              </div>
+            </div>
 
-                  {connectedSources.length === 0 ? (
-                    <p className="text-muted-foreground text-xs">
-                      No active extensions synced yet.
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {connectedSources.map((source) => (
+            <div className="space-y-4">
+              <SectionHeading title="Connections" meta="Apps and sessions" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-border bg-card p-5">
+                  <p className="font-medium text-sm">Connected apps</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {connectedSources.length === 0 ? (
+                      <p className="text-muted-foreground text-xs">
+                        No sources yet.
+                      </p>
+                    ) : (
+                      connectedSources.map((source) => (
                         <span
                           key={source.source}
-                          className="rounded-full border border-border bg-muted px-3 py-1 font-mono text-muted-foreground text-xs"
+                          className="rounded-md bg-muted px-2 py-1 text-xs"
                         >
-                          {source.source}: {source.count} synced
+                          {source.source} ({source.count})
                         </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="space-y-2 rounded-xl border border-border/40 border-dashed bg-muted/10 p-3 text-xs">
+                      ))
+                    )}
+                  </div>
+                  <div className="mt-4 rounded-md border border-border border-dashed p-3 text-xs">
                     {telegramConnection?.connected ? (
-                      <p className="text-foreground">
+                      <p>
                         Telegram linked as{" "}
-                        <span className="font-semibold text-mint">
+                        <span className="font-medium">
                           {telegramConnection.telegramUsername
                             ? `@${telegramConnection.telegramUsername}`
                             : `ID ${telegramConnection.telegramUserId}`}
@@ -613,74 +487,203 @@ export default function ProfilePage({
                       </p>
                     ) : (
                       <p className="text-muted-foreground">
-                        Telegram account is not linked.
+                        Telegram not linked.
                       </p>
                     )}
                     <Button
+                      type="button"
                       size="sm"
-                      className="w-full text-xs"
+                      className="mt-3"
                       onClick={handleConnectTelegram}
                       disabled={creatingTelegramToken}
                     >
                       {telegramConnection?.connected
-                        ? "Relink Telegram bot"
-                        : "Link Telegram bot"}
+                        ? "Relink Telegram"
+                        : "Connect Telegram"}
                     </Button>
                   </div>
                 </div>
 
-                {/* Active Sessions */}
-                <div className="space-y-3 rounded-2xl border border-border/40 bg-card/30 p-5">
-                  <h3 className="border-border/20 border-b pb-2 font-semibold text-foreground text-sm">
-                    Logged-in devices ({sessions.length})
-                  </h3>
-
-                  <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                    {sessions.map((session) => (
-                      <div
-                        key={session.id}
-                        className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/10 p-3 text-xs"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="flex items-center gap-1.5 truncate font-medium text-foreground">
-                            {session.userAgent?.includes("Mobile") ? (
-                              <Smartphone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            ) : (
-                              <Laptop className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            )}
+                <div className="rounded-lg border border-border bg-card p-5">
+                  <p className="font-medium text-sm">Connected sessions</p>
+                  <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                    {sessions.length === 0 ? (
+                      <p className="text-muted-foreground text-xs">
+                        No active sessions.
+                      </p>
+                    ) : (
+                      sessions.map((session) => (
+                        <div
+                          key={session.id}
+                          className="rounded-md border border-border/70 p-3 text-xs"
+                        >
+                          <p className="line-clamp-1">
                             {session.userAgent || "Unknown device"}
                           </p>
-                          <p className="mt-0.5 font-mono text-muted-foreground/80">
-                            {session.ipAddress || "Unknown IP"}
+                          <p className="mt-1 text-muted-foreground">
+                            {session.ipAddress || "Unknown IP"} | active since{" "}
+                            {formatSessionDate(session.createdAt)}
                           </p>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
-
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="w-full gap-1.5 text-xs"
-                    onClick={() => {
-                      authClient.signOut({
-                        fetchOptions: {
-                          onSuccess: () => {
-                            router.push("/dashboard");
-                          },
-                        },
-                      });
-                    }}
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Sign out of all sessions
-                  </Button>
                 </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    authClient.signOut({
+                      fetchOptions: {
+                        onSuccess: () => router.push("/dashboard"),
+                      },
+                    });
+                  }}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign out
+                </Button>
               </div>
             </div>
           </section>
-        )}
+        ) : null}
       </div>
+    </main>
+  );
+}
+
+function SectionHeading({ title, meta }: { title: string; meta?: string }) {
+  return (
+    <div className="flex items-end justify-between gap-4">
+      <h2 className="font-serif text-2xl tracking-normal">{title}</h2>
+      {meta ? <p className="text-muted-foreground text-xs">{meta}</p> : null}
     </div>
+  );
+}
+
+function EmptyPanel({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-border border-dashed bg-card/40 p-8 text-center text-muted-foreground text-sm">
+      {text}
+    </div>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/40 p-4">
+      <p className="font-serif text-2xl">{value}</p>
+      <p className="mt-1 text-[11px] text-muted-foreground uppercase tracking-[0.14em]">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function VisibilityPill({ visibility }: { visibility: "private" | "public" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
+        visibility === "public"
+          ? "border-mint/30 bg-mint/10 text-mint"
+          : "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      <Globe2 className="h-3 w-3" />
+      {visibility}
+    </span>
+  );
+}
+
+function BookmarkRow({
+  bookmark,
+  onCopy,
+}: {
+  bookmark: ProfileBookmark;
+  onCopy: () => void;
+}) {
+  const domain = getDomain(bookmark.url);
+  const letter = getLetterAvatar(bookmark.url);
+  const { views, stars } = getFakeStats(bookmark.id);
+
+  return (
+    <article className="flex gap-4 px-5 py-4 transition-colors hover:bg-muted/25">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-border bg-background font-mono text-muted-foreground text-xs">
+        {letter}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <a
+            href={bookmark.url}
+            target="_blank"
+            rel="noreferrer"
+            className="line-clamp-1 font-semibold text-sm hover:text-primary"
+          >
+            {bookmark.title}
+          </a>
+          <span className="font-mono text-muted-foreground text-xs">
+            {domain}
+          </span>
+        </div>
+        {bookmark.text ? (
+          <p className="mt-2 line-clamp-2 text-muted-foreground text-sm">
+            {bookmark.text}
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {bookmark.tags.slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-border bg-muted px-2 py-0.5 text-muted-foreground text-xs"
+            >
+              # {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="hidden shrink-0 flex-col items-end justify-between gap-3 text-muted-foreground text-xs sm:flex">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1">
+            <Eye className="h-3.5 w-3.5" />
+            {views}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Star className="h-3.5 w-3.5" />
+            {stars}
+          </span>
+        </div>
+        <Button type="button" variant="ghost" size="sm" onClick={onCopy}>
+          <Copy className="h-3.5 w-3.5" />
+          Save
+        </Button>
+      </div>
+    </article>
+  );
+}
+
+function ThemeButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? "default" : "outline"}
+      size="sm"
+      onClick={onClick}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </Button>
   );
 }
