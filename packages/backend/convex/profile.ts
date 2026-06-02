@@ -39,7 +39,12 @@ export const getProfileByUsername = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    // Filter folders and bookmarks based on owner status
+    const folderById = new Map(
+      allFolders.map((folder) => [folder._id, folder]),
+    );
+
+    // Filter folders and bookmarks based on owner status. Public viewers only
+    // see bookmarks that are public and live inside a public folder.
     const folders = allFolders
       .filter((folder) => isOwner || folder.visibility === "public")
       .map((folder) => {
@@ -57,10 +62,21 @@ export const getProfileByUsername = query({
       });
 
     const bookmarks = allBookmarks
-      .filter((b) => isOwner || b.visibility === "public")
+      .filter((bookmark) => {
+        if (isOwner) {
+          return true;
+        }
+
+        if (bookmark.visibility !== "public" || !bookmark.folderId) {
+          return false;
+        }
+
+        const folder = folderById.get(bookmark.folderId);
+        return folder?.visibility === "public";
+      })
       .map((b) => {
         // Find folder name if folderId exists
-        const folder = allFolders.find((f) => f._id === b.folderId);
+        const folder = b.folderId ? folderById.get(b.folderId) : null;
         return {
           id: b._id,
           url: b.url,
