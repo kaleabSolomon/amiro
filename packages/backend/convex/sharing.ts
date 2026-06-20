@@ -15,6 +15,94 @@ const shareVisibilityValidator = v.union(
   v.literal("unlisted"),
 );
 
+const bookmarkSourceValidator = v.union(
+  v.literal("chrome"),
+  v.literal("telegram"),
+  v.literal("instagram"),
+  v.literal("twitter"),
+);
+const bookmarkVisibilityValidator = v.union(
+  v.literal("private"),
+  v.literal("public"),
+);
+const nullableStringValidator = v.union(v.string(), v.null());
+const publicBookmarkValidator = v.object({
+  id: v.id("syncedBookmarks"),
+  url: v.string(),
+  title: v.string(),
+  text: v.string(),
+  childLinks: v.array(
+    v.object({
+      url: v.string(),
+      title: v.optional(v.string()),
+      siteName: v.optional(v.string()),
+      description: v.optional(v.string()),
+    }),
+  ),
+  tags: v.array(v.string()),
+  source: bookmarkSourceValidator,
+  visibility: bookmarkVisibilityValidator,
+  capturedAt: v.number(),
+  lastSyncedAt: v.number(),
+});
+const ownerValidator = v.union(
+  v.null(),
+  v.object({
+    id: v.string(),
+    name: v.string(),
+    username: nullableStringValidator,
+    image: nullableStringValidator,
+  }),
+);
+const shareSummaryValidator = v.object({
+  id: v.id("shares"),
+  publicId: v.string(),
+  resourceType: resourceTypeValidator,
+  visibility: shareVisibilityValidator,
+  campaign: nullableStringValidator,
+  createdAt: v.number(),
+  expiresAt: v.union(v.number(), v.null()),
+});
+const resolveShareReturnValidator = v.object({
+  share: shareSummaryValidator,
+  owner: ownerValidator,
+  resource: v.union(
+    v.object({
+      type: v.literal("bookmark"),
+      bookmark: publicBookmarkValidator,
+    }),
+    v.object({
+      type: v.literal("folder"),
+      folder: v.object({
+        id: v.id("folders"),
+        name: v.string(),
+        icon: v.string(),
+        visibility: bookmarkVisibilityValidator,
+        createdAt: v.number(),
+        updatedAt: v.number(),
+      }),
+      bookmarks: v.array(publicBookmarkValidator),
+    }),
+  ),
+});
+const topPerformingShareValidator = v.object({
+  publicId: v.string(),
+  resourceType: resourceTypeValidator,
+  totalSaves: v.number(),
+});
+const topPerformingBookmarkValidator = v.object({
+  id: v.id("syncedBookmarks"),
+  title: v.string(),
+  url: v.string(),
+  totalAttributedSaves: v.number(),
+});
+const topStarredBookmarkValidator = v.object({
+  id: v.id("syncedBookmarks"),
+  title: v.string(),
+  url: v.string(),
+  totalStars: v.number(),
+});
+
 type ReadCtx = QueryCtx | MutationCtx;
 
 type PublicBookmark = {
@@ -373,6 +461,11 @@ export const createShare = mutation({
     campaign: v.optional(v.string()),
     expiresAt: v.optional(v.number()),
   },
+  returns: v.object({
+    id: v.id("shares"),
+    publicId: v.string(),
+    shareUrlPath: v.string(),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const now = Date.now();
@@ -428,6 +521,7 @@ export const resolveShare = query({
   args: {
     publicId: v.string(),
   },
+  returns: resolveShareReturnValidator,
   handler: async (ctx, args) => {
     const share = await getShareByPublicId(ctx, args.publicId);
     const owner = await getOwner(ctx, share.sharedBy);
@@ -499,6 +593,11 @@ export const saveFromShare = mutation({
     bookmarkId: v.optional(v.id("syncedBookmarks")),
     destinationFolderId: v.optional(v.id("folders")),
   },
+  returns: v.object({
+    savedCount: v.number(),
+    attributedCount: v.number(),
+    skippedDuplicateCount: v.number(),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const share = await getShareByPublicId(ctx, args.publicId);
@@ -577,6 +676,10 @@ export const toggleBookmarkStar = mutation({
   args: {
     bookmarkId: v.id("syncedBookmarks"),
   },
+  returns: v.object({
+    bookmarkId: v.id("syncedBookmarks"),
+    starred: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const bookmark = await getShareBookmark(ctx, args.bookmarkId);
@@ -617,6 +720,10 @@ export const getBookmarkStarState = query({
   args: {
     bookmarkId: v.id("syncedBookmarks"),
   },
+  returns: v.object({
+    totalStars: v.number(),
+    viewerHasStarred: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.safeGetAuthUser(ctx);
     const bookmark = await getShareBookmark(ctx, args.bookmarkId);
@@ -645,6 +752,9 @@ export const getShareAnalytics = query({
   args: {
     publicId: v.string(),
   },
+  returns: v.object({
+    totalSaves: v.number(),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const share = await getShareByPublicId(ctx, args.publicId);
@@ -668,6 +778,12 @@ export const getBookmarkAnalytics = query({
     bookmarkId: v.id("syncedBookmarks"),
     limit: v.optional(v.number()),
   },
+  returns: v.object({
+    totalAttributedSaves: v.number(),
+    totalStars: v.number(),
+    viewerHasStarred: v.boolean(),
+    topPerformingShares: v.array(topPerformingShareValidator),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const bookmark = await ctx.db.get(args.bookmarkId);
@@ -728,6 +844,9 @@ export const getFolderAnalytics = query({
   args: {
     folderId: v.id("folders"),
   },
+  returns: v.object({
+    totalAttributedSaves: v.number(),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const folder = await ctx.db.get(args.folderId);
@@ -759,6 +878,9 @@ export const getGroupAnalytics = query({
   args: {
     groupId: v.string(),
   },
+  returns: v.object({
+    totalAttributedSaves: v.number(),
+  }),
   handler: async () => {
     throw new ConvexError("Bookmark groups are not available yet.");
   },
@@ -768,6 +890,20 @@ export const getUserAnalytics = query({
   args: {
     limit: v.optional(v.number()),
   },
+  returns: v.object({
+    totalSharesCreated: v.number(),
+    totalSavesGenerated: v.number(),
+    topPerformingShares: v.array(
+      v.object({
+        publicId: v.string(),
+        resourceType: resourceTypeValidator,
+        resourceId: v.string(),
+        totalSaves: v.number(),
+      }),
+    ),
+    topPerformingBookmarks: v.array(topPerformingBookmarkValidator),
+    topStarredBookmarks: v.array(topStarredBookmarkValidator),
+  }),
   handler: async (ctx, args) => {
     const authUser = await authComponent.getAuthUser(ctx);
     const limit = Math.max(1, Math.min(args.limit ?? 5, 25));
