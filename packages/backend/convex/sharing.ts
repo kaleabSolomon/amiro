@@ -249,6 +249,37 @@ async function bumpBookmarkStats(
   });
 }
 
+async function bumpBookmarkStarStats(
+  ctx: MutationCtx,
+  bookmark: Doc<"syncedBookmarks">,
+  amount: number,
+  now: number,
+) {
+  const stats = await ctx.db
+    .query("bookmarkStarStats")
+    .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+    .unique();
+
+  if (stats) {
+    await ctx.db.patch(stats._id, {
+      totalStars: Math.max(0, stats.totalStars + amount),
+      updatedAt: now,
+    });
+    return;
+  }
+
+  if (amount <= 0) {
+    return;
+  }
+
+  await ctx.db.insert("bookmarkStarStats", {
+    bookmarkId: bookmark._id,
+    ownerId: bookmark.userId,
+    totalStars: amount,
+    updatedAt: now,
+  });
+}
+
 async function bumpShareBookmarkStats(
   ctx: MutationCtx,
   share: Doc<"shares">,
@@ -542,6 +573,74 @@ export const saveFromShare = mutation({
   },
 });
 
+export const toggleBookmarkStar = mutation({
+  args: {
+    bookmarkId: v.id("syncedBookmarks"),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const bookmark = await getShareBookmark(ctx, args.bookmarkId);
+    const now = Date.now();
+
+    const existingClaim = await ctx.db
+      .query("bookmarkStarClaims")
+      .withIndex("by_starred_by_and_bookmark", (q) =>
+        q.eq("starredBy", authUser._id).eq("bookmarkId", bookmark._id),
+      )
+      .unique();
+
+    if (existingClaim) {
+      await ctx.db.delete(existingClaim._id);
+      await bumpBookmarkStarStats(ctx, bookmark, -1, now);
+      return {
+        bookmarkId: bookmark._id,
+        starred: false as const,
+      };
+    }
+
+    await ctx.db.insert("bookmarkStarClaims", {
+      bookmarkId: bookmark._id,
+      starredBy: authUser._id,
+      bookmarkOwnerId: bookmark.userId,
+      createdAt: now,
+    });
+    await bumpBookmarkStarStats(ctx, bookmark, 1, now);
+
+    return {
+      bookmarkId: bookmark._id,
+      starred: true as const,
+    };
+  },
+});
+
+export const getBookmarkStarState = query({
+  args: {
+    bookmarkId: v.id("syncedBookmarks"),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    const bookmark = await getShareBookmark(ctx, args.bookmarkId);
+    const stats = await ctx.db
+      .query("bookmarkStarStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique();
+
+    const claim = authUser
+      ? await ctx.db
+          .query("bookmarkStarClaims")
+          .withIndex("by_starred_by_and_bookmark", (q) =>
+            q.eq("starredBy", authUser._id).eq("bookmarkId", bookmark._id),
+          )
+          .unique()
+      : null;
+
+    return {
+      totalStars: stats?.totalStars ?? 0,
+      viewerHasStarred: Boolean(claim),
+    };
+  },
+});
+
 export const getShareAnalytics = query({
   args: {
     publicId: v.string(),
@@ -577,10 +676,22 @@ export const getBookmarkAnalytics = query({
     }
 
     const limit = Math.max(1, Math.min(args.limit ?? 5, 25));
-    const stats = await ctx.db
-      .query("bookmarkSaveStats")
-      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", args.bookmarkId))
-      .unique();
+    const [stats, starStats, starClaim] = await Promise.all([
+      ctx.db
+        .query("bookmarkSaveStats")
+        .withIndex("by_bookmark", (q) => q.eq("bookmarkId", args.bookmarkId))
+        .unique(),
+      ctx.db
+        .query("bookmarkStarStats")
+        .withIndex("by_bookmark", (q) => q.eq("bookmarkId", args.bookmarkId))
+        .unique(),
+      ctx.db
+        .query("bookmarkStarClaims")
+        .withIndex("by_starred_by_and_bookmark", (q) =>
+          q.eq("starredBy", authUser._id).eq("bookmarkId", args.bookmarkId),
+        )
+        .unique(),
+    ]);
     const shareStats = await ctx.db
       .query("shareBookmarkSaveStats")
       .withIndex("by_bookmark_and_total_saves", (q) =>
@@ -604,6 +715,8 @@ export const getBookmarkAnalytics = query({
 
     return {
       totalAttributedSaves: stats?.totalAttributedSaves ?? 0,
+      totalStars: starStats?.totalStars ?? 0,
+      viewerHasStarred: Boolean(starClaim),
       topPerformingShares: topPerformingShares.filter(
         (share) => share !== null,
       ),
@@ -659,25 +772,34 @@ export const getUserAnalytics = query({
     const authUser = await authComponent.getAuthUser(ctx);
     const limit = Math.max(1, Math.min(args.limit ?? 5, 25));
 
-    const curatorStats = await ctx.db
-      .query("curatorSaveStats")
-      .withIndex("by_user", (q) => q.eq("userId", authUser._id))
-      .unique();
-
-    const shareStats = await ctx.db
-      .query("shareSaveStats")
-      .withIndex("by_shared_by_and_total_saves", (q) =>
-        q.eq("sharedBy", authUser._id),
-      )
-      .order("desc")
-      .take(limit);
-    const bookmarkStats = await ctx.db
-      .query("bookmarkSaveStats")
-      .withIndex("by_owner_and_total_attributed_saves", (q) =>
-        q.eq("ownerId", authUser._id),
-      )
-      .order("desc")
-      .take(limit);
+    const [curatorStats, shareStats, bookmarkStats, starredBookmarkStats] =
+      await Promise.all([
+        ctx.db
+          .query("curatorSaveStats")
+          .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+          .unique(),
+        ctx.db
+          .query("shareSaveStats")
+          .withIndex("by_shared_by_and_total_saves", (q) =>
+            q.eq("sharedBy", authUser._id),
+          )
+          .order("desc")
+          .take(limit),
+        ctx.db
+          .query("bookmarkSaveStats")
+          .withIndex("by_owner_and_total_attributed_saves", (q) =>
+            q.eq("ownerId", authUser._id),
+          )
+          .order("desc")
+          .take(limit),
+        ctx.db
+          .query("bookmarkStarStats")
+          .withIndex("by_owner_and_total_stars", (q) =>
+            q.eq("ownerId", authUser._id),
+          )
+          .order("desc")
+          .take(limit),
+      ]);
 
     const topPerformingShares = await Promise.all(
       shareStats.map(async (stats) => {
@@ -705,6 +827,19 @@ export const getUserAnalytics = query({
           : null;
       }),
     );
+    const topStarredBookmarks = await Promise.all(
+      starredBookmarkStats.map(async (stats) => {
+        const bookmark = await ctx.db.get(stats.bookmarkId);
+        return bookmark
+          ? {
+              id: bookmark._id,
+              title: bookmark.title,
+              url: bookmark.url,
+              totalStars: stats.totalStars,
+            }
+          : null;
+      }),
+    );
 
     return {
       totalSharesCreated: curatorStats?.totalSharesCreated ?? 0,
@@ -713,6 +848,9 @@ export const getUserAnalytics = query({
         (share) => share !== null,
       ),
       topPerformingBookmarks: topPerformingBookmarks.filter(
+        (bookmark) => bookmark !== null,
+      ),
+      topStarredBookmarks: topStarredBookmarks.filter(
         (bookmark) => bookmark !== null,
       ),
     };

@@ -131,6 +131,24 @@ export default defineSchema({
     totalSavesGenerated: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+  bookmarkStarClaims: defineTable({
+    bookmarkId: v.id("syncedBookmarks"),
+    starredBy: v.string(),
+    bookmarkOwnerId: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_starred_by_and_bookmark", ["starredBy", "bookmarkId"])
+    .index("by_bookmark", ["bookmarkId"])
+    .index("by_bookmark_owner", ["bookmarkOwnerId"]),
+  bookmarkStarStats: defineTable({
+    bookmarkId: v.id("syncedBookmarks"),
+    ownerId: v.string(),
+    totalStars: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_bookmark", ["bookmarkId"])
+    .index("by_owner_and_total_stars", ["ownerId", "totalStars"])
+    .index("by_total_stars", ["totalStars"]),
   syncedBookmarks: defineTable({
     userId: v.string(),
     source: v.union(

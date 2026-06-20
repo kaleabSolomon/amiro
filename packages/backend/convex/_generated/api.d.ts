@@ -18,6 +18,7 @@ import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as privateData from "../privateData.js";
 import type * as profile from "../profile.js";
+import type * as sharing from "../sharing.js";
 import type * as sync from "../sync.js";
 
 import type {
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   privateData: typeof privateData;
   profile: typeof profile;
+  sharing: typeof sharing;
   sync: typeof sync;
 }>;
 

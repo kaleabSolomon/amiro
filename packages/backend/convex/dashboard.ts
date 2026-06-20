@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import {
   internalMutation,
   internalQuery,
@@ -66,6 +67,46 @@ function mapBookmark(bookmark: {
     visibility: bookmark.visibility ?? "private",
     capturedAt: bookmark.capturedAt,
     lastSyncedAt: bookmark.lastSyncedAt,
+  };
+}
+
+async function getBookmarkEngagement(
+  ctx: QueryCtx,
+  bookmark: Doc<"syncedBookmarks">,
+  viewerId: string,
+) {
+  const [saveStats, starStats, starClaim] = await Promise.all([
+    ctx.db
+      .query("bookmarkSaveStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    ctx.db
+      .query("bookmarkStarStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    ctx.db
+      .query("bookmarkStarClaims")
+      .withIndex("by_starred_by_and_bookmark", (q) =>
+        q.eq("starredBy", viewerId).eq("bookmarkId", bookmark._id),
+      )
+      .unique(),
+  ]);
+
+  return {
+    totalSaves: saveStats?.totalAttributedSaves ?? 0,
+    totalStars: starStats?.totalStars ?? 0,
+    viewerHasStarred: Boolean(starClaim),
+  };
+}
+
+async function mapBookmarkWithEngagement(
+  ctx: QueryCtx,
+  bookmark: Doc<"syncedBookmarks">,
+  viewerId: string,
+) {
+  return {
+    ...mapBookmark(bookmark),
+    ...(await getBookmarkEngagement(ctx, bookmark, viewerId)),
   };
 }
 
@@ -178,10 +219,12 @@ export const getBookmarksForFolder = query({
           .order("desc")
           .collect();
 
-    return docs.map((bookmark) => ({
-      ...mapBookmark(bookmark),
-      folderVisibility: targetFolderVisibility,
-    }));
+    return await Promise.all(
+      docs.map(async (bookmark) => ({
+        ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+        folderVisibility: targetFolderVisibility,
+      })),
+    );
   },
 });
 
@@ -216,18 +259,20 @@ export const getRecentBookmarks = query({
 
     const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
 
-    return bookmarks.map((bookmark) => {
-      const folder = bookmark.folderId
-        ? folderMap.get(bookmark.folderId)
-        : undefined;
+    return await Promise.all(
+      bookmarks.map(async (bookmark) => {
+        const folder = bookmark.folderId
+          ? folderMap.get(bookmark.folderId)
+          : undefined;
 
-      return {
-        ...mapBookmark(bookmark),
-        folderId: bookmark.folderId ?? null,
-        folderName: folder?.name ?? "Unfiled",
-        folderVisibility: folder?.visibility ?? "private",
-      };
-    });
+        return {
+          ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+          folderId: bookmark.folderId ?? null,
+          folderName: folder?.name ?? "Unfiled",
+          folderVisibility: folder?.visibility ?? "private",
+        };
+      }),
+    );
   },
 });
 

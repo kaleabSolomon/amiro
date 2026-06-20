@@ -26,6 +26,9 @@ export type DashboardBookmark = {
   folderId?: string | null;
   folderName?: string;
   folderVisibility?: "private" | "public";
+  totalSaves?: number;
+  totalStars?: number;
+  viewerHasStarred?: boolean;
   capturedAt: number;
   lastSyncedAt: number;
 };

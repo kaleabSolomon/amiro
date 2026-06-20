@@ -5,11 +5,11 @@ import type { Id } from "@amiro/backend/convex/_generated/dataModel";
 import { useMutation } from "convex/react";
 import {
   ArrowUpDown,
+  Bookmark as BookmarkIcon,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  Eye,
   Globe2,
   Hash,
   Lock,
@@ -43,18 +43,7 @@ function getLetterAvatar(url: string): string {
   return domain.charAt(0).toUpperCase();
 }
 
-/** Hard-coded views & stars seeded from the bookmark id for now */
-function getFakeStats(id: string): { views: number; stars: number } {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  }
-  const views = Math.abs(hash % 450) + 5;
-  const stars = Math.abs((hash >> 8) % 80);
-  return { views, stars };
-}
-
-const SORT_OPTIONS = ["Recent", "Most viewed", "Most saved"] as const;
+const SORT_OPTIONS = ["Recent", "Most starred", "Most saved"] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
 const RECENT_PAGE_SIZE = 20;
 
@@ -199,6 +188,7 @@ export function DashboardMainPanel({
   const updateBookmarkVisibility = useMutation(
     api.dashboard.updateBookmarkVisibility,
   );
+  const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
 
   const [creatingBookmark, setCreatingBookmark] = useState(false);
 
@@ -233,12 +223,22 @@ export function DashboardMainPanel({
     Math.ceil(filteredBookmarks.length / RECENT_PAGE_SIZE),
   );
   const safeRecentPage = Math.min(recentPage, recentPageCount);
+  const sortedBookmarks = useMemo(() => {
+    const next = [...filteredBookmarks];
+    if (sortBy === "Most starred") {
+      return next.sort((a, b) => (b.totalStars ?? 0) - (a.totalStars ?? 0));
+    }
+    if (sortBy === "Most saved") {
+      return next.sort((a, b) => (b.totalSaves ?? 0) - (a.totalSaves ?? 0));
+    }
+    return next.sort((a, b) => b.lastSyncedAt - a.lastSyncedAt);
+  }, [filteredBookmarks, sortBy]);
   const visibleBookmarks = isRecentView
-    ? filteredBookmarks.slice(
+    ? sortedBookmarks.slice(
         (safeRecentPage - 1) * RECENT_PAGE_SIZE,
         safeRecentPage * RECENT_PAGE_SIZE,
       )
-    : filteredBookmarks;
+    : sortedBookmarks;
   const recentBookmarkGroups = useMemo(
     () => groupBookmarksByDay(visibleBookmarks),
     [visibleBookmarks],
@@ -247,11 +247,14 @@ export function DashboardMainPanel({
   function renderBookmarkRow(bookmark: DashboardBookmark) {
     const domain = getDomain(bookmark.url);
     const letter = getLetterAvatar(bookmark.url);
-    const { views, stars } = getFakeStats(bookmark.id);
     const bookmarkIsPublic = bookmark.visibility === "public";
     const bookmarkToggleDisabled = isRecentView
       ? bookmark.folderVisibility !== "public"
       : !folderIsPublic;
+    const canStarBookmark = bookmarkIsPublic && !bookmarkToggleDisabled;
+    const totalSaves = bookmark.totalSaves ?? 0;
+    const totalStars = bookmark.totalStars ?? 0;
+    const viewerHasStarred = bookmark.viewerHasStarred ?? false;
 
     return (
       <div
@@ -393,14 +396,53 @@ export function DashboardMainPanel({
         </div>
 
         <div className="flex shrink-0 items-center gap-4 pt-0.5 text-muted-foreground">
-          <span className="flex items-center gap-1 text-xs">
-            <Eye className="h-3.5 w-3.5" />
-            {views}
+          <span
+            className="flex items-center gap-1 text-xs"
+            title="Saves from shares"
+          >
+            <BookmarkIcon className="h-3.5 w-3.5" />
+            {totalSaves}
           </span>
-          <span className="flex items-center gap-1 text-xs">
-            <Star className="h-3.5 w-3.5" />
-            {stars}
-          </span>
+          <button
+            type="button"
+            disabled={!canStarBookmark}
+            onClick={async () => {
+              if (!canStarBookmark) {
+                return;
+              }
+              try {
+                await toggleBookmarkStar({
+                  bookmarkId: bookmark.id as Id<"syncedBookmarks">,
+                });
+              } catch (error) {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to update bookmark star.";
+                toast.error(message);
+              }
+            }}
+            className={cn(
+              "flex items-center gap-1 rounded px-1 text-xs transition-colors",
+              viewerHasStarred
+                ? "text-amber-500 hover:text-amber-600"
+                : "hover:text-foreground",
+              !canStarBookmark &&
+                "cursor-not-allowed opacity-45 hover:text-muted-foreground",
+            )}
+            aria-pressed={viewerHasStarred}
+            aria-label={viewerHasStarred ? "Unstar bookmark" : "Star bookmark"}
+            title={
+              canStarBookmark
+                ? "Star bookmark"
+                : "Only public bookmarks can be starred"
+            }
+          >
+            <Star
+              className={cn("h-3.5 w-3.5", viewerHasStarred && "fill-current")}
+            />
+            {totalStars}
+          </button>
         </div>
       </div>
     );
