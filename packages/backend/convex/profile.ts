@@ -1,7 +1,40 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import { query } from "./_generated/server";
 import { authComponent } from "./auth";
+
+async function getBookmarkEngagement(
+  ctx: QueryCtx,
+  bookmark: Doc<"syncedBookmarks">,
+  viewerId?: string,
+) {
+  const [saveStats, starStats, starClaim] = await Promise.all([
+    ctx.db
+      .query("bookmarkSaveStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    ctx.db
+      .query("bookmarkStarStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    viewerId
+      ? ctx.db
+          .query("bookmarkStarClaims")
+          .withIndex("by_starred_by_and_bookmark", (q) =>
+            q.eq("starredBy", viewerId).eq("bookmarkId", bookmark._id),
+          )
+          .unique()
+      : null,
+  ]);
+
+  return {
+    totalSaves: saveStats?.totalAttributedSaves ?? 0,
+    totalStars: starStats?.totalStars ?? 0,
+    viewerHasStarred: Boolean(starClaim),
+  };
+}
 
 export const getProfileByUsername = query({
   args: { username: v.string() },
@@ -61,21 +94,21 @@ export const getProfileByUsername = query({
         };
       });
 
-    const bookmarks = allBookmarks
-      .filter((bookmark) => {
-        if (isOwner) {
-          return true;
-        }
+    const visibleBookmarks = allBookmarks.filter((bookmark) => {
+      if (isOwner) {
+        return true;
+      }
 
-        if (bookmark.visibility !== "public" || !bookmark.folderId) {
-          return false;
-        }
+      if (bookmark.visibility !== "public" || !bookmark.folderId) {
+        return false;
+      }
 
-        const folder = folderById.get(bookmark.folderId);
-        return folder?.visibility === "public";
-      })
-      .map((b) => {
-        // Find folder name if folderId exists
+      const folder = folderById.get(bookmark.folderId);
+      return folder?.visibility === "public";
+    });
+
+    const bookmarks = await Promise.all(
+      visibleBookmarks.map(async (b) => {
         const folder = b.folderId ? folderById.get(b.folderId) : null;
         return {
           id: b._id,
@@ -87,10 +120,13 @@ export const getProfileByUsername = query({
           lastSyncedAt: b.lastSyncedAt,
           folderId: b.folderId ?? null,
           folderName: folder?.name ?? "Unfiled",
+          folderVisibility: folder?.visibility ?? "private",
           visibility: b.visibility ?? "private",
           source: b.source,
+          ...(await getBookmarkEngagement(ctx, b, authUser?._id)),
         };
-      });
+      }),
+    );
 
     return {
       user: {
