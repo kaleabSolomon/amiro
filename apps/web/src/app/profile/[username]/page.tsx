@@ -6,7 +6,6 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Bookmark as BookmarkIcon,
   Calendar,
-  Copy,
   ExternalLink,
   Globe2,
   Link2,
@@ -135,6 +134,7 @@ export default function ProfilePage({
     api.dashboard.createTelegramLinkToken,
   );
   const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
+  const savePublicBookmark = useMutation(api.sharing.savePublicBookmark);
 
   const [activeFolderFilter, setActiveFolderFilter] = useState<string | null>(
     null,
@@ -142,6 +142,7 @@ export default function ProfilePage({
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
   const [displayName, setDisplayName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingBookmarkId, setSavingBookmarkId] = useState<string | null>(null);
   const [creatingTelegramToken, setCreatingTelegramToken] = useState(false);
 
   const isOwner = profileData?.isOwner ?? false;
@@ -229,11 +230,6 @@ export default function ProfilePage({
     toast.success("Profile link copied.");
   };
 
-  const handleCopyBookmark = async (url: string) => {
-    await navigator.clipboard.writeText(url);
-    toast.success("Bookmark link copied.");
-  };
-
   const handleToggleStar = async (bookmarkId: string) => {
     if (!canUseAuthenticatedActions) {
       toast.error("Sign in to star bookmarks.");
@@ -248,6 +244,32 @@ export default function ProfilePage({
       const message =
         error instanceof Error ? error.message : "Failed to update star.";
       toast.error(message);
+    }
+  };
+
+  const handleSaveBookmark = async (bookmarkId: string) => {
+    if (!canUseAuthenticatedActions || isOwner) {
+      return;
+    }
+
+    setSavingBookmarkId(bookmarkId);
+    try {
+      const result = await savePublicBookmark({
+        bookmarkId: bookmarkId as Id<"syncedBookmarks">,
+      });
+      toast.success(
+        result.attributed
+          ? "Bookmark saved to Unfiled."
+          : "Bookmark already saved.",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to save bookmark.";
+      toast.error(message);
+    } finally {
+      setSavingBookmarkId((current) =>
+        current === bookmarkId ? null : current,
+      );
     }
   };
 
@@ -431,7 +453,9 @@ export default function ProfilePage({
                         key={bookmark.id}
                         bookmark={bookmark}
                         canUseAuthenticatedActions={canUseAuthenticatedActions}
-                        onCopy={() => handleCopyBookmark(bookmark.url)}
+                        canSave={!isOwner && canUseAuthenticatedActions}
+                        isSaving={savingBookmarkId === bookmark.id}
+                        onSave={() => handleSaveBookmark(bookmark.id)}
                         onToggleStar={() => handleToggleStar(bookmark.id)}
                       />
                     ))}
@@ -687,12 +711,16 @@ function VisibilityPill({ visibility }: { visibility: "private" | "public" }) {
 function BookmarkRow({
   bookmark,
   canUseAuthenticatedActions,
-  onCopy,
+  canSave,
+  isSaving,
+  onSave,
   onToggleStar,
 }: {
   bookmark: ProfileBookmark;
   canUseAuthenticatedActions: boolean;
-  onCopy: () => void;
+  canSave: boolean;
+  isSaving: boolean;
+  onSave: () => void;
   onToggleStar: () => void;
 }) {
   const domain = getDomain(bookmark.url);
@@ -733,14 +761,6 @@ function BookmarkRow({
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
-            <button
-              type="button"
-              onClick={onCopy}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Copy bookmark link"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </button>
           </div>
         </div>
 
@@ -774,13 +794,23 @@ function BookmarkRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-4 pt-0.5 text-muted-foreground">
-        <span
-          className="flex items-center gap-1 text-xs"
-          title="Saves from shares"
-        >
+        <span className="flex items-center gap-1 text-xs" title="Saves">
           <BookmarkIcon className="h-3.5 w-3.5" />
           {totalSaves}
         </span>
+        {canSave ? (
+          <button
+            type="button"
+            disabled={isSaving}
+            onClick={onSave}
+            className="flex items-center gap-1 rounded px-1 text-xs transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Save bookmark"
+            title="Save bookmark to Unfiled"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {isSaving ? "Saving" : "Save"}
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={!canStarBookmark}

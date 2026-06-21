@@ -1,6 +1,10 @@
 "use client";
 
-import { Clock, FolderClosed, Plus, Share } from "lucide-react";
+import { api } from "@amiro/backend/convex/_generated/api";
+import { useQuery } from "convex/react";
+import { Clock, FolderClosed, Plus, Share, Sparkles } from "lucide-react";
+import type { Route } from "next";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +22,6 @@ import {
   SidebarMenuSkeleton,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import UserMenu from "../user-menu";
 import { NewFolderDialog } from "./new-folder-dialog";
 import type { DashboardFolder } from "./types";
 
@@ -29,6 +32,15 @@ const WORKSPACE_FOLDER_SKELETONS = [
   "workspace-folder-skeleton-4",
   "workspace-folder-skeleton-5",
 ];
+
+function getInitials(name?: string | null) {
+  if (!name) {
+    return "U";
+  }
+
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "U";
+}
 
 export function DashboardFolderSidebar({
   folders,
@@ -53,6 +65,10 @@ export function DashboardFolderSidebar({
     visibility: "private" | "public";
   }) => Promise<void>;
 }) {
+  const currentUser = useQuery(api.auth.getCurrentUser);
+  const profileHref = currentUser?.username
+    ? (`/profile/${currentUser.username}` as Route)
+    : "/dashboard";
   const folderEntries = [...folders].sort((a, b) => {
     if (a.id === "unfiled") {
       return -1;
@@ -167,7 +183,25 @@ export function DashboardFolderSidebar({
       </SidebarContent>
       <SidebarFooter>
         <div className="border-sidebar-border border-t pt-2">
-          <UserMenu />
+          <Link
+            href={profileHref}
+            className="flex cursor-pointer items-center gap-2 rounded-md p-2 transition-colors hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center"
+          >
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-linear-to-br from-primary to-secondary font-semibold text-primary-foreground text-xs">
+              {getInitials(currentUser?.name)}
+            </div>
+            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center gap-1 font-medium text-xs">
+                <span className="truncate">
+                  {currentUser?.name ?? "Profile"}
+                </span>
+                <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Open profile
+              </div>
+            </div>
+          </Link>
         </div>
       </SidebarFooter>
     </Sidebar>

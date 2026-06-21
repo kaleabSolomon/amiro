@@ -79,11 +79,14 @@ export const getProfileByUsername = query({
     // Filter folders and bookmarks based on owner status. Public viewers only
     // see bookmarks that are public and live inside a public folder.
     const folders = allFolders
-      .filter((folder) => isOwner || folder.visibility === "public")
+      .filter(
+        (folder) => isOwner || (folder.visibility ?? "private") === "public",
+      )
       .map((folder) => {
         const folderBookmarks = allBookmarks.filter(
           (b) =>
-            b.folderId === folder._id && (isOwner || b.visibility === "public"),
+            b.folderId === folder._id &&
+            (isOwner || (b.visibility ?? "private") === "public"),
         );
         return {
           id: folder._id,
@@ -99,12 +102,16 @@ export const getProfileByUsername = query({
         return true;
       }
 
-      if (bookmark.visibility !== "public" || !bookmark.folderId) {
+      if ((bookmark.visibility ?? "private") !== "public") {
         return false;
       }
 
+      if (!bookmark.folderId) {
+        return true;
+      }
+
       const folder = folderById.get(bookmark.folderId);
-      return folder?.visibility === "public";
+      return (folder?.visibility ?? "private") === "public";
     });
 
     const bookmarks = await Promise.all(

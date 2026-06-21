@@ -110,7 +110,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     if (!searchResults) {
       return [];
     }
-    return searchResults.folders.map((folder) => ({
+    return searchResults.folders.map((folder: any) => ({
       id: folder.id,
       name: folder.name,
       visibility: "private" as const,

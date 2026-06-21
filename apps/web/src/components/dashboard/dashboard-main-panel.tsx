@@ -396,10 +396,7 @@ export function DashboardMainPanel({
         </div>
 
         <div className="flex shrink-0 items-center gap-4 pt-0.5 text-muted-foreground">
-          <span
-            className="flex items-center gap-1 text-xs"
-            title="Saves from shares"
-          >
+          <span className="flex items-center gap-1 text-xs" title="Saves">
             <BookmarkIcon className="h-3.5 w-3.5" />
             {totalSaves}
           </span>

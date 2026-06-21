@@ -91,6 +91,18 @@ export default defineSchema({
     .index("by_bookmark", ["bookmarkId"])
     .index("by_share", ["firstShareId"])
     .index("by_shared_by", ["firstSharedBy"]),
+  bookmarkSaveClaims: defineTable({
+    bookmarkId: v.id("syncedBookmarks"),
+    savedBy: v.string(),
+    source: v.union(v.literal("share"), v.literal("profile")),
+    firstShareId: v.optional(v.id("shares")),
+    firstSharedBy: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_saved_by_and_bookmark", ["savedBy", "bookmarkId"])
+    .index("by_bookmark", ["bookmarkId"])
+    .index("by_source", ["source"])
+    .index("by_share", ["firstShareId"]),
   shareSaveStats: defineTable({
     shareId: v.id("shares"),
     sharedBy: v.string(),

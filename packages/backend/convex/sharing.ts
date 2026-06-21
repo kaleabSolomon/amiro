@@ -102,6 +102,11 @@ const topStarredBookmarkValidator = v.object({
   url: v.string(),
   totalStars: v.number(),
 });
+const savePublicBookmarkReturnValidator = v.object({
+  bookmarkId: v.id("syncedBookmarks"),
+  savedBookmarkId: v.id("syncedBookmarks"),
+  attributed: v.boolean(),
+});
 
 type ReadCtx = QueryCtx | MutationCtx;
 
@@ -409,16 +414,33 @@ async function recordSaveAttribution(
     now: number;
   },
 ) {
-  const existingClaim = await ctx.db
-    .query("shareBookmarkSaveClaims")
-    .withIndex("by_saved_by_and_bookmark", (q) =>
-      q.eq("savedBy", args.savedBy).eq("bookmarkId", args.bookmark._id),
-    )
-    .unique();
+  const [existingClaim, existingShareClaim] = await Promise.all([
+    ctx.db
+      .query("bookmarkSaveClaims")
+      .withIndex("by_saved_by_and_bookmark", (q) =>
+        q.eq("savedBy", args.savedBy).eq("bookmarkId", args.bookmark._id),
+      )
+      .unique(),
+    ctx.db
+      .query("shareBookmarkSaveClaims")
+      .withIndex("by_saved_by_and_bookmark", (q) =>
+        q.eq("savedBy", args.savedBy).eq("bookmarkId", args.bookmark._id),
+      )
+      .unique(),
+  ]);
 
-  if (existingClaim) {
+  if (existingClaim || existingShareClaim) {
     return false;
   }
+
+  await ctx.db.insert("bookmarkSaveClaims", {
+    bookmarkId: args.bookmark._id,
+    savedBy: args.savedBy,
+    source: "share",
+    firstShareId: args.share._id,
+    firstSharedBy: args.share.sharedBy,
+    createdAt: args.now,
+  });
 
   await ctx.db.insert("shareBookmarkSaveClaims", {
     bookmarkId: args.bookmark._id,
@@ -668,6 +690,74 @@ export const saveFromShare = mutation({
       savedCount: bookmarks.length,
       attributedCount,
       skippedDuplicateCount: bookmarks.length - attributedCount,
+    };
+  },
+});
+
+export const savePublicBookmark = mutation({
+  args: {
+    bookmarkId: v.id("syncedBookmarks"),
+  },
+  returns: savePublicBookmarkReturnValidator,
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const bookmark = await getShareBookmark(ctx, args.bookmarkId);
+    const now = Date.now();
+
+    if (bookmark.userId === authUser._id) {
+      throw new ConvexError("You already own this bookmark.");
+    }
+
+    const savedBookmark = (await ctx.runMutation(
+      internal.sync.upsertCaptureFromExtension,
+      {
+        userId: authUser._id,
+        source: bookmark.source,
+        url: bookmark.url,
+        title: bookmark.title,
+        text: bookmark.text,
+        additionalLinks: bookmark.childLinks,
+        tags: bookmark.tags,
+        capturedAt: new Date(now).toISOString(),
+        visibility: "private",
+      },
+    )) as { id: Id<"syncedBookmarks"> };
+
+    const [existingClaim, existingShareClaim] = await Promise.all([
+      ctx.db
+        .query("bookmarkSaveClaims")
+        .withIndex("by_saved_by_and_bookmark", (q) =>
+          q.eq("savedBy", authUser._id).eq("bookmarkId", bookmark._id),
+        )
+        .unique(),
+      ctx.db
+        .query("shareBookmarkSaveClaims")
+        .withIndex("by_saved_by_and_bookmark", (q) =>
+          q.eq("savedBy", authUser._id).eq("bookmarkId", bookmark._id),
+        )
+        .unique(),
+    ]);
+
+    if (existingClaim || existingShareClaim) {
+      return {
+        bookmarkId: bookmark._id,
+        savedBookmarkId: savedBookmark.id,
+        attributed: false,
+      };
+    }
+
+    await ctx.db.insert("bookmarkSaveClaims", {
+      bookmarkId: bookmark._id,
+      savedBy: authUser._id,
+      source: "profile",
+      createdAt: now,
+    });
+    await bumpBookmarkStats(ctx, bookmark, 1, now);
+
+    return {
+      bookmarkId: bookmark._id,
+      savedBookmarkId: savedBookmark.id,
+      attributed: true,
     };
   },
 });
