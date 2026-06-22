@@ -12,6 +12,11 @@ export default defineSchema({
     .index("by_token", ["token"])
     .index("by_user", ["userId"])
     .index("by_user_and_used_at", ["userId", "usedAt"]),
+  userProfiles: defineTable({
+    userId: v.string(),
+    bio: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
   telegramConnections: defineTable({
     userId: v.string(),
     telegramUserId: v.number(),

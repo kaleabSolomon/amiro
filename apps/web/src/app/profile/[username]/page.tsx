@@ -141,6 +141,12 @@ export default function ProfilePage({
   );
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
   const [displayName, setDisplayName] = useState("");
+  const [usernameValue, setUsernameValue] = useState("");
+  const [bioValue, setBioValue] = useState("");
+  const [usernameAvailability, setUsernameAvailability] = useState<{
+    status: "idle" | "checking" | "available" | "taken" | "invalid";
+    message: string | null;
+  }>({ status: "idle", message: null });
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingBookmarkId, setSavingBookmarkId] = useState<string | null>(null);
   const [creatingTelegramToken, setCreatingTelegramToken] = useState(false);
@@ -152,10 +158,64 @@ export default function ProfilePage({
   const canUseAuthenticatedActions = Boolean(currentUser);
 
   useEffect(() => {
-    if (profileUser?.name) {
-      setDisplayName(profileUser.name);
+    if (profileUser?.name) setDisplayName(profileUser.name);
+    if (profileUser?.username) setUsernameValue(profileUser.username);
+    if (profileUser?.bio) setBioValue(profileUser.bio);
+  }, [profileUser?.name, profileUser?.username, profileUser?.bio]);
+
+  useEffect(() => {
+    const normalizedUsername = usernameValue.trim();
+
+    if (normalizedUsername === profileUser?.username) {
+      setUsernameAvailability({ status: "idle", message: null });
+      return;
     }
-  }, [profileUser?.name]);
+
+    if (!normalizedUsername || normalizedUsername.length < 3) {
+      setUsernameAvailability({ status: "idle", message: null });
+      return;
+    }
+
+    setUsernameAvailability({
+      status: "checking",
+      message: "Checking username availability...",
+    });
+
+    let isCancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const result = await authClient.isUsernameAvailable({
+          username: normalizedUsername,
+        });
+
+        if (isCancelled) return;
+
+        if (result.data?.available) {
+          setUsernameAvailability({
+            status: "available",
+            message: "Username is available.",
+          });
+        } else {
+          setUsernameAvailability({
+            status: "taken",
+            message: "That username is already taken.",
+          });
+        }
+      } catch (error) {
+        if (isCancelled) return;
+        setUsernameAvailability({
+          status: "invalid",
+          message:
+            error instanceof Error ? error.message : "Could not validate.",
+        });
+      }
+    }, 450);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [usernameValue, profileUser?.username]);
 
   useEffect(() => {
     if (!isOwner && activeTab === "settings") {
@@ -189,10 +249,39 @@ export default function ProfilePage({
       return;
     }
 
+    if (
+      usernameAvailability.status === "checking" ||
+      usernameAvailability.status === "taken" ||
+      usernameAvailability.status === "invalid"
+    ) {
+      toast.error("Please choose a valid and available username.");
+      return;
+    }
+
     setSavingProfile(true);
     try {
-      await updateProfile({ name: displayName.trim() });
+      if (usernameValue.trim() !== profileUser?.username) {
+        const result = await authClient.updateUser({
+          username: usernameValue.trim(),
+        });
+        if (result.error) {
+          throw new Error(result.error.message || "Failed to update username.");
+        }
+      }
+
+      await updateProfile({
+        name: displayName.trim(),
+        bio: bioValue.trim(),
+      });
+
       toast.success("Profile updated.");
+
+      if (
+        usernameValue.trim() !== profileUser?.username &&
+        usernameValue.trim()
+      ) {
+        router.push(`/profile/${usernameValue.trim()}`);
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to update profile.";
@@ -342,10 +431,12 @@ export default function ProfilePage({
               </div>
             </div>
 
-            <p className="mt-6 max-w-3xl text-foreground/90 text-sm leading-6">
-              {isOwner
-                ? "This is your public Amiro profile. Public folders and public bookmarks are visible to other people."
-                : `${profileUser?.name} is collecting and sharing public bookmarks on Amiro.`}
+            <p className="mt-6 max-w-3xl whitespace-pre-wrap text-foreground/90 text-sm leading-6">
+              {profileUser?.bio
+                ? profileUser.bio
+                : isOwner
+                  ? "This is your public Amiro profile. Public folders and public bookmarks are visible to other people."
+                  : `${profileUser?.name} is collecting and sharing public bookmarks on Amiro.`}
             </p>
 
             <div className="mt-5 flex flex-wrap items-center gap-4 text-muted-foreground text-xs">
@@ -481,6 +572,41 @@ export default function ProfilePage({
                     />
                   </div>
                   <div className="space-y-1.5">
+                    <Label htmlFor="profile-username">Username</Label>
+                    <Input
+                      id="profile-username"
+                      value={usernameValue}
+                      onChange={(event) => setUsernameValue(event.target.value)}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                    {usernameAvailability.message ? (
+                      <p
+                        className={cn(
+                          "font-medium text-[11px]",
+                          usernameAvailability.status === "available"
+                            ? "text-primary"
+                            : usernameAvailability.status === "checking"
+                              ? "text-muted-foreground"
+                              : "text-destructive",
+                        )}
+                      >
+                        {usernameAvailability.message}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="profile-bio">Bio</Label>
+                    <textarea
+                      id="profile-bio"
+                      value={bioValue}
+                      onChange={(event) => setBioValue(event.target.value)}
+                      placeholder="A short bio..."
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="space-y-1.5 pt-2">
                     <Label htmlFor="profile-email">Email</Label>
                     <Input
                       id="profile-email"
@@ -488,15 +614,17 @@ export default function ProfilePage({
                       disabled
                     />
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={handleSaveProfile}
-                    disabled={savingProfile}
-                  >
-                    <Save className="h-4 w-4" />
-                    {savingProfile ? "Saving..." : "Save profile"}
-                  </Button>
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveProfile}
+                      disabled={savingProfile}
+                    >
+                      <Save className="h-4 w-4" />
+                      {savingProfile ? "Saving..." : "Save profile"}
+                    </Button>
+                  </div>
                 </div>
               </SettingsCard>
 

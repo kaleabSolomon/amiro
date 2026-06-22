@@ -47,6 +47,7 @@ export const getProfileByUsername = query({
       _id: string;
       name: string;
       username?: string | null;
+      bio?: string | null;
       image?: string | null;
       email: string;
       createdAt: number;
@@ -60,7 +61,13 @@ export const getProfileByUsername = query({
     const authUser = await authComponent.safeGetAuthUser(ctx);
     const isOwner = authUser ? authUser._id === user._id : false;
 
-    // 3. Fetch folders
+    // 3. Fetch user profile
+    const userProfile = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+
+    // 4. Fetch folders
     const allFolders = await ctx.db
       .query("folders")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -140,6 +147,7 @@ export const getProfileByUsername = query({
         id: user._id,
         name: user.name,
         username: user.username ?? null,
+        bio: userProfile?.bio ?? null,
         image: user.image ?? null,
         email: isOwner ? user.email : undefined,
         createdAt: user.createdAt,
