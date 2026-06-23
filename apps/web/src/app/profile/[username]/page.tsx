@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Globe2,
   Link2,
+  Lock,
   LogOut,
   Monitor,
   Moon,
@@ -47,6 +48,7 @@ type ProfileBookmark = {
   lastSyncedAt: number;
   folderId: string | null;
   folderName: string;
+  folderIcon: string;
   folderVisibility?: "private" | "public";
   visibility: "private" | "public";
   source: "chrome" | "telegram" | "instagram" | "twitter";
@@ -877,27 +879,22 @@ function BookmarkRow({
           >
             {bookmark.title}
           </a>
-          <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-
-          <div className="ml-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <a
-              href={bookmark.url}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Open link"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
+          <span className="font-bold text-muted-foreground/60 text-xs">
+            &middot;
+          </span>
+          <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs">
+            <span>{bookmark.folderIcon}</span>
+            {bookmark.folderName}
+          </span>
+          {bookmark.visibility === "public" ? (
+            <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+          ) : (
+            <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+          )}
         </div>
 
         <p className="mt-0.5 font-mono text-muted-foreground text-xs">
           {domain}
-        </p>
-
-        <p className="mt-1 text-muted-foreground text-xs">
-          {bookmark.folderName}
         </p>
 
         {bookmark.text ? (
@@ -921,49 +918,63 @@ function BookmarkRow({
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-4 pt-0.5 text-muted-foreground">
-        <span className="flex items-center gap-1 text-xs" title="Saves">
-          <BookmarkIcon className="h-3.5 w-3.5" />
-          {totalSaves}
-        </span>
-        {canSave ? (
+      <div className="flex shrink-0 flex-col items-end justify-between self-stretch">
+        <div className="flex items-center gap-4 pt-0.5 text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs" title="Saves">
+            <BookmarkIcon className="h-3.5 w-3.5" />
+            {totalSaves}
+          </span>
+          {canSave ? (
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={onSave}
+              className="flex items-center gap-1 rounded px-1 text-xs transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Save bookmark"
+              title="Save bookmark to Unfiled"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {isSaving ? "Saving" : "Save"}
+            </button>
+          ) : null}
           <button
             type="button"
-            disabled={isSaving}
-            onClick={onSave}
-            className="flex items-center gap-1 rounded px-1 text-xs transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Save bookmark"
-            title="Save bookmark to Unfiled"
+            disabled={!canStarBookmark}
+            onClick={onToggleStar}
+            className={cn(
+              "flex items-center gap-1 rounded px-1 text-xs transition-colors",
+              viewerHasStarred
+                ? "text-amber-500 hover:text-amber-600"
+                : "hover:text-foreground",
+              !canStarBookmark &&
+                "cursor-not-allowed opacity-45 hover:text-muted-foreground",
+            )}
+            aria-pressed={viewerHasStarred}
+            aria-label={viewerHasStarred ? "Unstar bookmark" : "Star bookmark"}
+            title={
+              canStarBookmark
+                ? "Star bookmark"
+                : "Sign in to star public bookmarks"
+            }
           >
-            <Save className="h-3.5 w-3.5" />
-            {isSaving ? "Saving" : "Save"}
+            <Star
+              className={cn("h-3.5 w-3.5", viewerHasStarred && "fill-current")}
+            />
+            {totalStars}
           </button>
-        ) : null}
-        <button
-          type="button"
-          disabled={!canStarBookmark}
-          onClick={onToggleStar}
-          className={cn(
-            "flex items-center gap-1 rounded px-1 text-xs transition-colors",
-            viewerHasStarred
-              ? "text-amber-500 hover:text-amber-600"
-              : "hover:text-foreground",
-            !canStarBookmark &&
-              "cursor-not-allowed opacity-45 hover:text-muted-foreground",
-          )}
-          aria-pressed={viewerHasStarred}
-          aria-label={viewerHasStarred ? "Unstar bookmark" : "Star bookmark"}
-          title={
-            canStarBookmark
-              ? "Star bookmark"
-              : "Sign in to star public bookmarks"
-          }
-        >
-          <Star
-            className={cn("h-3.5 w-3.5", viewerHasStarred && "fill-current")}
-          />
-          {totalStars}
-        </button>
+        </div>
+
+        <div className="flex items-center gap-1 pb-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <a
+            href={bookmark.url}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Open link"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
       </div>
     </article>
   );

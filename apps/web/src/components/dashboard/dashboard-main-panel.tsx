@@ -275,14 +275,16 @@ export function DashboardMainPanel({
             >
               {bookmark.title}
             </a>
-            {bookmarkIsPublic ? (
-              <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-            ) : (
-              <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-            )}
+            <div className="relative flex items-center">
+              <div className="flex items-center opacity-100 transition-opacity group-hover:opacity-0">
+                {bookmarkIsPublic ? (
+                  <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                ) : (
+                  <Lock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                )}
+              </div>
 
-            <div className="ml-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-              <div className="flex items-center rounded-md border border-border bg-background/80 p-0.5">
+              <div className="pointer-events-none absolute top-1/2 left-0 z-10 flex -translate-y-1/2 items-center rounded-md border border-border bg-background/80 p-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
                 <VisibilityToggle
                   active={!bookmarkIsPublic}
                   icon={Lock}
@@ -334,33 +336,6 @@ export function DashboardMainPanel({
                   }}
                 />
               </div>
-              <a
-                href={bookmark.url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Open link"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-              <button
-                type="button"
-                disabled={deletingBookmarkId === bookmark.id}
-                onClick={async () => {
-                  setDeletingBookmarkId(bookmark.id);
-                  try {
-                    await onDeleteBookmark(bookmark.id);
-                  } finally {
-                    setDeletingBookmarkId((current) =>
-                      current === bookmark.id ? null : current,
-                    );
-                  }
-                }}
-                className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                aria-label="Delete bookmark"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
             </div>
           </div>
 
@@ -395,51 +370,88 @@ export function DashboardMainPanel({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-4 pt-0.5 text-muted-foreground">
-          <span className="flex items-center gap-1 text-xs" title="Saves">
-            <BookmarkIcon className="h-3.5 w-3.5" />
-            {totalSaves}
-          </span>
-          <button
-            type="button"
-            disabled={!canStarBookmark}
-            onClick={async () => {
-              if (!canStarBookmark) {
-                return;
+        <div className="flex shrink-0 flex-col items-end justify-between self-stretch">
+          <div className="flex items-center gap-4 pt-0.5 text-muted-foreground">
+            <span className="flex items-center gap-1 text-xs" title="Saves">
+              <BookmarkIcon className="h-3.5 w-3.5" />
+              {totalSaves}
+            </span>
+            <button
+              type="button"
+              disabled={!canStarBookmark}
+              onClick={async () => {
+                if (!canStarBookmark) {
+                  return;
+                }
+                try {
+                  await toggleBookmarkStar({
+                    bookmarkId: bookmark.id as Id<"syncedBookmarks">,
+                  });
+                } catch (error) {
+                  const message =
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to update bookmark star.";
+                  toast.error(message);
+                }
+              }}
+              className={cn(
+                "flex items-center gap-1 rounded px-1 text-xs transition-colors",
+                viewerHasStarred
+                  ? "text-amber-500 hover:text-amber-600"
+                  : "hover:text-foreground",
+                !canStarBookmark &&
+                  "cursor-not-allowed opacity-45 hover:text-muted-foreground",
+              )}
+              aria-pressed={viewerHasStarred}
+              aria-label={
+                viewerHasStarred ? "Unstar bookmark" : "Star bookmark"
               }
-              try {
-                await toggleBookmarkStar({
-                  bookmarkId: bookmark.id as Id<"syncedBookmarks">,
-                });
-              } catch (error) {
-                const message =
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to update bookmark star.";
-                toast.error(message);
+              title={
+                canStarBookmark
+                  ? "Star bookmark"
+                  : "Only public bookmarks can be starred"
               }
-            }}
-            className={cn(
-              "flex items-center gap-1 rounded px-1 text-xs transition-colors",
-              viewerHasStarred
-                ? "text-amber-500 hover:text-amber-600"
-                : "hover:text-foreground",
-              !canStarBookmark &&
-                "cursor-not-allowed opacity-45 hover:text-muted-foreground",
-            )}
-            aria-pressed={viewerHasStarred}
-            aria-label={viewerHasStarred ? "Unstar bookmark" : "Star bookmark"}
-            title={
-              canStarBookmark
-                ? "Star bookmark"
-                : "Only public bookmarks can be starred"
-            }
-          >
-            <Star
-              className={cn("h-3.5 w-3.5", viewerHasStarred && "fill-current")}
-            />
-            {totalStars}
-          </button>
+            >
+              <Star
+                className={cn(
+                  "h-3.5 w-3.5",
+                  viewerHasStarred && "fill-current",
+                )}
+              />
+              {totalStars}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <a
+              href={bookmark.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Open link"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+            <button
+              type="button"
+              disabled={deletingBookmarkId === bookmark.id}
+              onClick={async () => {
+                setDeletingBookmarkId(bookmark.id);
+                try {
+                  await onDeleteBookmark(bookmark.id);
+                } finally {
+                  setDeletingBookmarkId((current) =>
+                    current === bookmark.id ? null : current,
+                  );
+                }
+              }}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Delete bookmark"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     );

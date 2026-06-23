@@ -134,6 +134,7 @@ export const getProfileByUsername = query({
           lastSyncedAt: b.lastSyncedAt,
           folderId: b.folderId ?? null,
           folderName: folder?.name ?? "Unfiled",
+          folderIcon: folder?.icon ?? "📁",
           folderVisibility: folder?.visibility ?? "private",
           visibility: b.visibility ?? "private",
           source: b.source,
