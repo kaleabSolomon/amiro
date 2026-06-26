@@ -187,7 +187,7 @@ export function DashboardFolderSidebar({
             href={profileHref}
             className="flex cursor-pointer items-center gap-2 rounded-md p-2 transition-colors hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center"
           >
-            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-linear-to-br from-primary to-secondary font-semibold text-primary-foreground text-xs">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-linear-to-br from-[oklch(0.86_0.13_165)]/80 to-[oklch(0.65_0.18_320)]/70 font-semibold text-[oklch(0.2_0.04_165)] text-xs shadow-[0_1px_2px_oklch(0_0_0_/_0.4),0_8px_24px_-12px_oklch(0_0_0_/_0.5)]">
               {getInitials(currentUser?.name)}
             </div>
             <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
