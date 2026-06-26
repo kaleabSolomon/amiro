@@ -139,6 +139,7 @@ export default function ProfilePage({
   );
   const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
   const savePublicBookmark = useMutation(api.sharing.savePublicBookmark);
+  const createShare = useMutation(api.sharing.createShare);
 
   const [activeFolderFilter, setActiveFolderFilter] = useState<string | null>(
     null,
@@ -153,6 +154,7 @@ export default function ProfilePage({
   }>({ status: "idle", message: null });
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingBookmarkId, setSavingBookmarkId] = useState<string | null>(null);
+  const [sharingFolderId, setSharingFolderId] = useState<string | null>(null);
   const [creatingTelegramToken, setCreatingTelegramToken] = useState(false);
 
   const isOwner = profileData?.isOwner ?? false;
@@ -321,6 +323,27 @@ export default function ProfilePage({
   const handleShareProfile = async () => {
     await navigator.clipboard.writeText(window.location.href);
     toast.success("Profile link copied.");
+  };
+
+  const handleShareFolder = async (e: React.MouseEvent, folderId: string) => {
+    e.stopPropagation();
+    setSharingFolderId(folderId);
+    try {
+      const result = await createShare({
+        resourceType: "folder",
+        resourceId: folderId,
+        visibility: "unlisted",
+      });
+      const url = `${window.location.origin}/share/${result.publicId}`;
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create share link.",
+      );
+    } finally {
+      setSharingFolderId((cur) => (cur === folderId ? null : cur));
+    }
   };
 
   const handleToggleStar = async (bookmarkId: string) => {
@@ -500,14 +523,22 @@ export default function ProfilePage({
                     {folders.map((folder) => {
                       const active = activeFolderFilter === folder.id;
                       return (
-                        <button
+                        // biome-ignore lint/a11y/useSemanticElements: Needs to be a div because it contains a nested button
+                        <div
                           key={folder.id}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() =>
                             setActiveFolderFilter(active ? null : folder.id)
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setActiveFolderFilter(active ? null : folder.id);
+                            }
+                          }}
                           className={cn(
-                            "rounded-xl border bg-card/50 p-5 text-left transition-colors hover:bg-muted/50",
+                            "group relative cursor-pointer rounded-xl border bg-card/50 p-5 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             active
                               ? "border-mint bg-mint/5"
                               : "border-border/60",
@@ -517,7 +548,23 @@ export default function ProfilePage({
                             <span className="grid h-9 w-9 place-items-center rounded-md bg-mint/10 text-mint">
                               {folder.icon ?? "F"}
                             </span>
-                            <VisibilityPill visibility={folder.visibility} />
+                            <div className="flex items-center gap-2">
+                              {isOwner && folder.visibility === "public" ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) =>
+                                    handleShareFolder(e, folder.id)
+                                  }
+                                  disabled={sharingFolderId === folder.id}
+                                  className="z-10 rounded p-1 text-muted-foreground opacity-0 transition-all hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 group-hover:opacity-100"
+                                  aria-label="Copy share link"
+                                  title="Copy share link"
+                                >
+                                  <Link2 className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
+                              <VisibilityPill visibility={folder.visibility} />
+                            </div>
                           </div>
                           <h2 className="mt-5 line-clamp-1 font-serif text-xl">
                             {folder.name}
@@ -525,7 +572,7 @@ export default function ProfilePage({
                           <p className="mt-1 text-muted-foreground text-sm">
                             {folder.itemCount} bookmarks
                           </p>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
