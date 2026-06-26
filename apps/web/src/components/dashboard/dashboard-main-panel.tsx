@@ -21,6 +21,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { NewBookmarkDialog } from "@/components/dashboard/new-bookmark-dialog";
+import { ShareFolderDialog } from "@/components/dashboard/share-folder-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -575,14 +576,20 @@ export function DashboardMainPanel({
                   </Button>
                 }
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!folderIsPublic}
-              >
-                Share
-              </Button>
+              <ShareFolderDialog
+                folderId={selectedFolder.id as Id<"folders">}
+                folderName={selectedFolder.name}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!folderIsPublic}
+                  >
+                    Share
+                  </Button>
+                }
+              />
             </div>
           ) : null}
         </div>
