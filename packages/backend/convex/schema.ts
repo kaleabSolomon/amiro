@@ -202,4 +202,28 @@ export default defineSchema({
       searchField: "searchDocument",
       filterFields: ["userId"],
     }),
+  notifications: defineTable({
+    recipientId: v.string(),
+    type: v.union(
+      v.literal("bookmark_saved"),
+      v.literal("bookmark_starred"),
+      v.literal("new_follower"),
+      v.literal("followee_bookmark"),
+    ),
+    actorId: v.string(),
+    actorName: v.string(),
+    actorUsername: v.optional(v.string()),
+    actorImage: v.optional(v.string()),
+    // Related resource refs — optional because not all types use all fields
+    bookmarkId: v.optional(v.id("syncedBookmarks")),
+    bookmarkTitle: v.optional(v.string()),
+    bookmarkUrl: v.optional(v.string()),
+    folderId: v.optional(v.id("folders")),
+    shareId: v.optional(v.id("shares")),
+    // State
+    read: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_recipient_and_created_at", ["recipientId", "createdAt"])
+    .index("by_recipient_and_read", ["recipientId", "read"]),
 });
