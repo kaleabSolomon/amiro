@@ -472,6 +472,17 @@ async function recordSaveAttribution(
     args.now,
   );
 
+  // Notify the bookmark owner that someone saved their bookmark via share
+  await ctx.runMutation(internal.notifications.createNotification, {
+    recipientId: args.bookmark.userId,
+    type: "bookmark_saved",
+    actorId: args.savedBy,
+    bookmarkId: args.bookmark._id,
+    bookmarkTitle: args.bookmark.title,
+    bookmarkUrl: args.bookmark.url,
+    shareId: args.share._id,
+  });
+
   return true;
 }
 
@@ -754,6 +765,16 @@ export const savePublicBookmark = mutation({
     });
     await bumpBookmarkStats(ctx, bookmark, 1, now);
 
+    // Notify the bookmark owner that someone saved their bookmark from their profile
+    await ctx.runMutation(internal.notifications.createNotification, {
+      recipientId: bookmark.userId,
+      type: "bookmark_saved",
+      actorId: authUser._id,
+      bookmarkId: bookmark._id,
+      bookmarkTitle: bookmark.title,
+      bookmarkUrl: bookmark.url,
+    });
+
     return {
       bookmarkId: bookmark._id,
       savedBookmarkId: savedBookmark.id,
@@ -798,6 +819,16 @@ export const toggleBookmarkStar = mutation({
       createdAt: now,
     });
     await bumpBookmarkStarStats(ctx, bookmark, 1, now);
+
+    // Notify the bookmark owner that someone starred their bookmark (only on star, not unstar)
+    await ctx.runMutation(internal.notifications.createNotification, {
+      recipientId: bookmark.userId,
+      type: "bookmark_starred",
+      actorId: authUser._id,
+      bookmarkId: bookmark._id,
+      bookmarkTitle: bookmark.title,
+      bookmarkUrl: bookmark.url,
+    });
 
     return {
       bookmarkId: bookmark._id,
