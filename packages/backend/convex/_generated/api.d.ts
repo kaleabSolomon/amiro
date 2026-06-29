@@ -16,6 +16,7 @@ import type * as email_templates_passwordResetEmail from "../email/templates/pas
 import type * as email_templates_verificationEmail from "../email/templates/verificationEmail.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
+import type * as notifications from "../notifications.js";
 import type * as privateData from "../privateData.js";
 import type * as profile from "../profile.js";
 import type * as sharing from "../sharing.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   "email/templates/verificationEmail": typeof email_templates_verificationEmail;
   healthCheck: typeof healthCheck;
   http: typeof http;
+  notifications: typeof notifications;
   privateData: typeof privateData;
   profile: typeof profile;
   sharing: typeof sharing;
