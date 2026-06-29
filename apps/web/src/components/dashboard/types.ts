@@ -1,6 +1,8 @@
 export type DashboardFolder = {
   id: string;
   name: string;
+  icon?: string;
+  visibility: "private" | "public";
   parentId: string | null;
   tags: string[];
   itemCount: number;
@@ -20,6 +22,13 @@ export type DashboardBookmark = {
   }>;
   tags: string[];
   source: "chrome" | "telegram" | "instagram" | "twitter";
+  visibility: "private" | "public";
+  folderId?: string | null;
+  folderName?: string;
+  folderVisibility?: "private" | "public";
+  totalSaves?: number;
+  totalStars?: number;
+  viewerHasStarred?: boolean;
   capturedAt: number;
   lastSyncedAt: number;
 };

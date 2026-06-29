@@ -1,11 +1,13 @@
 "use client";
 
-import { useConvexAuth } from "convex/react";
+import { api } from "@amiro/backend/convex/_generated/api";
+import { useConvexAuth, useQuery } from "convex/react";
 import { CheckCircle2, LoaderCircle, MailCheck, XCircle } from "lucide-react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import CompleteUsernameForm from "@/components/complete-username-form";
 import ForgotPasswordForm from "@/components/forgot-password-form";
 import { LandingShell } from "@/components/landing/landing-shell";
 import ResetPasswordForm from "@/components/reset-password-form";
@@ -17,10 +19,11 @@ import amiro from "../../../assets/logos/amiro.png";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
-export default function AuthPageInner() {
+function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const currentUser = useQuery(api.auth.getCurrentUser);
 
   const mode = searchParams.get("mode");
   const resetToken = searchParams.get("token");
@@ -46,6 +49,14 @@ export default function AuthPageInner() {
     phase: "verifying" | "success" | "failure";
     message: string;
   } | null>(null);
+  const requiresUsernameCompletion = Boolean(
+    isAuthenticated && currentUser && !currentUser.username,
+  );
+  const isResolvingUsernameRequirement =
+    isAuthenticated &&
+    currentUser === undefined &&
+    mode === "complete-profile" &&
+    !isLoading;
 
   const isVerificationSuccess =
     verificationStatus === "success" ||
@@ -79,6 +90,10 @@ export default function AuthPageInner() {
       setShowSignIn(true);
       setShowForgotPassword(false);
       setShowResetPassword(true);
+    } else if (mode === "complete-profile") {
+      setShowForgotPassword(false);
+      setShowResetPassword(false);
+      setPendingVerificationEmail(null);
     }
   }, [mode]);
 
@@ -236,7 +251,16 @@ export default function AuthPageInner() {
       return;
     }
 
-    if (pendingVerificationEmail || hasVerificationParams || verificationFlow) {
+    if (currentUser === undefined) {
+      return;
+    }
+
+    if (
+      pendingVerificationEmail ||
+      hasVerificationParams ||
+      verificationFlow ||
+      requiresUsernameCompletion
+    ) {
       return;
     }
 
@@ -244,8 +268,10 @@ export default function AuthPageInner() {
   }, [
     isAuthenticated,
     isLoading,
+    currentUser,
     hasVerificationParams,
     pendingVerificationEmail,
+    requiresUsernameCompletion,
     verificationFlow,
     router,
   ]);
@@ -260,7 +286,9 @@ export default function AuthPageInner() {
                 <div className="h-4 w-4 rounded-full bg-primary" />
               </div>
               {verificationFlow ||
-              pendingVerificationEmail ? null : showResetPassword ||
+              pendingVerificationEmail ||
+              requiresUsernameCompletion ||
+              isResolvingUsernameRequirement ? null : showResetPassword ||
                 showForgotPassword ? (
                 <div className="text-muted-foreground text-sm">
                   <button
@@ -381,6 +409,27 @@ export default function AuthPageInner() {
                       </Button>
                     </div>
                   </div>
+                ) : isResolvingUsernameRequirement ? (
+                  <div className="flex w-full flex-col items-center">
+                    <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary shadow-xs ring-1 ring-primary/20">
+                      <LoaderCircle className="h-6 w-6 animate-spin stroke-[1.8]" />
+                    </div>
+                    <h2 className="mb-1.5 font-semibold text-2xl tracking-tight">
+                      Preparing your profile
+                    </h2>
+                    <p className="text-center text-muted-foreground text-sm leading-relaxed">
+                      We&apos;re checking whether you still need to choose a
+                      username.
+                    </p>
+                  </div>
+                ) : requiresUsernameCompletion ? (
+                  <CompleteUsernameForm
+                    email={currentUser!.email}
+                    name={currentUser!.name}
+                    onCompleted={() => {
+                      router.replace("/dashboard");
+                    }}
+                  />
                 ) : showResetPassword ? (
                   <ResetPasswordForm
                     token={resetToken}
@@ -453,5 +502,19 @@ export default function AuthPageInner() {
         </div>
       </div>
     </LandingShell>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-svh items-center justify-center">
+          <div className="text-muted-foreground text-sm">Loading...</div>
+        </div>
+      }
+    >
+      <AuthPageInner />
+    </Suspense>
   );
 }

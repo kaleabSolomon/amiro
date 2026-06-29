@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import {
   internalMutation,
   internalQuery,
@@ -13,6 +14,8 @@ type FolderStats = {
   updatedAtMs: number | null;
   tagCounts: Map<string, number>;
 };
+
+const visibilityValidator = v.union(v.literal("private"), v.literal("public"));
 
 function getOrCreateStats(map: Map<string, FolderStats>, key: string) {
   const existing = map.get(key);
@@ -34,6 +37,77 @@ function topTags(tagCounts: Map<string, number>, limit = 4) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
     .map(([tag]) => tag);
+}
+
+function mapBookmark(bookmark: {
+  _id: Id<"syncedBookmarks">;
+  url: string;
+  title: string;
+  text?: string;
+  childLinks?: Array<{
+    url: string;
+    title?: string;
+    siteName?: string;
+    description?: string;
+  }>;
+  tags: string[];
+  source: "chrome" | "telegram" | "instagram" | "twitter";
+  visibility?: "private" | "public";
+  capturedAt: number;
+  lastSyncedAt: number;
+}) {
+  return {
+    id: bookmark._id,
+    url: bookmark.url,
+    title: bookmark.title,
+    text: bookmark.text ?? "",
+    childLinks: bookmark.childLinks ?? [],
+    tags: bookmark.tags,
+    source: bookmark.source,
+    visibility: bookmark.visibility ?? "private",
+    capturedAt: bookmark.capturedAt,
+    lastSyncedAt: bookmark.lastSyncedAt,
+  };
+}
+
+async function getBookmarkEngagement(
+  ctx: QueryCtx,
+  bookmark: Doc<"syncedBookmarks">,
+  viewerId: string,
+) {
+  const [saveStats, starStats, starClaim] = await Promise.all([
+    ctx.db
+      .query("bookmarkSaveStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    ctx.db
+      .query("bookmarkStarStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    ctx.db
+      .query("bookmarkStarClaims")
+      .withIndex("by_starred_by_and_bookmark", (q) =>
+        q.eq("starredBy", viewerId).eq("bookmarkId", bookmark._id),
+      )
+      .unique(),
+  ]);
+
+  return {
+    totalSaves: saveStats?.totalAttributedSaves ?? 0,
+    totalStars: starStats?.totalStars ?? 0,
+    viewerHasStarred: Boolean(starClaim),
+  };
+}
+
+async function mapBookmarkWithEngagement(
+  ctx: QueryCtx,
+  bookmark: Doc<"syncedBookmarks">,
+  viewerId: string,
+) {
+  return {
+    ...mapBookmark(bookmark),
+    ...(await getBookmarkEngagement(ctx, bookmark, viewerId)),
+  };
 }
 
 function generateLinkToken() {
@@ -80,6 +154,8 @@ export const getFolderTree = query({
       return {
         id: folder._id,
         name: folder.name,
+        icon: folder.icon,
+        visibility: folder.visibility ?? "private",
         parentId: folder.parentFolderId ?? null,
         itemCount: stats?.itemCount ?? 0,
         updatedAtMs: stats?.updatedAtMs ?? null,
@@ -91,6 +167,8 @@ export const getFolderTree = query({
     const unfiled = {
       id: "unfiled",
       name: "Unfiled",
+      icon: "📥",
+      visibility: "private" as const,
       parentId: null,
       itemCount: unfiledStats?.itemCount ?? 0,
       updatedAtMs: unfiledStats?.updatedAtMs ?? null,
@@ -115,12 +193,14 @@ export const getBookmarksForFolder = query({
       args.folderId === "unfiled"
         ? undefined
         : (args.folderId as Id<"folders">);
+    let targetFolderVisibility: "private" | "public" = "private";
 
     if (targetFolderId) {
       const folder = await ctx.db.get(targetFolderId);
       if (!folder || folder.userId !== authUser._id) {
         throw new ConvexError("Folder not found.");
       }
+      targetFolderVisibility = folder.visibility ?? "private";
     }
 
     const docs = !targetFolderId
@@ -139,17 +219,83 @@ export const getBookmarksForFolder = query({
           .order("desc")
           .collect();
 
-    return docs.map((bookmark) => ({
-      id: bookmark._id,
-      url: bookmark.url,
-      title: bookmark.title,
-      text: bookmark.text ?? "",
-      childLinks: bookmark.childLinks ?? [],
-      tags: bookmark.tags,
-      source: bookmark.source,
-      capturedAt: bookmark.capturedAt,
-      lastSyncedAt: bookmark.lastSyncedAt,
-    }));
+    return await Promise.all(
+      docs.map(async (bookmark) => ({
+        ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+        folderVisibility: targetFolderVisibility,
+      })),
+    );
+  },
+});
+
+export const getRecentBookmarks = query({
+  args: {
+    days: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return [];
+    }
+
+    const days = Math.max(1, Math.min(args.days ?? 7, 31));
+    const limit = Math.max(1, Math.min(args.limit ?? 100, 200));
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    const [folders, bookmarks] = await Promise.all([
+      ctx.db
+        .query("folders")
+        .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+        .collect(),
+      ctx.db
+        .query("syncedBookmarks")
+        .withIndex("by_user_and_last_synced_at", (q) =>
+          q.eq("userId", authUser._id).gte("lastSyncedAt", since),
+        )
+        .order("desc")
+        .take(limit),
+    ]);
+
+    const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
+
+    return await Promise.all(
+      bookmarks.map(async (bookmark) => {
+        const folder = bookmark.folderId
+          ? folderMap.get(bookmark.folderId)
+          : undefined;
+
+        return {
+          ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+          folderId: bookmark.folderId ?? null,
+          folderName: folder?.name ?? "Unfiled",
+          folderVisibility: folder?.visibility ?? "private",
+        };
+      }),
+    );
+  },
+});
+
+export const getRecentBookmarkCount = query({
+  args: {
+    days: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return 0;
+    }
+
+    const days = Math.max(1, Math.min(args.days ?? 7, 31));
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+    const bookmarks = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_last_synced_at", (q) =>
+        q.eq("userId", authUser._id).gte("lastSyncedAt", since),
+      )
+      .take(1000);
+
+    return bookmarks.length;
   },
 });
 
@@ -265,6 +411,8 @@ export const searchWorkspace = query({
 export const createFolder = mutation({
   args: {
     name: v.string(),
+    icon: v.optional(v.string()),
+    visibility: v.optional(visibilityValidator),
     parentFolderId: v.optional(v.id("folders")),
   },
   handler: async (ctx, args) => {
@@ -285,6 +433,8 @@ export const createFolder = mutation({
     const id = await ctx.db.insert("folders", {
       userId: authUser._id,
       name,
+      icon: args.icon?.trim() || undefined,
+      visibility: args.visibility ?? "private",
       parentFolderId: args.parentFolderId,
       createdAt: now,
       updatedAt: now,
@@ -298,6 +448,8 @@ export const createFolderForUser = internalMutation({
   args: {
     userId: v.string(),
     name: v.string(),
+    icon: v.optional(v.string()),
+    visibility: v.optional(visibilityValidator),
     parentFolderId: v.optional(v.id("folders")),
   },
   handler: async (ctx, args) => {
@@ -317,6 +469,8 @@ export const createFolderForUser = internalMutation({
     const id = await ctx.db.insert("folders", {
       userId: args.userId,
       name,
+      icon: args.icon?.trim() || undefined,
+      visibility: args.visibility ?? "private",
       parentFolderId: args.parentFolderId,
       createdAt: now,
       updatedAt: now,
@@ -339,6 +493,70 @@ export const deleteBookmark = mutation({
 
     await ctx.db.delete(args.bookmarkId);
     return { ok: true as const };
+  },
+});
+
+export const updateFolderVisibility = mutation({
+  args: {
+    folderId: v.id("folders"),
+    visibility: visibilityValidator,
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || folder.userId !== authUser._id) {
+      throw new ConvexError("Folder not found.");
+    }
+
+    await ctx.db.patch(folder._id, {
+      visibility: args.visibility,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      id: folder._id,
+      visibility: args.visibility,
+    };
+  },
+});
+
+export const updateBookmarkVisibility = mutation({
+  args: {
+    bookmarkId: v.id("syncedBookmarks"),
+    visibility: visibilityValidator,
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const bookmark = await ctx.db.get(args.bookmarkId);
+    if (!bookmark || bookmark.userId !== authUser._id) {
+      throw new ConvexError("Bookmark not found.");
+    }
+
+    if (bookmark.folderId) {
+      const folder = await ctx.db.get(bookmark.folderId);
+      if (!folder || folder.userId !== authUser._id) {
+        throw new ConvexError("Folder not found.");
+      }
+      if ((folder.visibility ?? "private") !== "public") {
+        throw new ConvexError(
+          "Bookmark visibility can only be changed inside a public folder.",
+        );
+      }
+    } else {
+      throw new ConvexError(
+        "Bookmark visibility can only be changed inside a public folder.",
+      );
+    }
+
+    await ctx.db.patch(bookmark._id, {
+      visibility: args.visibility,
+      lastSyncedAt: Date.now(),
+    });
+
+    return {
+      id: bookmark._id,
+      visibility: args.visibility,
+    };
   },
 });
 

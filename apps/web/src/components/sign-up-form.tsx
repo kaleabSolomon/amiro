@@ -2,7 +2,7 @@
 
 import { useForm } from "@tanstack/react-form";
 import { Eye, EyeOff, User } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -12,6 +12,13 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
+type UsernameAvailability =
+  | { status: "idle"; message: null }
+  | { status: "checking"; message: string }
+  | { status: "available"; message: string }
+  | { status: "taken"; message: string }
+  | { status: "invalid"; message: string };
+
 export default function SignUpForm({
   onVerificationRequired,
 }: {
@@ -20,13 +27,19 @@ export default function SignUpForm({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [usernameValue, setUsernameValue] = useState("");
+  const [usernameAvailability, setUsernameAvailability] =
+    useState<UsernameAvailability>({
+      status: "idle",
+      message: null,
+    });
 
   const handleGoogleSignUp = async () => {
     setIsGoogleLoading(true);
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/dashboard",
+        callbackURL: "/auth?mode=complete-profile",
       });
     } catch {
       toast.error("Google sign up failed. Please try again.");
@@ -40,6 +53,7 @@ export default function SignUpForm({
       password: "",
       confirmPassword: "",
       name: "",
+      username: "",
     },
     onSubmit: async ({ value }) => {
       await authClient.signUp.email(
@@ -47,6 +61,7 @@ export default function SignUpForm({
           email: value.email,
           password: value.password,
           name: value.name,
+          username: value.username.trim(),
           callbackURL: "/auth?mode=signin&verification=success",
         },
         {
@@ -65,6 +80,14 @@ export default function SignUpForm({
           name: z.string().min(2, "Name must be at least 2 characters"),
           email: z.email("Invalid email address"),
           password: z.string().min(8, "Password must be at least 8 characters"),
+          username: z
+            .string()
+            .min(3, "Username must be at least 3 characters")
+            .max(30, "Username must be at most 30 characters")
+            .regex(
+              /^[a-zA-Z0-9_.]+$/,
+              "Username can only contain letters, numbers, underscores, and periods",
+            ),
           confirmPassword: z
             .string()
             .min(8, "Confirm password must be at least 8 characters"),
@@ -75,6 +98,73 @@ export default function SignUpForm({
         }),
     },
   });
+
+  useEffect(() => {
+    const normalizedUsername = usernameValue.trim();
+
+    if (!normalizedUsername) {
+      setUsernameAvailability({ status: "idle", message: null });
+      return;
+    }
+
+    if (normalizedUsername.length < 3) {
+      setUsernameAvailability({ status: "idle", message: null });
+      return;
+    }
+
+    setUsernameAvailability({
+      status: "checking",
+      message: "Checking username availability...",
+    });
+
+    let isCancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const result = await authClient.isUsernameAvailable({
+          username: normalizedUsername,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        if (result.data?.available) {
+          setUsernameAvailability({
+            status: "available",
+            message: "Username is available.",
+          });
+          return;
+        }
+
+        setUsernameAvailability({
+          status: "taken",
+          message: "That username is already taken.",
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Could not validate username right now.";
+
+        setUsernameAvailability({
+          status: "invalid",
+          message:
+            normalizedUsername.length < 3
+              ? "Username must be at least 3 characters."
+              : message,
+        });
+      }
+    }, 450);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [usernameValue]);
 
   return (
     <div className="flex w-full flex-col items-center">
@@ -234,25 +324,31 @@ export default function SignUpForm({
             )}
           </form.Field>
 
-          <form.Field name="password">
+          <form.Field name="username">
             {(field) => (
               <div className="space-y-1.5">
                 <Label
                   htmlFor={field.name}
                   className="font-medium text-muted-foreground text-xs"
                 >
-                  Password *
+                  Username *
                 </Label>
                 <div className="relative">
                   <Input
                     id={field.name}
                     name={field.name}
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="••••••••••"
+                    placeholder="jane_doe"
                     value={field.state.value}
                     onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    className="h-11 rounded-lg border border-input px-4 pr-10 pl-10 tracking-widest shadow-xs placeholder:tracking-widest"
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      field.handleChange(nextValue);
+                      setUsernameValue(nextValue);
+                    }}
+                    className="h-11 rounded-lg border border-input px-4 pl-10 shadow-xs"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
                   <svg
                     className="absolute top-3 left-3 h-5 w-5 text-muted-foreground/50"
@@ -260,25 +356,14 @@ export default function SignUpForm({
                     viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
-                    <title>password</title>
+                    <title>username</title>
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="1.5"
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                      d="M17 20h5V4H2v16h5m10 0v-2a4 4 0 00-4-4H11a4 4 0 00-4 4v2m10 0H7m10-10a4 4 0 11-8 0 4 4 0 018 0z"
                     />
                   </svg>
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute top-3 right-3 text-muted-foreground/50 transition-colors hover:text-foreground"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-5 w-5 stroke-[1.5]" />
-                    ) : (
-                      <Eye className="h-5 w-5 stroke-[1.5]" />
-                    )}
-                  </button>
                 </div>
                 {field.state.meta.errors.map((error) => (
                   <p
@@ -288,18 +373,32 @@ export default function SignUpForm({
                     {error?.message}
                   </p>
                 ))}
+                {usernameAvailability.message &&
+                field.state.meta.errors.length === 0 ? (
+                  <p
+                    className={`font-medium text-[11px] ${
+                      usernameAvailability.status === "available"
+                        ? "text-primary"
+                        : usernameAvailability.status === "checking"
+                          ? "text-muted-foreground"
+                          : "text-destructive"
+                    }`}
+                  >
+                    {usernameAvailability.message}
+                  </p>
+                ) : null}
               </div>
             )}
           </form.Field>
 
-          <form.Field name="confirmPassword">
+          <form.Field name="password">
             {(field) => (
               <div className="space-y-1.5">
                 <Label
                   htmlFor={field.name}
                   className="font-medium text-muted-foreground text-xs"
                 >
-                  Confirm Password *
+                  Password *
                 </Label>
                 <div className="relative">
                   <Input
@@ -318,7 +417,7 @@ export default function SignUpForm({
                     viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
-                    <title>confirm password</title>
+                    <title>password</title>
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -350,13 +449,77 @@ export default function SignUpForm({
             )}
           </form.Field>
 
+          <form.Field name="confirmPassword">
+            {(field) => (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor={field.name}
+                  className="font-medium text-muted-foreground text-xs"
+                >
+                  Confirm Password *
+                </Label>
+                <div className="relative">
+                  <Input
+                    id={field.name}
+                    name={field.name}
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="••••••••••"
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    className="h-11 rounded-lg border border-input px-4 pr-10 pl-10 tracking-widest shadow-xs placeholder:tracking-widest"
+                  />
+                  <svg
+                    className="absolute top-3 left-3 h-5 w-5 text-muted-foreground/50"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <title>confirm password</title>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.5"
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
+                  </svg>
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute top-3 right-3 text-muted-foreground/50 transition-colors hover:text-foreground"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-5 w-5 stroke-[1.5]" />
+                    ) : (
+                      <Eye className="h-5 w-5 stroke-[1.5]" />
+                    )}
+                  </button>
+                </div>
+                {field.state.meta.errors.map((error) => (
+                  <p
+                    key={error?.message}
+                    className="font-medium text-[11px] text-destructive"
+                  >
+                    {error?.message}
+                  </p>
+                ))}
+              </div>
+            )}
+          </form.Field>
+
           <form.Subscribe>
             {(state) => (
               <Button
                 type="submit"
                 size="lg"
                 className="mt-6 h-12 w-full rounded-lg shadow-md"
-                disabled={!state.canSubmit || state.isSubmitting}
+                disabled={
+                  !state.canSubmit ||
+                  state.isSubmitting ||
+                  usernameAvailability.status === "checking" ||
+                  usernameAvailability.status === "taken" ||
+                  usernameAvailability.status === "invalid"
+                }
               >
                 {state.isSubmitting ? "Creating account..." : "Register"}
               </Button>

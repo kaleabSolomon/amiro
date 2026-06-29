@@ -1,6 +1,7 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth } from "better-auth";
+import { username } from "better-auth/plugins";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
@@ -63,6 +64,7 @@ function createAuth(ctx: GenericCtx<DataModel>) {
         authConfig,
         jwksRotateOnTokenGenerationError: true,
       }),
+      username(),
     ],
   });
 }
@@ -129,6 +131,7 @@ export const getActiveSessions = query({
 export const updateProfile = mutation({
   args: {
     name: v.string(),
+    bio: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const name = args.name.trim();
@@ -137,6 +140,8 @@ export const updateProfile = mutation({
     }
 
     const authUser = await authComponent.getAuthUser(ctx);
+
+    // Update name in better-auth
     await ctx.runMutation(components.betterAuth.adapter.updateOne, {
       input: {
         model: "user",
@@ -144,6 +149,25 @@ export const updateProfile = mutation({
         update: { name },
       },
     });
+
+    // Update bio in userProfiles
+    const existingProfile = await ctx.db
+      .query("userProfiles")
+      .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+      .unique();
+
+    if (existingProfile) {
+      await ctx.db.patch(existingProfile._id, {
+        bio: args.bio?.trim(),
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.insert("userProfiles", {
+        userId: authUser._id,
+        bio: args.bio?.trim(),
+        updatedAt: Date.now(),
+      });
+    }
 
     return { ok: true };
   },
