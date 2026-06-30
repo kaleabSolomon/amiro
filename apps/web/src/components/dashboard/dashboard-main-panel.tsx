@@ -474,9 +474,19 @@ export function DashboardMainPanel({
             <p className="mt-1 text-muted-foreground text-sm">
               {displayedItemCount} saved items · updated{" "}
               {formatRelativeTime(displayedUpdatedAtMs)}
-              {isRecentView
-                ? " · last 7 days"
-                : ` · ${folderIsPublic ? "🌐 Public" : "🔒 Private"}`}
+              {isRecentView ? (
+                " · last 7 days"
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  {" · "}
+                  {folderIsPublic ? (
+                    <Globe2 className="inline h-3.5 w-3.5" />
+                  ) : (
+                    <Lock className="inline h-3.5 w-3.5" />
+                  )}
+                  {folderIsPublic ? " Public" : " Private"}
+                </span>
+              )}
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">

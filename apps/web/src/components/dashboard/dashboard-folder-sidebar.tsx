@@ -2,11 +2,26 @@
 
 import { api } from "@amiro/backend/convex/_generated/api";
 import { useQuery } from "convex/react";
-import { Clock, FolderClosed, Plus, Share, Sparkles } from "lucide-react";
+import {
+  Clock,
+  FolderClosed,
+  LogOut,
+  Plus,
+  Share,
+  Sparkles,
+} from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -22,6 +37,7 @@ import {
   SidebarMenuSkeleton,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { authClient } from "@/lib/auth-client";
 import { NewFolderDialog } from "./new-folder-dialog";
 import type { DashboardFolder } from "./types";
 
@@ -66,6 +82,7 @@ export function DashboardFolderSidebar({
   }) => Promise<void>;
 }) {
   const currentUser = useQuery(api.auth.getCurrentUser);
+  const router = useRouter();
   const profileHref = currentUser?.username
     ? (`/profile/${currentUser.username}` as Route)
     : "/dashboard";
@@ -183,25 +200,49 @@ export function DashboardFolderSidebar({
       </SidebarContent>
       <SidebarFooter>
         <div className="border-sidebar-border border-t pt-2">
-          <Link
-            href={profileHref}
-            className="flex cursor-pointer items-center gap-2 rounded-md p-2 transition-colors hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center"
-          >
-            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-linear-to-br from-[oklch(0.86_0.13_165)]/80 to-[oklch(0.65_0.18_320)]/70 font-semibold text-[oklch(0.2_0.04_165)] text-xs shadow-[0_1px_2px_oklch(0_0_0_/_0.4),0_8px_24px_-12px_oklch(0_0_0_/_0.5)]">
-              {getInitials(currentUser?.name)}
-            </div>
-            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-              <div className="flex items-center gap-1 font-medium text-xs">
-                <span className="truncate">
-                  {currentUser?.name ?? "Profile"}
-                </span>
-                <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex w-full cursor-pointer items-center gap-2 rounded-md p-2 text-left transition-colors hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-linear-to-br from-[oklch(0.86_0.13_165)]/80 to-[oklch(0.65_0.18_320)]/70 font-semibold text-[oklch(0.2_0.04_165)] text-xs shadow-[0_1px_2px_oklch(0_0_0_/_0.4),0_8px_24px_-12px_oklch(0_0_0_/_0.5)]">
+                {getInitials(currentUser?.name)}
               </div>
-              <div className="text-[11px] text-muted-foreground">
+              <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+                <div className="flex items-center gap-1 font-medium text-xs">
+                  <span className="truncate">
+                    {currentUser?.name ?? "Profile"}
+                  </span>
+                  <Sparkles className="h-3 w-3 shrink-0 text-primary" />
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  @{currentUser?.username ?? "user"}
+                </div>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="start"
+              sideOffset={8}
+              className="w-48"
+            >
+              <DropdownMenuItem render={<Link href={profileHref} />}>
+                <Sparkles className="h-4 w-4" />
                 Open profile
-              </div>
-            </div>
-          </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => {
+                  authClient.signOut({
+                    fetchOptions: {
+                      onSuccess: () => router.push("/"),
+                    },
+                  });
+                }}
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </SidebarFooter>
     </Sidebar>
