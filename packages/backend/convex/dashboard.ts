@@ -560,6 +560,57 @@ export const updateBookmarkVisibility = mutation({
   },
 });
 
+export const moveBookmark = mutation({
+  args: {
+    bookmarkId: v.id("syncedBookmarks"),
+    folderId: v.optional(v.id("folders")), // undefined = Unfiled
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const bookmark = await ctx.db.get(args.bookmarkId);
+    if (!bookmark || bookmark.userId !== authUser._id) {
+      throw new ConvexError("Bookmark not found.");
+    }
+
+    let destinationIsPublic = false;
+    if (args.folderId) {
+      const folder = await ctx.db.get(args.folderId);
+      if (!folder || folder.userId !== authUser._id) {
+        throw new ConvexError("Folder not found.");
+      }
+      destinationIsPublic = (folder.visibility ?? "private") === "public";
+    }
+
+    // No-op guard: moving to the folder the bookmark already lives in.
+    if ((bookmark.folderId ?? undefined) === (args.folderId ?? undefined)) {
+      return {
+        id: bookmark._id,
+        folderId: args.folderId ?? null,
+        visibility: bookmark.visibility ?? "private",
+      };
+    }
+
+    // Preserve the invariant that a bookmark may be public only inside a
+    // public folder — downgrade to private when the destination is private
+    // or Unfiled.
+    const nextVisibility = destinationIsPublic
+      ? (bookmark.visibility ?? "private")
+      : "private";
+
+    await ctx.db.patch(bookmark._id, {
+      folderId: args.folderId,
+      visibility: nextVisibility,
+      lastSyncedAt: Date.now(),
+    });
+
+    return {
+      id: bookmark._id,
+      folderId: args.folderId ?? null,
+      visibility: nextVisibility,
+    };
+  },
+});
+
 export const getConnectedSources = query({
   args: {},
   handler: async (ctx) => {
