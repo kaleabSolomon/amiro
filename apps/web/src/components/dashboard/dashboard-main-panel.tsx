@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  FolderInput,
   Globe2,
   Hash,
   Lock,
@@ -20,12 +21,14 @@ import {
 import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { MoveBookmarkDialog } from "@/components/dashboard/move-bookmark-dialog";
 import { NewBookmarkDialog } from "@/components/dashboard/new-bookmark-dialog";
 import { ShareFolderDialog } from "@/components/dashboard/share-folder-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+import { useDashboard } from "./dashboard-context";
 import { formatRelativeTime } from "./time";
 import type { DashboardBookmark, DashboardFolder } from "./types";
 
@@ -182,6 +185,8 @@ export function DashboardMainPanel({
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [recentPage, setRecentPage] = useState(1);
 
+  const { folders } = useDashboard();
+
   const createBookmark = useMutation(api.sync.createBookmark);
   const updateFolderVisibility = useMutation(
     api.dashboard.updateFolderVisibility,
@@ -190,6 +195,7 @@ export function DashboardMainPanel({
     api.dashboard.updateBookmarkVisibility,
   );
   const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
+  const moveBookmark = useMutation(api.dashboard.moveBookmark);
 
   const [creatingBookmark, setCreatingBookmark] = useState(false);
 
@@ -253,6 +259,9 @@ export function DashboardMainPanel({
       ? bookmark.folderVisibility !== "public"
       : !folderIsPublic;
     const canStarBookmark = bookmarkIsPublic && !bookmarkToggleDisabled;
+    const currentFolderId = isRecentView
+      ? (bookmark.folderId ?? "unfiled")
+      : selectedFolder.id;
     const totalSaves = bookmark.totalSaves ?? 0;
     const totalStars = bookmark.totalStars ?? 0;
     const viewerHasStarred = bookmark.viewerHasStarred ?? false;
@@ -434,6 +443,39 @@ export function DashboardMainPanel({
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
+            <MoveBookmarkDialog
+              folders={folders}
+              currentFolderId={currentFolderId}
+              bookmarkIsPublic={bookmarkIsPublic}
+              onMove={async (destinationFolderId) => {
+                try {
+                  await moveBookmark({
+                    bookmarkId: bookmark.id as Id<"syncedBookmarks">,
+                    folderId:
+                      destinationFolderId === "unfiled"
+                        ? undefined
+                        : (destinationFolderId as Id<"folders">),
+                  });
+                  toast.success("Bookmark moved.");
+                } catch (error) {
+                  const message =
+                    error instanceof Error
+                      ? error.message
+                      : "Failed to move bookmark.";
+                  toast.error(message);
+                  throw error;
+                }
+              }}
+              trigger={
+                <button
+                  type="button"
+                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Move bookmark to another folder"
+                >
+                  <FolderInput className="h-3.5 w-3.5" />
+                </button>
+              }
+            />
             <button
               type="button"
               disabled={deletingBookmarkId === bookmark.id}
