@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { components } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import {
@@ -292,6 +293,110 @@ export const getRecentBookmarkCount = query({
       .query("syncedBookmarks")
       .withIndex("by_user_and_last_synced_at", (q) =>
         q.eq("userId", authUser._id).gte("lastSyncedAt", since),
+      )
+      .take(1000);
+
+    return bookmarks.length;
+  },
+});
+
+async function resolveSaverProfiles(ctx: QueryCtx, userIds: Iterable<string>) {
+  const uniqueIds = [...new Set(userIds)];
+  const entries = await Promise.all(
+    uniqueIds.map(async (userId) => {
+      const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "user",
+        where: [{ field: "_id", value: userId }],
+      })) as {
+        _id: string;
+        name?: string | null;
+        username?: string | null;
+        image?: string | null;
+      } | null;
+
+      return [
+        userId,
+        {
+          id: userId,
+          name: user?.name ?? "Amiro user",
+          username: user?.username ?? null,
+          image: user?.image ?? null,
+        },
+      ] as const;
+    }),
+  );
+
+  return new Map(entries);
+}
+
+export const getSharedBookmarks = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return [];
+    }
+
+    const limit = Math.max(1, Math.min(args.limit ?? 120, 200));
+
+    const [folders, bookmarks] = await Promise.all([
+      ctx.db
+        .query("folders")
+        .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+        .collect(),
+      ctx.db
+        .query("syncedBookmarks")
+        .withIndex("by_user_and_saved_at", (q) =>
+          q.eq("userId", authUser._id).gt("savedAt", 0),
+        )
+        .order("desc")
+        .take(limit),
+    ]);
+
+    const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
+    const savers = await resolveSaverProfiles(
+      ctx,
+      bookmarks
+        .map((bookmark) => bookmark.savedFromUserId)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    return await Promise.all(
+      bookmarks.map(async (bookmark) => {
+        const folder = bookmark.folderId
+          ? folderMap.get(bookmark.folderId)
+          : undefined;
+        const saver = bookmark.savedFromUserId
+          ? (savers.get(bookmark.savedFromUserId) ?? null)
+          : null;
+
+        return {
+          ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+          folderId: bookmark.folderId ?? null,
+          folderName: folder?.name ?? "Unfiled",
+          folderVisibility: folder?.visibility ?? "private",
+          savedAt: bookmark.savedAt ?? bookmark.lastSyncedAt,
+          savedFrom: saver,
+        };
+      }),
+    );
+  },
+});
+
+export const getSharedBookmarkCount = query({
+  args: {},
+  handler: async (ctx) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return 0;
+    }
+
+    const bookmarks = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_saved_at", (q) =>
+        q.eq("userId", authUser._id).gt("savedAt", 0),
       )
       .take(1000);
 

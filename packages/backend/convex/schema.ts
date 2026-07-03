@@ -176,6 +176,11 @@ export default defineSchema({
     ),
     folderId: v.optional(v.id("folders")),
     visibility: v.optional(v.union(v.literal("private"), v.literal("public"))),
+    // When this bookmark was saved from someone else's shared/public bookmark,
+    // these record who it came from and when. The saver fully owns this copy —
+    // it is not a hard link to the original. Absent for self-created bookmarks.
+    savedFromUserId: v.optional(v.string()),
+    savedAt: v.optional(v.number()),
     url: v.string(),
     title: v.string(),
     text: v.optional(v.string()),
@@ -198,6 +203,7 @@ export default defineSchema({
     .index("by_user_and_source_and_url", ["userId", "source", "url"])
     .index("by_user_and_folder", ["userId", "folderId"])
     .index("by_user_and_last_synced_at", ["userId", "lastSyncedAt"])
+    .index("by_user_and_saved_at", ["userId", "savedAt"])
     .searchIndex("search_by_user_document", {
       searchField: "searchDocument",
       filterFields: ["userId"],

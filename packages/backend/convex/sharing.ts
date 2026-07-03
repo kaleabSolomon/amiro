@@ -673,18 +673,30 @@ export const saveFromShare = mutation({
 
     let attributedCount = 0;
     for (const bookmark of bookmarks) {
-      await ctx.runMutation(internal.sync.upsertCaptureFromExtension, {
-        userId: authUser._id,
-        source: bookmark.source,
-        folderId: args.destinationFolderId,
-        url: bookmark.url,
-        title: bookmark.title,
-        text: bookmark.text,
-        additionalLinks: bookmark.childLinks,
-        tags: bookmark.tags,
-        capturedAt: new Date(now).toISOString(),
-        visibility: "private",
-      });
+      const saved = (await ctx.runMutation(
+        internal.sync.upsertCaptureFromExtension,
+        {
+          userId: authUser._id,
+          source: bookmark.source,
+          folderId: args.destinationFolderId,
+          url: bookmark.url,
+          title: bookmark.title,
+          text: bookmark.text,
+          additionalLinks: bookmark.childLinks,
+          tags: bookmark.tags,
+          capturedAt: new Date(now).toISOString(),
+          visibility: "private",
+        },
+      )) as { id: Id<"syncedBookmarks"> };
+
+      // Record that this copy was saved from someone else so it surfaces in
+      // "Shared with me". Skip when saving from your own share.
+      if (bookmark.userId !== authUser._id) {
+        await ctx.db.patch(saved.id, {
+          savedFromUserId: bookmark.userId,
+          savedAt: now,
+        });
+      }
 
       const attributed = await recordSaveAttribution(ctx, {
         share,
@@ -733,6 +745,13 @@ export const savePublicBookmark = mutation({
         visibility: "private",
       },
     )) as { id: Id<"syncedBookmarks"> };
+
+    // Record that this copy was saved from someone else so it surfaces in
+    // "Shared with me". The self-owned case is rejected above.
+    await ctx.db.patch(savedBookmark.id, {
+      savedFromUserId: bookmark.userId,
+      savedAt: now,
+    });
 
     const [existingClaim, existingShareClaim] = await Promise.all([
       ctx.db
