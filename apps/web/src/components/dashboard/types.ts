@@ -29,6 +29,13 @@ export type DashboardBookmark = {
   totalSaves?: number;
   totalStars?: number;
   viewerHasStarred?: boolean;
+  savedAt?: number;
+  savedFrom?: {
+    id: string;
+    name: string;
+    username: string | null;
+    image: string | null;
+  } | null;
   capturedAt: number;
   lastSyncedAt: number;
 };

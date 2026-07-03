@@ -75,17 +75,20 @@ function formatDayHeading(timestamp: number) {
   }).format(date);
 }
 
-function groupBookmarksByDay(bookmarks: DashboardBookmark[]) {
+function groupBookmarksByDay(
+  bookmarks: DashboardBookmark[],
+  getTimestamp: (bookmark: DashboardBookmark) => number,
+) {
   const groups = new Map<string, DashboardBookmark[]>();
 
   for (const bookmark of bookmarks) {
-    const key = getDayKey(bookmark.lastSyncedAt);
+    const key = getDayKey(getTimestamp(bookmark));
     groups.set(key, [...(groups.get(key) ?? []), bookmark]);
   }
 
   return [...groups.entries()].map(([key, items]) => ({
     key,
-    label: formatDayHeading(items[0]?.lastSyncedAt ?? Date.now()),
+    label: formatDayHeading(items[0] ? getTimestamp(items[0]) : Date.now()),
     bookmarks: items,
   }));
 }
@@ -217,13 +220,24 @@ export function DashboardMainPanel({
   }, [bookmarks, activeTag]);
 
   const isRecentView = selectedFolder.id === "recent";
+  const isSharedView = selectedFolder.id === "shared";
+  const isFeedView = isRecentView || isSharedView;
   const folderIsPublic = selectedFolder.visibility === "public";
   const folderVisibilityLocked = selectedFolder.id === "unfiled";
-  const displayedItemCount = isRecentView
+  const feedTimestamp = useMemo(
+    () => (bookmark: DashboardBookmark) =>
+      isSharedView
+        ? (bookmark.savedAt ?? bookmark.lastSyncedAt)
+        : bookmark.lastSyncedAt,
+    [isSharedView],
+  );
+  const displayedItemCount = isFeedView
     ? bookmarks.length
     : selectedFolder.itemCount;
-  const displayedUpdatedAtMs = isRecentView
-    ? (bookmarks[0]?.lastSyncedAt ?? null)
+  const displayedUpdatedAtMs = isFeedView
+    ? bookmarks[0]
+      ? feedTimestamp(bookmarks[0])
+      : null
     : selectedFolder.updatedAtMs;
   const recentPageCount = Math.max(
     1,
@@ -238,28 +252,28 @@ export function DashboardMainPanel({
     if (sortBy === "Most saved") {
       return next.sort((a, b) => (b.totalSaves ?? 0) - (a.totalSaves ?? 0));
     }
-    return next.sort((a, b) => b.lastSyncedAt - a.lastSyncedAt);
-  }, [filteredBookmarks, sortBy]);
-  const visibleBookmarks = isRecentView
+    return next.sort((a, b) => feedTimestamp(b) - feedTimestamp(a));
+  }, [filteredBookmarks, sortBy, feedTimestamp]);
+  const visibleBookmarks = isFeedView
     ? sortedBookmarks.slice(
         (safeRecentPage - 1) * RECENT_PAGE_SIZE,
         safeRecentPage * RECENT_PAGE_SIZE,
       )
     : sortedBookmarks;
-  const recentBookmarkGroups = useMemo(
-    () => groupBookmarksByDay(visibleBookmarks),
-    [visibleBookmarks],
+  const feedBookmarkGroups = useMemo(
+    () => groupBookmarksByDay(visibleBookmarks, feedTimestamp),
+    [visibleBookmarks, feedTimestamp],
   );
 
   function renderBookmarkRow(bookmark: DashboardBookmark) {
     const domain = getDomain(bookmark.url);
     const letter = getLetterAvatar(bookmark.url);
     const bookmarkIsPublic = bookmark.visibility === "public";
-    const bookmarkToggleDisabled = isRecentView
+    const bookmarkToggleDisabled = isFeedView
       ? bookmark.folderVisibility !== "public"
       : !folderIsPublic;
     const canStarBookmark = bookmarkIsPublic && !bookmarkToggleDisabled;
-    const currentFolderId = isRecentView
+    const currentFolderId = isFeedView
       ? (bookmark.folderId ?? "unfiled")
       : selectedFolder.id;
     const totalSaves = bookmark.totalSaves ?? 0;
@@ -353,9 +367,21 @@ export function DashboardMainPanel({
             {domain}
           </p>
 
-          {isRecentView && bookmark.folderName ? (
+          {isFeedView && bookmark.folderName ? (
             <p className="mt-1 text-muted-foreground text-xs">
-              {bookmark.folderName}
+              {isSharedView && bookmark.savedFrom ? (
+                <>
+                  Saved from{" "}
+                  <span className="font-medium text-foreground/80">
+                    {bookmark.savedFrom.username
+                      ? `@${bookmark.savedFrom.username}`
+                      : bookmark.savedFrom.name}
+                  </span>{" "}
+                  · {bookmark.folderName}
+                </>
+              ) : (
+                bookmark.folderName
+              )}
             </p>
           ) : null}
 
@@ -518,6 +544,8 @@ export function DashboardMainPanel({
               {formatRelativeTime(displayedUpdatedAtMs)}
               {isRecentView ? (
                 " · last 7 days"
+              ) : isSharedView ? (
+                " · saved from others"
               ) : (
                 <span className="inline-flex items-center gap-1">
                   {" · "}
@@ -544,7 +572,7 @@ export function DashboardMainPanel({
             </div>
           </div>
 
-          {!isRecentView ? (
+          {!isFeedView ? (
             <div className="flex shrink-0 items-center gap-2">
               <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
                 <VisibilityToggle
@@ -652,7 +680,9 @@ export function DashboardMainPanel({
         <p className="mb-4 font-medium text-muted-foreground text-sm">
           {isRecentView
             ? "Recent bookmarks from the last 7 days"
-            : `Bookmarks in ${selectedFolder.name}`}
+            : isSharedView
+              ? "Bookmarks you saved from others"
+              : `Bookmarks in ${selectedFolder.name}`}
         </p>
 
         {bookmarksLoading ? (
@@ -663,7 +693,11 @@ export function DashboardMainPanel({
           ))
         ) : bookmarks.length === 0 ? (
           <div className="rounded-xl border border-border border-dashed p-6 text-center text-muted-foreground text-sm">
-            No bookmarks in this folder yet.
+            {isRecentView
+              ? "No bookmarks saved in the last 7 days."
+              : isSharedView
+                ? "Nothing here yet. Bookmarks you save from other people will show up here."
+                : "No bookmarks in this folder yet."}
           </div>
         ) : (
           <div className="rounded-xl border border-border/60 bg-card/50">
@@ -748,9 +782,9 @@ export function DashboardMainPanel({
               </div>
             </div>
 
-            {isRecentView ? (
+            {isFeedView ? (
               <div>
-                {recentBookmarkGroups.map((group, index) => (
+                {feedBookmarkGroups.map((group, index) => (
                   <section
                     key={group.key}
                     className={cn(index > 0 && "border-border/60 border-t")}
@@ -776,7 +810,7 @@ export function DashboardMainPanel({
               </div>
             )}
 
-            {isRecentView && recentPageCount > 1 ? (
+            {isFeedView && recentPageCount > 1 ? (
               <div className="flex items-center justify-between border-border/60 border-t px-5 py-3">
                 <p className="text-muted-foreground text-xs">
                   Page {safeRecentPage} of {recentPageCount}

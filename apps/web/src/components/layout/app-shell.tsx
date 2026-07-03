@@ -17,6 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     selectedFolderId,
     foldersLoading,
     recentCount,
+    sharedCount,
     selectFolder,
   } = useDashboard();
   const createFolder = useMutation(api.dashboard.createFolder);
@@ -61,6 +62,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         selectedFolderId={selectedFolderId}
         isLoading={foldersLoading}
         recentCount={recentCount}
+        sharedCount={sharedCount}
         creatingFolder={creatingFolder}
         onSelectFolder={selectFolder}
         onCreateFolder={handleCreateFolder}

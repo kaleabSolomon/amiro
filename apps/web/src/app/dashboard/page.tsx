@@ -61,19 +61,40 @@ function FolderWorkspace() {
           itemCount: 0,
           updatedAtMs: null,
         }
-      : (folderMap.get(selectedFolderId) ?? folders[0]);
+      : selectedFolderId === "shared"
+        ? {
+            id: "shared",
+            name: "Shared with me",
+            icon: "🔗",
+            visibility: "private",
+            parentId: null,
+            tags: [],
+            itemCount: 0,
+            updatedAtMs: null,
+          }
+        : (folderMap.get(selectedFolderId) ?? folders[0]);
   const breadcrumbs = useMemo(() => [selectedFolder], [selectedFolder]);
 
+  const isFeedView =
+    selectedFolderId === "recent" || selectedFolderId === "shared";
   const folderBookmarks = useQuery(
     api.dashboard.getBookmarksForFolder,
-    selectedFolderId === "recent" ? "skip" : { folderId: selectedFolderId },
+    isFeedView ? "skip" : { folderId: selectedFolderId },
   );
   const recentBookmarks = useQuery(
     api.dashboard.getRecentBookmarks,
     selectedFolderId === "recent" ? { days: 7, limit: 120 } : "skip",
   );
+  const sharedBookmarks = useQuery(
+    api.dashboard.getSharedBookmarks,
+    selectedFolderId === "shared" ? { limit: 120 } : "skip",
+  );
   const bookmarks =
-    selectedFolderId === "recent" ? recentBookmarks : folderBookmarks;
+    selectedFolderId === "recent"
+      ? recentBookmarks
+      : selectedFolderId === "shared"
+        ? sharedBookmarks
+        : folderBookmarks;
   const bookmarksLoading = bookmarks === undefined;
 
   const deleteBookmark = useMutation(api.dashboard.deleteBookmark);

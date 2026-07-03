@@ -32,6 +32,7 @@ interface DashboardContextValue {
   folders: DashboardFolder[];
   foldersLoading: boolean;
   recentCount: number;
+  sharedCount: number;
   commandPalette: CommandPaletteState;
 }
 
@@ -51,6 +52,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const recentCountQuery = useQuery(api.dashboard.getRecentBookmarkCount, {
     days: 7,
   });
+  const sharedCountQuery = useQuery(api.dashboard.getSharedBookmarkCount);
   const foldersLoading = foldersQuery === undefined;
 
   const folders = useMemo<DashboardFolder[]>(() => {
@@ -79,7 +81,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Auto-correct if selected folder no longer exists
   useEffect(() => {
-    if (selectedFolderId === "recent") {
+    if (selectedFolderId === "recent" || selectedFolderId === "shared") {
       return;
     }
     if (!folderMap.has(selectedFolderId) && folders.length > 0) {
@@ -190,6 +192,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       folders,
       foldersLoading,
       recentCount: recentCountQuery ?? 0,
+      sharedCount: sharedCountQuery ?? 0,
       commandPalette,
     }),
     [
@@ -198,6 +201,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       folders,
       foldersLoading,
       recentCountQuery,
+      sharedCountQuery,
       commandPalette,
     ],
   );

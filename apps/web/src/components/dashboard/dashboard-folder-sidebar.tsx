@@ -64,6 +64,7 @@ export function DashboardFolderSidebar({
   isLoading = false,
   loadingFallback,
   recentCount = 0,
+  sharedCount = 0,
   creatingFolder = false,
   onSelectFolder,
   onCreateFolder,
@@ -73,6 +74,7 @@ export function DashboardFolderSidebar({
   isLoading?: boolean;
   loadingFallback?: ReactNode;
   recentCount?: number;
+  sharedCount?: number;
   creatingFolder?: boolean;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (input: {
@@ -137,7 +139,7 @@ export function DashboardFolderSidebar({
                   <Share className="h-4 w-4 text-sidebar-foreground/40" />
                   <span>Shared with me</span>
                 </SidebarMenuButton>
-                <SidebarMenuBadge>10</SidebarMenuBadge>
+                <SidebarMenuBadge>{sharedCount}</SidebarMenuBadge>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
