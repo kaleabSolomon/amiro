@@ -196,6 +196,13 @@ export default defineSchema({
     ),
     searchDocument: v.optional(v.string()),
     tags: v.array(v.string()),
+    // --- AI tagging fields ---
+    // Normalized URL used as cache key for tag dedup across users.
+    canonicalUrl: v.optional(v.string()),
+    // Tracks whether AI topical tagging has been applied.
+    tagStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("tagged"), v.literal("skipped")),
+    ),
     capturedAt: v.number(),
     lastSyncedAt: v.number(),
   })
@@ -204,6 +211,8 @@ export default defineSchema({
     .index("by_user_and_folder", ["userId", "folderId"])
     .index("by_user_and_last_synced_at", ["userId", "lastSyncedAt"])
     .index("by_user_and_saved_at", ["userId", "savedAt"])
+    // Used by the tagging cron to find bookmarks awaiting AI topic tags.
+    .index("by_tag_status", ["tagStatus"])
     .searchIndex("search_by_user_document", {
       searchField: "searchDocument",
       filterFields: ["userId"],
@@ -232,4 +241,19 @@ export default defineSchema({
   })
     .index("by_recipient_and_created_at", ["recipientId", "createdAt"])
     .index("by_recipient_and_read", ["recipientId", "read"]),
+  // --- AI tagging infrastructure ---
+  // Caches AI-generated topic tags keyed by canonical URL. When the exact same
+  // link is saved by multiple users the cache hit avoids a redundant AI call.
+  urlTagCache: defineTable({
+    canonicalUrl: v.string(),
+    // Only topic:* tags are cached (heuristic type:* tags are free to recompute).
+    tags: v.array(v.string()),
+    hitCount: v.number(),
+    lastSeenAt: v.number(),
+  }).index("by_canonical_url", ["canonicalUrl"]),
+  // Single-doc-per-day counter that enforces the free-tier daily request cap.
+  taggingQuota: defineTable({
+    dayKey: v.string(),
+    requestCount: v.number(),
+  }).index("by_day", ["dayKey"]),
 });
