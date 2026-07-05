@@ -3,6 +3,8 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { authComponent } from "./auth";
+import { heuristicTypeTags } from "./lib/heuristic-tags";
+import { canonicalizeUrl } from "./lib/url-canonical";
 
 const sourceValidator = v.union(
   v.literal("chrome"),
@@ -60,29 +62,6 @@ function normalizeChildLinks(
   }
 
   return [...deduped.values()];
-}
-
-function buildDefaultTags(args: {
-  source: "chrome" | "telegram" | "instagram" | "twitter";
-  url: string;
-  capturedAtMs: number;
-}) {
-  const tags = new Set<string>();
-  tags.add(`source:${args.source}`);
-
-  try {
-    const hostname = new URL(args.url).hostname.replace(/^www\./, "");
-    if (hostname) {
-      tags.add(`domain:${hostname}`);
-    }
-  } catch {
-    // Ignore invalid URLs for derived domain tags.
-  }
-
-  const month = new Date(args.capturedAtMs).toISOString().slice(0, 7);
-  tags.add(`captured:${month}`);
-
-  return [...tags];
 }
 
 function buildSearchDocument(args: {
@@ -157,15 +136,35 @@ export const upsertCaptureFromExtension = internalMutation({
       }
     }
 
-    const defaultTags = buildDefaultTags({
-      source: args.source,
-      url: args.url,
-      capturedAtMs,
-    });
+    const { canonicalUrl } = canonicalizeUrl(args.url);
+    const typeTags = heuristicTypeTags(args.url);
+
+    // Check URL tag cache for previously-computed topic:* tags
+    let cachedTopicTags: string[] = [];
+    let tagStatus: "pending" | "tagged" = "pending";
+
+    if (canonicalUrl) {
+      const cached = await ctx.db
+        .query("urlTagCache")
+        .withIndex("by_canonical_url", (q) =>
+          q.eq("canonicalUrl", canonicalUrl),
+        )
+        .unique();
+
+      if (cached) {
+        cachedTopicTags = cached.tags;
+        tagStatus = "tagged";
+        await ctx.db.patch(cached._id, {
+          hitCount: cached.hitCount + 1,
+          lastSeenAt: Date.now(),
+        });
+      }
+    }
+
     const childLinks = normalizeChildLinks(args.additionalLinks);
     const mergedTags = [
       ...new Set(
-        [...args.tags, ...defaultTags]
+        [...args.tags, ...typeTags, ...cachedTopicTags]
           .map(normalizeTag)
           .filter((tag) => tag.length > 0),
       ),
@@ -199,6 +198,8 @@ export const upsertCaptureFromExtension = internalMutation({
         childLinks,
         searchDocument,
         tags: mergedTags,
+        canonicalUrl: canonicalUrl || undefined,
+        tagStatus: existing.tagStatus === "tagged" ? "tagged" : tagStatus,
         capturedAt: capturedAtMs,
         lastSyncedAt: now,
       });
@@ -220,6 +221,8 @@ export const upsertCaptureFromExtension = internalMutation({
       childLinks,
       searchDocument,
       tags: mergedTags,
+      canonicalUrl: canonicalUrl || undefined,
+      tagStatus,
       capturedAt: capturedAtMs,
       lastSyncedAt: now,
     });
