@@ -13,6 +13,7 @@ import {
   FolderInput,
   Globe2,
   Hash,
+  Loader2,
   Lock,
   Plus,
   Star,
@@ -29,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { useDashboard } from "./dashboard-context";
+import { type DisplayTag, tagFacetClass, toDisplayTags } from "./tag-display";
 import { formatRelativeTime } from "./time";
 import type { DashboardBookmark, DashboardFolder } from "./types";
 
@@ -202,15 +204,20 @@ export function DashboardMainPanel({
 
   const [creatingBookmark, setCreatingBookmark] = useState(false);
 
-  /* Collect unique tags from bookmarks for the filter bar */
+  /* Collect unique tags from bookmarks for the filter bar (legacy chips hidden,
+     facet prefixes stripped for display; `raw` drives filtering). */
   const allTags = useMemo(() => {
-    const tagSet = new Set<string>();
+    const seen = new Set<string>();
+    const out: DisplayTag[] = [];
     for (const bookmark of bookmarks) {
-      for (const tag of bookmark.tags) {
-        tagSet.add(tag);
+      for (const display of toDisplayTags(bookmark.tags)) {
+        if (!seen.has(display.raw)) {
+          seen.add(display.raw);
+          out.push(display);
+        }
       }
     }
-    return Array.from(tagSet);
+    return out;
   }, [bookmarks]);
 
   /* Filter bookmarks by active tag */
@@ -392,14 +399,28 @@ export function DashboardMainPanel({
           ) : null}
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {bookmark.tags.slice(0, 4).map((tag) => (
+            {toDisplayTags(bookmark.tags)
+              .slice(0, 4)
+              .map((tag) => (
+                <span
+                  key={tag.raw}
+                  className={cn(
+                    "inline-flex items-center gap-0.5 rounded-full border px-2 py-0.5 font-medium text-[11px]",
+                    tagFacetClass(tag.facet),
+                  )}
+                >
+                  {tag.label}
+                </span>
+              ))}
+            {bookmark.tagStatus === "pending" ? (
               <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-muted/80 px-2 py-0.5 font-medium text-[11px] text-muted-foreground"
+                className="inline-flex items-center gap-1 rounded-full border border-border/60 border-dashed px-2 py-0.5 font-medium text-[11px] text-muted-foreground/70"
+                title="AI is picking topic tags for this bookmark"
               >
-                # {tag}
+                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                tagging…
               </span>
-            ))}
+            ) : null}
             <span className="text-[11px] text-muted-foreground/60">
               {formatRelativeTime(bookmark.capturedAt)}
             </span>
@@ -560,13 +581,16 @@ export function DashboardMainPanel({
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {selectedFolder.tags.map((tag) => (
+              {toDisplayTags(selectedFolder.tags).map((tag) => (
                 <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 rounded-full border border-border/80 bg-muted px-2.5 py-1 font-medium text-[11px] text-muted-foreground"
+                  key={tag.raw}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-medium text-[11px]",
+                    tagFacetClass(tag.facet),
+                  )}
                 >
-                  <Hash className="h-3 w-3" />
-                  {tag}
+                  {tag.facet === "plain" ? <Hash className="h-3 w-3" /> : null}
+                  {tag.label}
                 </span>
               ))}
             </div>
@@ -721,19 +745,20 @@ export function DashboardMainPanel({
                 </button>
                 {allTags.map((tag) => (
                   <button
-                    key={tag}
+                    key={tag.raw}
                     type="button"
                     onClick={() => {
-                      setActiveTag(activeTag === tag ? null : tag);
+                      setActiveTag(activeTag === tag.raw ? null : tag.raw);
                       setRecentPage(1);
                     }}
-                    className={`rounded-full px-3 py-1 font-medium text-xs transition-colors ${
-                      activeTag === tag
-                        ? "bg-foreground text-background"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
+                    className={cn(
+                      "rounded-full border px-3 py-1 font-medium text-xs transition-colors",
+                      activeTag === tag.raw
+                        ? "border-transparent bg-foreground text-background"
+                        : cn(tagFacetClass(tag.facet), "hover:opacity-80"),
+                    )}
                   >
-                    #{tag}
+                    {tag.label}
                   </button>
                 ))}
               </div>

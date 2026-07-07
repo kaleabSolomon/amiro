@@ -54,6 +54,7 @@ function mapBookmark(bookmark: {
   tags: string[];
   source: "chrome" | "telegram" | "instagram" | "twitter";
   visibility?: "private" | "public";
+  tagStatus?: "pending" | "tagged" | "skipped";
   capturedAt: number;
   lastSyncedAt: number;
 }) {
@@ -66,6 +67,7 @@ function mapBookmark(bookmark: {
     tags: bookmark.tags,
     source: bookmark.source,
     visibility: bookmark.visibility ?? "private",
+    tagStatus: bookmark.tagStatus,
     capturedAt: bookmark.capturedAt,
     lastSyncedAt: bookmark.lastSyncedAt,
   };

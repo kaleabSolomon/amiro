@@ -8,6 +8,8 @@ import {
   internalQuery,
 } from "./_generated/server";
 import { classifyTopics, RateLimitedError, type TagItem } from "./ai/gemini";
+import { heuristicTypeTags } from "./lib/heuristic_tags";
+import { canonicalizeUrl } from "./lib/url_canonical";
 import { buildSearchDocument, normalizeTag } from "./sync";
 
 // How many pending bookmarks one cron tick pulls. One batch → one AI request.
@@ -312,6 +314,114 @@ export const runTaggingBatch = internalAction({
       groups: groups.size,
       applied: applyItems.length,
       requestsMade,
+    };
+  },
+});
+
+// ── One-time backfill / cleanup migration ────────────────────────────────────
+
+// Legacy chip prefixes retired by the two-layer tag model. Stripped on backfill.
+const LEGACY_TAG_PREFIXES = ["source:", "domain:", "captured:"];
+const BACKFILL_PAGE_SIZE = 100;
+
+/**
+ * One-time migration to bring existing bookmarks onto the two-layer tag model.
+ *
+ * For each row it: strips legacy `source:`/`domain:`/`captured:` chips, recomputes
+ * `canonicalUrl` + heuristic `type:*` tags, rebuilds `searchDocument`, and requeues
+ * `tagStatus: "pending"` for rows that have no `topic:*` yet (so the cron enriches
+ * them over time, throttled by the daily quota). Rows already carrying a `topic:*`
+ * become `tagged`; rows already in the pipeline keep their status.
+ *
+ * Paginated and idempotent: unchanged rows are not rewritten, so it's safe to run
+ * repeatedly. Pass `autoContinue: true` (the default) to self-schedule through the
+ * whole table from a single kickoff; the response also returns the cursor for
+ * manual paging.
+ *
+ * Kick off from the dashboard / CLI:
+ *   npx convex run tagging:backfillTags
+ */
+export const backfillTags = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+    autoContinue: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const numItems = args.batchSize ?? BACKFILL_PAGE_SIZE;
+    const autoContinue = args.autoContinue ?? true;
+
+    const page = await ctx.db
+      .query("syncedBookmarks")
+      .paginate({ cursor: args.cursor ?? null, numItems });
+
+    let updated = 0;
+    for (const bookmark of page.page) {
+      const kept = bookmark.tags.filter(
+        (t) => !LEGACY_TAG_PREFIXES.some((p) => t.startsWith(p)),
+      );
+      const { canonicalUrl } = canonicalizeUrl(bookmark.url);
+      const typeTags = heuristicTypeTags(bookmark.url);
+
+      const mergedTags = [
+        ...new Set(
+          [...kept, ...typeTags].map(normalizeTag).filter((t) => t.length > 0),
+        ),
+      ];
+
+      const hasTopic = mergedTags.some((t) => t.startsWith("topic:"));
+      // Has a topic → tagged. Otherwise keep any status already assigned by the
+      // pipeline (don't churn `skipped`/`pending`); legacy rows (no status) get
+      // queued as `pending` so the cron can enrich them.
+      const nextStatus: "pending" | "tagged" | "skipped" = hasTopic
+        ? "tagged"
+        : (bookmark.tagStatus ?? "pending");
+
+      const nextCanonical = canonicalUrl || undefined;
+      const tagsChanged =
+        mergedTags.length !== bookmark.tags.length ||
+        mergedTags.some((t, i) => t !== bookmark.tags[i]);
+      const canonicalChanged =
+        (bookmark.canonicalUrl ?? undefined) !== nextCanonical;
+      const statusChanged = (bookmark.tagStatus ?? undefined) !== nextStatus;
+
+      // searchDocument is derived from tags — only recompute/write when something
+      // actually changed, so reruns over clean rows are free.
+      if (!(tagsChanged || canonicalChanged || statusChanged)) {
+        continue;
+      }
+
+      const searchDocument = buildSearchDocument({
+        source: bookmark.source,
+        url: bookmark.url,
+        title: bookmark.title,
+        text: bookmark.text,
+        tags: mergedTags,
+        childLinks: bookmark.childLinks,
+      });
+
+      await ctx.db.patch(bookmark._id, {
+        tags: mergedTags,
+        canonicalUrl: nextCanonical,
+        tagStatus: nextStatus,
+        searchDocument,
+      });
+      updated++;
+    }
+
+    if (!page.isDone && autoContinue) {
+      await ctx.scheduler.runAfter(0, internal.tagging.backfillTags, {
+        cursor: page.continueCursor,
+        batchSize: numItems,
+        autoContinue: true,
+      });
+    }
+
+    return {
+      processed: page.page.length,
+      updated,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
     };
   },
 });

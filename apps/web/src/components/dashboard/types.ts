@@ -23,6 +23,7 @@ export type DashboardBookmark = {
   tags: string[];
   source: "chrome" | "telegram" | "instagram" | "twitter";
   visibility: "private" | "public";
+  tagStatus?: "pending" | "tagged" | "skipped";
   folderId?: string | null;
   folderName?: string;
   folderVisibility?: "private" | "public";
