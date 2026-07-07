@@ -1,9 +1,9 @@
-import { heuristicTypeTags } from "./heuristic-tags";
+import { heuristicTypeTags } from "./heuristic_tags";
 
 /**
  * Table-driven tests for heuristic format tags.
  *
- * Run with: npx -y tsx packages/backend/convex/lib/heuristic-tags.test.ts
+ * Run with: npx -y tsx packages/backend/convex/lib/heuristic_tags.test.ts
  */
 
 type TestCase = {

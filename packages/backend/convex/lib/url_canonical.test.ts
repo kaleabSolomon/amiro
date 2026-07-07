@@ -1,9 +1,9 @@
-import { canonicalizeUrl } from "./url-canonical";
+import { canonicalizeUrl } from "./url_canonical";
 
 /**
  * Table-driven tests for URL canonicalization.
  *
- * Run with: npx tsx packages/backend/convex/lib/url-canonical.test.ts
+ * Run with: npx tsx packages/backend/convex/lib/url_canonical.test.ts
  */
 
 type TestCase = {

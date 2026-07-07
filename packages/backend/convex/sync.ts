@@ -3,8 +3,8 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { authComponent } from "./auth";
-import { heuristicTypeTags } from "./lib/heuristic-tags";
-import { canonicalizeUrl } from "./lib/url-canonical";
+import { heuristicTypeTags } from "./lib/heuristic_tags";
+import { canonicalizeUrl } from "./lib/url_canonical";
 
 const sourceValidator = v.union(
   v.literal("chrome"),
@@ -14,7 +14,7 @@ const sourceValidator = v.union(
 );
 const visibilityValidator = v.union(v.literal("private"), v.literal("public"));
 
-function normalizeTag(tag: string) {
+export function normalizeTag(tag: string) {
   return tag.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
@@ -64,7 +64,7 @@ function normalizeChildLinks(
   return [...deduped.values()];
 }
 
-function buildSearchDocument(args: {
+export function buildSearchDocument(args: {
   source: "chrome" | "telegram" | "instagram" | "twitter";
   url: string;
   title: string;
