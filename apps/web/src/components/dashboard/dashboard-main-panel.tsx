@@ -9,11 +9,11 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   ExternalLink,
   FolderInput,
   Globe2,
   Hash,
-  Loader2,
   Lock,
   Plus,
   Star,
@@ -26,6 +26,11 @@ import { MoveBookmarkDialog } from "@/components/dashboard/move-bookmark-dialog"
 import { NewBookmarkDialog } from "@/components/dashboard/new-bookmark-dialog";
 import { ShareFolderDialog } from "@/components/dashboard/share-folder-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  CustomTooltip,
+  CustomTooltipContent,
+  CustomTooltipTrigger,
+} from "@/components/ui/custom-tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -413,13 +418,19 @@ export function DashboardMainPanel({
                 </span>
               ))}
             {bookmark.tagStatus === "pending" ? (
-              <span
-                className="inline-flex items-center gap-1 rounded-full border border-border/60 border-dashed px-2 py-0.5 font-medium text-[11px] text-muted-foreground/70"
-                title="AI is picking topic tags for this bookmark"
-              >
-                <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                tagging…
-              </span>
+              <CustomTooltip>
+                <CustomTooltipTrigger
+                  render={
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border/60 border-dashed px-2 py-0.5 font-medium text-[11px] text-muted-foreground/70" />
+                  }
+                >
+                  <Clock className="h-2.5 w-2.5" />
+                  to be tagged
+                </CustomTooltipTrigger>
+                <CustomTooltipContent>
+                  Queued for topic tagging on the next run
+                </CustomTooltipContent>
+              </CustomTooltip>
             ) : null}
             <span className="text-[11px] text-muted-foreground/60">
               {formatRelativeTime(bookmark.capturedAt)}
