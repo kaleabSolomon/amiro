@@ -2,23 +2,21 @@
 
 import { api } from "@amiro/backend/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { Bell, FolderPlus, User } from "lucide-react";
-import type { Route } from "next";
-import Link from "next/link";
+import { Bell, FolderPlus } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
 import { useDashboard } from "@/components/dashboard/dashboard-context";
 import { NewFolderDialog } from "@/components/dashboard/new-folder-dialog";
 import { ModeToggle } from "@/components/mode-toggle";
+import { NotificationPanel } from "@/components/notifications/notification-panel";
 import { Button } from "@/components/ui/button";
 
 export function AppNav() {
   const { commandPalette } = useDashboard();
   const createFolder = useMutation(api.dashboard.createFolder);
-  const currentUser = useQuery(api.auth.getCurrentUser);
-  const profileHref = currentUser?.username
-    ? (`/profile/${currentUser.username}` as Route)
-    : "/dashboard";
+
+  const unreadCountResponse = useQuery(api.notifications.getUnreadCount);
+  const unreadCount = unreadCountResponse?.count ?? 0;
 
   return (
     <nav className="sticky top-0 z-40 border-foreground-muted/20 border-b bg-background/80 backdrop-blur-md">
@@ -37,14 +35,6 @@ export function AppNav() {
         />
 
         <div className="flex shrink-0 items-center gap-1">
-          <Link
-            href={profileHref}
-            className="inline-flex items-center gap-2 rounded-md px-2 py-2 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground sm:px-3"
-          >
-            <User className="h-4 w-4" />
-            <span className="hidden sm:inline">My profile</span>
-          </Link>
-
           <NewFolderDialog
             onCreateFolder={async (input) => {
               await createFolder({
@@ -65,9 +55,23 @@ export function AppNav() {
 
           <ModeToggle />
 
-          <Button variant="ghost" size="icon" aria-label="Notifications">
-            <Bell className="h-[1.2rem] w-[1.2rem]" />
-          </Button>
+          <NotificationPanel
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Notifications"
+                className="relative"
+              >
+                <Bell className="h-[1.2rem] w-[1.2rem]" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 font-medium text-[10px] text-destructive-foreground">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </Button>
+            }
+          />
         </div>
       </div>
     </nav>

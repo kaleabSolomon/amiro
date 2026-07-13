@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as ai_gemini from "../ai/gemini.js";
 import type * as auth from "../auth.js";
+import type * as crons from "../crons.js";
 import type * as dashboard from "../dashboard.js";
 import type * as email_sendPasswordResetEmail from "../email/sendPasswordResetEmail.js";
 import type * as email_sendVerificationEmail from "../email/sendVerificationEmail.js";
@@ -16,10 +18,14 @@ import type * as email_templates_passwordResetEmail from "../email/templates/pas
 import type * as email_templates_verificationEmail from "../email/templates/verificationEmail.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
+import type * as lib_heuristic_tags from "../lib/heuristic_tags.js";
+import type * as lib_url_canonical from "../lib/url_canonical.js";
+import type * as notifications from "../notifications.js";
 import type * as privateData from "../privateData.js";
 import type * as profile from "../profile.js";
 import type * as sharing from "../sharing.js";
 import type * as sync from "../sync.js";
+import type * as tagging from "../tagging.js";
 
 import type {
   ApiFromModules,
@@ -28,7 +34,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "ai/gemini": typeof ai_gemini;
   auth: typeof auth;
+  crons: typeof crons;
   dashboard: typeof dashboard;
   "email/sendPasswordResetEmail": typeof email_sendPasswordResetEmail;
   "email/sendVerificationEmail": typeof email_sendVerificationEmail;
@@ -36,10 +44,14 @@ declare const fullApi: ApiFromModules<{
   "email/templates/verificationEmail": typeof email_templates_verificationEmail;
   healthCheck: typeof healthCheck;
   http: typeof http;
+  "lib/heuristic_tags": typeof lib_heuristic_tags;
+  "lib/url_canonical": typeof lib_url_canonical;
+  notifications: typeof notifications;
   privateData: typeof privateData;
   profile: typeof profile;
   sharing: typeof sharing;
   sync: typeof sync;
+  tagging: typeof tagging;
 }>;
 
 /**

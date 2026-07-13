@@ -23,12 +23,20 @@ export type DashboardBookmark = {
   tags: string[];
   source: "chrome" | "telegram" | "instagram" | "twitter";
   visibility: "private" | "public";
+  tagStatus?: "pending" | "tagged" | "skipped";
   folderId?: string | null;
   folderName?: string;
   folderVisibility?: "private" | "public";
   totalSaves?: number;
   totalStars?: number;
   viewerHasStarred?: boolean;
+  savedAt?: number;
+  savedFrom?: {
+    id: string;
+    name: string;
+    username: string | null;
+    image: string | null;
+  } | null;
   capturedAt: number;
   lastSyncedAt: number;
 };

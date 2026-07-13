@@ -14,6 +14,10 @@ import Link from "next/link";
 import { use, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  tagFacetClass,
+  toDisplayTags,
+} from "@/components/dashboard/tag-display";
 import { formatRelativeTime } from "@/components/dashboard/time";
 import { Footer } from "@/components/layout/site-footer";
 import { Button } from "@/components/ui/button";
@@ -141,14 +145,18 @@ function BookmarkRow({
         ) : null}
 
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          {bookmark.tags.slice(0, 4).map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex items-center gap-0.5 rounded-full border border-border/70 bg-muted/80 px-2 py-0.5 font-medium text-[11px] text-muted-foreground"
-            >
-              # {tag}
-            </span>
-          ))}
+          {toDisplayTags(bookmark.tags)
+            .slice(0, 4)
+            .map((tag) => (
+              <span
+                key={tag.raw}
+                className={`inline-flex items-center gap-0.5 rounded-full border px-2 py-0.5 font-medium text-[11px] ${tagFacetClass(
+                  tag.facet,
+                )}`}
+              >
+                {tag.label}
+              </span>
+            ))}
           <span className="text-[11px] text-muted-foreground/60">
             {formatRelativeTime(bookmark.capturedAt)}
           </span>

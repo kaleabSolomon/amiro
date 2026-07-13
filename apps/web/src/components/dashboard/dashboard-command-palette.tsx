@@ -3,6 +3,7 @@
 import { FolderClosed, Search } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { toDisplayTags } from "./tag-display";
 import type { DashboardFolder, DashboardSearchBookmark } from "./types";
 
 export function DashboardCommandPalette({
@@ -160,23 +161,31 @@ export function DashboardCommandPalette({
                     <p className="mb-1 px-2 py-1 text-muted-foreground text-xs uppercase">
                       Bookmarks
                     </p>
-                    {bookmarks.map((bookmark) => (
-                      <button
-                        key={bookmark.id}
-                        type="button"
-                        onClick={() => onOpenBookmark(bookmark.url)}
-                        className="mb-1 w-full rounded-lg px-2.5 py-2 text-left hover:bg-muted"
-                      >
-                        <p className="line-clamp-1 text-sm">{bookmark.title}</p>
-                        <p className="line-clamp-1 text-muted-foreground text-xs">
-                          {bookmark.url}
-                        </p>
-                        <p className="line-clamp-1 text-[11px] text-muted-foreground">
-                          {bookmark.folderName} • {bookmark.source} • #
-                          {bookmark.tags.slice(0, 2).join(" #")}
-                        </p>
-                      </button>
-                    ))}
+                    {bookmarks.map((bookmark) => {
+                      const tagText = toDisplayTags(bookmark.tags)
+                        .slice(0, 2)
+                        .map((tag) => `#${tag.label}`)
+                        .join(" ");
+                      return (
+                        <button
+                          key={bookmark.id}
+                          type="button"
+                          onClick={() => onOpenBookmark(bookmark.url)}
+                          className="mb-1 w-full rounded-lg px-2.5 py-2 text-left hover:bg-muted"
+                        >
+                          <p className="line-clamp-1 text-sm">
+                            {bookmark.title}
+                          </p>
+                          <p className="line-clamp-1 text-muted-foreground text-xs">
+                            {bookmark.url}
+                          </p>
+                          <p className="line-clamp-1 text-[11px] text-muted-foreground">
+                            {bookmark.folderName} • {bookmark.source}
+                            {tagText ? ` • ${tagText}` : ""}
+                          </p>
+                        </button>
+                      );
+                    })}
                   </>
                 ) : null}
               </>

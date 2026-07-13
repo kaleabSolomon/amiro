@@ -472,6 +472,17 @@ async function recordSaveAttribution(
     args.now,
   );
 
+  // Notify the bookmark owner that someone saved their bookmark via share
+  await ctx.runMutation(internal.notifications.createNotification, {
+    recipientId: args.bookmark.userId,
+    type: "bookmark_saved",
+    actorId: args.savedBy,
+    bookmarkId: args.bookmark._id,
+    bookmarkTitle: args.bookmark.title,
+    bookmarkUrl: args.bookmark.url,
+    shareId: args.share._id,
+  });
+
   return true;
 }
 
@@ -662,18 +673,30 @@ export const saveFromShare = mutation({
 
     let attributedCount = 0;
     for (const bookmark of bookmarks) {
-      await ctx.runMutation(internal.sync.upsertCaptureFromExtension, {
-        userId: authUser._id,
-        source: bookmark.source,
-        folderId: args.destinationFolderId,
-        url: bookmark.url,
-        title: bookmark.title,
-        text: bookmark.text,
-        additionalLinks: bookmark.childLinks,
-        tags: bookmark.tags,
-        capturedAt: new Date(now).toISOString(),
-        visibility: "private",
-      });
+      const saved = (await ctx.runMutation(
+        internal.sync.upsertCaptureFromExtension,
+        {
+          userId: authUser._id,
+          source: bookmark.source,
+          folderId: args.destinationFolderId,
+          url: bookmark.url,
+          title: bookmark.title,
+          text: bookmark.text,
+          additionalLinks: bookmark.childLinks,
+          tags: bookmark.tags,
+          capturedAt: new Date(now).toISOString(),
+          visibility: "private",
+        },
+      )) as { id: Id<"syncedBookmarks"> };
+
+      // Record that this copy was saved from someone else so it surfaces in
+      // "Shared with me". Skip when saving from your own share.
+      if (bookmark.userId !== authUser._id) {
+        await ctx.db.patch(saved.id, {
+          savedFromUserId: bookmark.userId,
+          savedAt: now,
+        });
+      }
 
       const attributed = await recordSaveAttribution(ctx, {
         share,
@@ -723,6 +746,13 @@ export const savePublicBookmark = mutation({
       },
     )) as { id: Id<"syncedBookmarks"> };
 
+    // Record that this copy was saved from someone else so it surfaces in
+    // "Shared with me". The self-owned case is rejected above.
+    await ctx.db.patch(savedBookmark.id, {
+      savedFromUserId: bookmark.userId,
+      savedAt: now,
+    });
+
     const [existingClaim, existingShareClaim] = await Promise.all([
       ctx.db
         .query("bookmarkSaveClaims")
@@ -753,6 +783,16 @@ export const savePublicBookmark = mutation({
       createdAt: now,
     });
     await bumpBookmarkStats(ctx, bookmark, 1, now);
+
+    // Notify the bookmark owner that someone saved their bookmark from their profile
+    await ctx.runMutation(internal.notifications.createNotification, {
+      recipientId: bookmark.userId,
+      type: "bookmark_saved",
+      actorId: authUser._id,
+      bookmarkId: bookmark._id,
+      bookmarkTitle: bookmark.title,
+      bookmarkUrl: bookmark.url,
+    });
 
     return {
       bookmarkId: bookmark._id,
@@ -798,6 +838,16 @@ export const toggleBookmarkStar = mutation({
       createdAt: now,
     });
     await bumpBookmarkStarStats(ctx, bookmark, 1, now);
+
+    // Notify the bookmark owner that someone starred their bookmark (only on star, not unstar)
+    await ctx.runMutation(internal.notifications.createNotification, {
+      recipientId: bookmark.userId,
+      type: "bookmark_starred",
+      actorId: authUser._id,
+      bookmarkId: bookmark._id,
+      bookmarkTitle: bookmark.title,
+      bookmarkUrl: bookmark.url,
+    });
 
     return {
       bookmarkId: bookmark._id,

@@ -176,6 +176,11 @@ export default defineSchema({
     ),
     folderId: v.optional(v.id("folders")),
     visibility: v.optional(v.union(v.literal("private"), v.literal("public"))),
+    // When this bookmark was saved from someone else's shared/public bookmark,
+    // these record who it came from and when. The saver fully owns this copy —
+    // it is not a hard link to the original. Absent for self-created bookmarks.
+    savedFromUserId: v.optional(v.string()),
+    savedAt: v.optional(v.number()),
     url: v.string(),
     title: v.string(),
     text: v.optional(v.string()),
@@ -191,6 +196,13 @@ export default defineSchema({
     ),
     searchDocument: v.optional(v.string()),
     tags: v.array(v.string()),
+    // --- AI tagging fields ---
+    // Normalized URL used as cache key for tag dedup across users.
+    canonicalUrl: v.optional(v.string()),
+    // Tracks whether AI topical tagging has been applied.
+    tagStatus: v.optional(
+      v.union(v.literal("pending"), v.literal("tagged"), v.literal("skipped")),
+    ),
     capturedAt: v.number(),
     lastSyncedAt: v.number(),
   })
@@ -198,8 +210,50 @@ export default defineSchema({
     .index("by_user_and_source_and_url", ["userId", "source", "url"])
     .index("by_user_and_folder", ["userId", "folderId"])
     .index("by_user_and_last_synced_at", ["userId", "lastSyncedAt"])
+    .index("by_user_and_saved_at", ["userId", "savedAt"])
+    // Used by the tagging cron to find bookmarks awaiting AI topic tags.
+    .index("by_tag_status", ["tagStatus"])
     .searchIndex("search_by_user_document", {
       searchField: "searchDocument",
       filterFields: ["userId"],
     }),
+  notifications: defineTable({
+    recipientId: v.string(),
+    type: v.union(
+      v.literal("bookmark_saved"),
+      v.literal("bookmark_starred"),
+      v.literal("new_follower"),
+      v.literal("followee_bookmark"),
+    ),
+    actorId: v.string(),
+    actorName: v.string(),
+    actorUsername: v.optional(v.string()),
+    actorImage: v.optional(v.string()),
+    // Related resource refs — optional because not all types use all fields
+    bookmarkId: v.optional(v.id("syncedBookmarks")),
+    bookmarkTitle: v.optional(v.string()),
+    bookmarkUrl: v.optional(v.string()),
+    folderId: v.optional(v.id("folders")),
+    shareId: v.optional(v.id("shares")),
+    // State
+    read: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_recipient_and_created_at", ["recipientId", "createdAt"])
+    .index("by_recipient_and_read", ["recipientId", "read"]),
+  // --- AI tagging infrastructure ---
+  // Caches AI-generated topic tags keyed by canonical URL. When the exact same
+  // link is saved by multiple users the cache hit avoids a redundant AI call.
+  urlTagCache: defineTable({
+    canonicalUrl: v.string(),
+    // Only topic:* tags are cached (heuristic type:* tags are free to recompute).
+    tags: v.array(v.string()),
+    hitCount: v.number(),
+    lastSeenAt: v.number(),
+  }).index("by_canonical_url", ["canonicalUrl"]),
+  // Single-doc-per-day counter that enforces the free-tier daily request cap.
+  taggingQuota: defineTable({
+    dayKey: v.string(),
+    requestCount: v.number(),
+  }).index("by_day", ["dayKey"]),
 });
