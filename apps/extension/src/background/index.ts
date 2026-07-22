@@ -11,6 +11,7 @@ import type {
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
+  SearchResult,
   Visibility,
 } from "../types/messages";
 
@@ -297,6 +298,48 @@ async function getBookmarks(folderId?: string, limit?: number) {
   return body.data;
 }
 
+async function searchBookmarks(query: string, limit?: number) {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const params = new URLSearchParams({ q: query });
+  if (limit) {
+    params.set("limit", String(limit));
+  }
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/search?${params.toString()}`;
+
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${session.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    throw new Error(`Search failed (${response.status}).`);
+  }
+
+  const body = (await response.json()) as {
+    ok: boolean;
+    data?: SearchResult;
+    error?: string;
+  };
+
+  if (!body.ok || !body.data) {
+    throw new Error(body.error || "Search failed.");
+  }
+
+  return body.data;
+}
+
 async function postExtensionAction(
   path: string,
   payload: Record<string, unknown>,
@@ -479,6 +522,20 @@ chrome.runtime.onMessage.addListener(
             error instanceof Error
               ? error.message
               : "Failed to load bookmarks.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/search") {
+      searchBookmarks(message.query, message.limit)
+        .then((search) => {
+          sendResponse({ ok: true, search });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Search failed.";
           sendResponse({ ok: false, error: errorMessage });
         });
 

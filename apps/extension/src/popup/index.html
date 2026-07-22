@@ -253,6 +253,31 @@
 
         <!-- Shown when connected -->
         <div id="bm-body" class="stack hidden">
+          <div class="bm-search">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              id="bm-search-input"
+              class="bm-search-input"
+              type="search"
+              placeholder="Search name, tag, or folder…"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="Search bookmarks"
+            />
+            <button
+              id="bm-search-clear"
+              class="bm-search-clear hidden"
+              type="button"
+              aria-label="Clear search"
+            >
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <div
             id="bm-folders"
             class="folder-filter"

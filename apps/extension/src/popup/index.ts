@@ -5,6 +5,7 @@ import type {
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
+  SearchResult,
   Visibility,
 } from "../types/messages";
 
@@ -62,6 +63,8 @@ const bmDisconnected = $<HTMLDivElement>("#bm-disconnected");
 const bmBody = $<HTMLDivElement>("#bm-body");
 const bmFolders = $<HTMLDivElement>("#bm-folders");
 const bmList = $<HTMLDivElement>("#bm-list");
+const bmSearchInput = $<HTMLInputElement>("#bm-search-input");
+const bmSearchClear = $<HTMLButtonElement>("#bm-search-clear");
 
 // ── State ─────────────────────────────────────────────────────────
 let currentSession: AuthSessionState | null = null;
@@ -71,6 +74,8 @@ let selectedIcon = FOLDER_ICONS[0];
 let folderTree: FolderOption[] = [];
 let selectedBmFolderId = "unfiled";
 let bookmarksInitialized = false;
+let searchQuery = "";
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Auto tags applied on capture are noise in the row UI; hide them.
 const HIDDEN_TAG_PREFIXES = ["source:", "domain:", "captured:"];
@@ -178,6 +183,7 @@ function setConnectionState(session: AuthSessionState | null) {
     folderTree = [];
     selectedBmFolderId = "unfiled";
     bookmarksInitialized = false;
+    resetSearch();
     if (bmFolders) {
       bmFolders.innerHTML = "";
     }
@@ -431,6 +437,153 @@ function renderBookmarks(items: BookmarkItem[]) {
   }
 }
 
+// ── Search ────────────────────────────────────────────────────────
+function resetSearch() {
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+    searchTimer = undefined;
+  }
+  searchQuery = "";
+  if (bmSearchInput) {
+    bmSearchInput.value = "";
+  }
+  bmSearchClear?.classList.add("hidden");
+}
+
+function isSearching() {
+  return searchQuery.trim().length > 0;
+}
+
+function onSearchInput() {
+  const value = bmSearchInput?.value ?? "";
+  searchQuery = value;
+  bmSearchClear?.classList.toggle("hidden", value.length === 0);
+
+  if (searchTimer) {
+    clearTimeout(searchTimer);
+  }
+
+  if (!value.trim()) {
+    // Back to folder-browse mode.
+    bmFolders?.classList.remove("hidden");
+    void loadBookmarks();
+    return;
+  }
+
+  searchTimer = setTimeout(() => void runSearch(value), 200);
+}
+
+async function runSearch(query: string) {
+  if (!currentSession || !bmList) {
+    return;
+  }
+
+  bmFolders?.classList.add("hidden");
+  renderBmState("loading");
+
+  try {
+    const response = await send({
+      type: "amiro/search",
+      query,
+      limit: 30,
+    } satisfies ExtensionMessage);
+
+    if (!response.ok) {
+      throw new Error(response.error);
+    }
+
+    // Drop stale responses if the query changed while this one was in flight.
+    if (searchQuery.trim() !== query.trim()) {
+      return;
+    }
+
+    renderSearchResults(
+      response.search ?? { folders: [], bookmarks: [] },
+      query,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Search failed.";
+    renderBmState("error", message);
+  }
+}
+
+function renderSearchResults(result: SearchResult, query: string) {
+  if (!bmList) {
+    return;
+  }
+
+  bmList.innerHTML = "";
+
+  if (result.folders.length === 0 && result.bookmarks.length === 0) {
+    const state = document.createElement("div");
+    state.className = "bm-state";
+    const text = document.createElement("p");
+    text.textContent = `No results for “${query.trim()}”.`;
+    state.append(text);
+    bmList.append(state);
+    return;
+  }
+
+  if (result.folders.length > 0) {
+    const label = document.createElement("p");
+    label.className = "bm-section-label";
+    label.textContent = "Folders";
+    bmList.append(label);
+
+    const folderRow = document.createElement("div");
+    folderRow.className = "folder-filter";
+    for (const folder of result.folders) {
+      const pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "folder-pill";
+
+      const icon = document.createElement("span");
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = folder.icon || "📁";
+
+      const name = document.createElement("span");
+      name.className = "folder-pill-name";
+      name.textContent = folder.name;
+
+      pill.append(icon, name);
+      pill.addEventListener("click", () => openFolderFromSearch(folder.id));
+      folderRow.append(pill);
+    }
+    bmList.append(folderRow);
+  }
+
+  if (result.bookmarks.length > 0) {
+    const label = document.createElement("p");
+    label.className = "bm-section-label";
+    label.textContent = "Bookmarks";
+    bmList.append(label);
+
+    for (const item of result.bookmarks) {
+      bmList.append(buildBookmarkRow(item));
+    }
+  }
+}
+
+// Jump from a matched folder into normal folder-browse mode.
+function openFolderFromSearch(folderId: string) {
+  resetSearch();
+  bmFolders?.classList.remove("hidden");
+  selectedBmFolderId = folderTree.some((folder) => folder.id === folderId)
+    ? folderId
+    : "unfiled";
+  renderFolderFilter();
+  void loadBookmarks();
+}
+
+// Reload whichever view is active (search results or folder browse).
+async function refreshCurrentView() {
+  if (isSearching()) {
+    await runSearch(searchQuery);
+  } else {
+    await loadBookmarks();
+  }
+}
+
 const ICON_GLOBE =
   '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
 const ICON_MOVE =
@@ -504,9 +657,17 @@ function buildBookmarkRow(item: BookmarkItem) {
   body.append(title, meta);
 
   const tags = formatTags(item.tags);
-  if (tags.length > 0) {
+  // Show the folder chip on search results (where rows span folders).
+  const showFolderChip = isSearching() && Boolean(item.folderName);
+  if (tags.length > 0 || showFolderChip) {
     const tagRow = document.createElement("span");
     tagRow.className = "bm-tags";
+    if (showFolderChip && item.folderName) {
+      const folderChip = document.createElement("span");
+      folderChip.className = "chip chip-folder";
+      folderChip.textContent = item.folderName;
+      tagRow.append(folderChip);
+    }
     for (const tag of tags) {
       const chip = document.createElement("span");
       chip.className = tag.kind === "topic" ? "chip chip-topic" : "chip";
@@ -581,6 +742,9 @@ function showMoveBar(
   const bar = document.createElement("div");
   bar.className = "bm-move-bar";
 
+  // The bookmark's own current folder (works in both browse and search views).
+  const currentFolderId = item.folderId ?? "unfiled";
+
   const select = document.createElement("select");
   select.className = "select bm-move";
   select.setAttribute("aria-label", "Move to folder");
@@ -588,14 +752,14 @@ function showMoveBar(
     const option = document.createElement("option");
     option.value = folder.id;
     option.textContent = `${folder.icon || "📁"} ${folder.name}`;
-    if (folder.id === selectedBmFolderId) {
+    if (folder.id === currentFolderId) {
       option.selected = true;
     }
     select.append(option);
   }
   select.addEventListener("change", () => {
     const target = select.value;
-    if (target && target !== selectedBmFolderId) {
+    if (target && target !== currentFolderId) {
       void performMove(item, target);
     } else {
       renderRowActions(row, actions, item);
@@ -622,7 +786,7 @@ async function performDelete(item: BookmarkItem) {
     }
     setStatus(`Deleted “${item.title}”.`, "success");
     await loadFolders();
-    await loadBookmarks();
+    await refreshCurrentView();
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to delete bookmark.";
@@ -643,7 +807,7 @@ async function performMove(item: BookmarkItem, folderId: string) {
     }
     setStatus(`Moved “${item.title}”.`, "success");
     await loadFolders();
-    await loadBookmarks();
+    await refreshCurrentView();
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to move bookmark.";
@@ -920,7 +1084,7 @@ async function captureCurrentTab() {
       // Refresh folder counts and, if already viewing bookmarks, the list.
       await loadFolders();
       if (bookmarksInitialized) {
-        await loadBookmarks();
+        await refreshCurrentView();
       }
     } else {
       const suffix = response.syncMessage ? ` ${response.syncMessage}` : "";
@@ -1052,6 +1216,22 @@ connectSaveButton?.addEventListener("click", () => void connectSession());
 connectBmButton?.addEventListener("click", () => void connectSession());
 disconnectButton?.addEventListener("click", () => void disconnectSession());
 captureButton?.addEventListener("click", () => void captureCurrentTab());
+
+bmSearchInput?.addEventListener("input", onSearchInput);
+bmSearchInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && bmSearchInput.value) {
+    event.preventDefault();
+    resetSearch();
+    bmFolders?.classList.remove("hidden");
+    void loadBookmarks();
+  }
+});
+bmSearchClear?.addEventListener("click", () => {
+  resetSearch();
+  bmFolders?.classList.remove("hidden");
+  bmSearchInput?.focus();
+  void loadBookmarks();
+});
 
 createFolderToggle?.addEventListener("click", () => {
   if (createFolderPanel?.classList.contains("hidden")) {

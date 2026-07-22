@@ -31,6 +31,20 @@ export type BookmarkItem = {
   visibility: Visibility;
   text: string;
   capturedAt: number;
+  folderId?: string | null;
+  // Present on search results so a row can show which folder it lives in.
+  folderName?: string;
+};
+
+export type SearchFolder = {
+  id: string;
+  name: string;
+  icon?: string | null;
+};
+
+export type SearchResult = {
+  folders: SearchFolder[];
+  bookmarks: BookmarkItem[];
 };
 
 export type AuthSessionState = {
@@ -56,6 +70,7 @@ export type ExtensionMessage =
     }
   | { type: "amiro/get-folders" }
   | { type: "amiro/get-bookmarks"; folderId?: string; limit?: number }
+  | { type: "amiro/search"; query: string; limit?: number }
   | { type: "amiro/delete-bookmark"; bookmarkId: string }
   | { type: "amiro/move-bookmark"; bookmarkId: string; folderId?: string }
   | {
@@ -76,6 +91,7 @@ export type ExtensionMessageResponse =
       session?: AuthSessionState | null;
       folders?: FolderOption[];
       bookmarks?: BookmarkItem[];
+      search?: SearchResult;
       folderId?: string;
       started?: true;
       connected?: true;

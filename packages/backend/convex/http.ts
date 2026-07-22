@@ -794,6 +794,59 @@ http.route({
 });
 
 http.route({
+  path: "/api/extension/search",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: syncCorsHeaders });
+  }),
+});
+
+http.route({
+  path: "/api/extension/search",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    const url = new URL(request.url);
+    const query = url.searchParams.get("q") ?? "";
+    const limitParam = url.searchParams.get("limit");
+    const parsedLimit = limitParam
+      ? Number.parseInt(limitParam, 10)
+      : undefined;
+    const limit =
+      parsedLimit !== undefined && Number.isFinite(parsedLimit)
+        ? parsedLimit
+        : undefined;
+
+    try {
+      const data = await ctx.runQuery(internal.sync.searchBookmarksForUser, {
+        userId: authUser._id,
+        query,
+        limit,
+      });
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to search.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
   path: "/api/extension/folders",
   method: "POST",
   handler: httpAction(async (ctx, request) => {

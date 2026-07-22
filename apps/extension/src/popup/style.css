@@ -788,6 +788,97 @@ kbd {
   white-space: nowrap;
 }
 
+/* ── Bookmarks: search ──────────────────────────────────────────── */
+.bm-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.bm-search:focus-within {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 30%, transparent);
+}
+
+.bm-search > .icon {
+  width: 15px;
+  height: 15px;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.bm-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 9px 0;
+  font-size: 13px;
+  color: var(--foreground);
+  outline: none;
+}
+
+.bm-search-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+/* hide the native clear affordance in favor of our own button */
+.bm-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.bm-search-clear {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.bm-search-clear:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.bm-search-clear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 35%, transparent);
+}
+
+.bm-search-clear .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.bm-section-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.bm-section-label:not(:first-child) {
+  margin-top: 8px;
+}
+
 /* ── Bookmarks: list & rows ─────────────────────────────────────── */
 .bm-list {
   display: grid;
@@ -985,6 +1076,13 @@ kbd {
   background: color-mix(in oklch, var(--mint) 14%, transparent);
   color: var(--mint);
   border-color: color-mix(in oklch, var(--mint) 30%, transparent);
+}
+
+/* folder chip shown on search-result rows */
+.chip-folder {
+  background: transparent;
+  color: var(--muted-foreground);
+  border-color: var(--border-strong);
 }
 
 /* ── Bookmarks: inline states ───────────────────────────────────── */
