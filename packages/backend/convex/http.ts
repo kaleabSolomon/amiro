@@ -81,6 +81,16 @@ const extensionCreateFolderSchema = z.object({
   parentFolderId: z.string().optional(),
 });
 
+const extensionDeleteBookmarkSchema = z.object({
+  bookmarkId: z.string().min(1),
+});
+
+const extensionMoveBookmarkSchema = z.object({
+  bookmarkId: z.string().min(1),
+  // Absent / "unfiled" means move to Unfiled (no folder).
+  folderId: z.string().optional(),
+});
+
 const syncCorsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
@@ -637,6 +647,144 @@ http.route({
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to load bookmarks.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/delete",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: syncCorsHeaders });
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/delete",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = extensionDeleteBookmarkSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid delete payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const data = await ctx.runMutation(
+        internal.dashboard.deleteBookmarkForUser,
+        {
+          userId: authUser._id,
+          bookmarkId: parsed.data.bookmarkId as Id<"syncedBookmarks">,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete bookmark.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/move",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: syncCorsHeaders });
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/move",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = extensionMoveBookmarkSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid move payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const folderId =
+      parsed.data.folderId && parsed.data.folderId !== "unfiled"
+        ? (parsed.data.folderId as Id<"folders">)
+        : undefined;
+
+    try {
+      const data = await ctx.runMutation(
+        internal.dashboard.moveBookmarkForUser,
+        {
+          userId: authUser._id,
+          bookmarkId: parsed.data.bookmarkId as Id<"syncedBookmarks">,
+          folderId,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to move bookmark.";
       return new Response(JSON.stringify({ ok: false, error: message }), {
         status: 400,
         headers: syncCorsHeaders,

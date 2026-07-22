@@ -431,12 +431,37 @@ function renderBookmarks(items: BookmarkItem[]) {
   }
 }
 
+const ICON_GLOBE =
+  '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
+const ICON_MOVE =
+  '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h4l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M12 11v6M9 14l3 3 3-3"/></svg>';
+const ICON_TRASH =
+  '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m1 0v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V7"/><path d="M10 11v6M14 11v6"/></svg>';
+const ICON_X =
+  '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+function iconButton(className: string, label: string, svg: string) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.innerHTML = svg;
+  return button;
+}
+
 function buildBookmarkRow(item: BookmarkItem) {
-  const row = document.createElement("a");
+  const row = document.createElement("div");
   row.className = "bm-row";
-  row.href = item.url;
-  row.target = "_blank";
-  row.rel = "noopener noreferrer";
+
+  const main = document.createElement("div");
+  main.className = "bm-row-main";
+
+  const open = document.createElement("a");
+  open.className = "bm-open";
+  open.href = item.url;
+  open.target = "_blank";
+  open.rel = "noopener noreferrer";
 
   const avatar = document.createElement("span");
   avatar.className = "avatar";
@@ -464,6 +489,18 @@ function buildBookmarkRow(item: BookmarkItem) {
   time.textContent = relativeTime(item.capturedAt);
   meta.append(domain, dot, time);
 
+  if (item.visibility === "public") {
+    const vis = document.createElement("span");
+    vis.className = "bm-vis-inline";
+    vis.title = "Public";
+    vis.innerHTML = ICON_GLOBE;
+    const label = document.createElement("span");
+    label.className = "sr-only";
+    label.textContent = "Public";
+    vis.append(label);
+    meta.append(vis);
+  }
+
   body.append(title, meta);
 
   const tags = formatTags(item.tags);
@@ -479,22 +516,139 @@ function buildBookmarkRow(item: BookmarkItem) {
     body.append(tagRow);
   }
 
-  row.append(avatar, body);
+  open.append(avatar, body);
 
-  if (item.visibility === "public") {
-    const vis = document.createElement("span");
-    vis.className = "bm-vis";
-    vis.title = "Public";
-    vis.innerHTML =
-      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
-    const label = document.createElement("span");
-    label.className = "sr-only";
-    label.textContent = "Public";
-    vis.append(label);
-    row.append(vis);
-  }
+  const actions = document.createElement("div");
+  actions.className = "bm-actions";
+
+  main.append(open, actions);
+  row.append(main);
+  renderRowActions(row, actions, item);
 
   return row;
+}
+
+function renderRowActions(
+  row: HTMLElement,
+  actions: HTMLElement,
+  item: BookmarkItem,
+) {
+  actions.innerHTML = "";
+  row.querySelector(".bm-move-bar")?.remove();
+
+  let deleteArmed = false;
+  let disarmTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const moveButton = iconButton("bm-action", "Move to folder", ICON_MOVE);
+  moveButton.addEventListener("click", () => showMoveBar(row, actions, item));
+
+  const deleteButton = iconButton(
+    "bm-action bm-action-danger",
+    "Delete bookmark",
+    ICON_TRASH,
+  );
+  deleteButton.addEventListener("click", () => {
+    if (!deleteArmed) {
+      // First click arms; second click within the window confirms.
+      deleteArmed = true;
+      deleteButton.classList.add("armed");
+      deleteButton.setAttribute("aria-label", "Confirm delete");
+      deleteButton.title = "Click again to delete";
+      disarmTimer = setTimeout(() => {
+        deleteArmed = false;
+        deleteButton.classList.remove("armed");
+        deleteButton.setAttribute("aria-label", "Delete bookmark");
+        deleteButton.title = "Delete bookmark";
+      }, 3000);
+      return;
+    }
+    if (disarmTimer) {
+      clearTimeout(disarmTimer);
+    }
+    void performDelete(item);
+  });
+
+  actions.append(moveButton, deleteButton);
+}
+
+function showMoveBar(
+  row: HTMLElement,
+  actions: HTMLElement,
+  item: BookmarkItem,
+) {
+  row.querySelector(".bm-move-bar")?.remove();
+
+  const bar = document.createElement("div");
+  bar.className = "bm-move-bar";
+
+  const select = document.createElement("select");
+  select.className = "select bm-move";
+  select.setAttribute("aria-label", "Move to folder");
+  for (const folder of folderTree) {
+    const option = document.createElement("option");
+    option.value = folder.id;
+    option.textContent = `${folder.icon || "📁"} ${folder.name}`;
+    if (folder.id === selectedBmFolderId) {
+      option.selected = true;
+    }
+    select.append(option);
+  }
+  select.addEventListener("change", () => {
+    const target = select.value;
+    if (target && target !== selectedBmFolderId) {
+      void performMove(item, target);
+    } else {
+      renderRowActions(row, actions, item);
+    }
+  });
+
+  const cancel = iconButton("bm-action", "Cancel move", ICON_X);
+  cancel.addEventListener("click", () => renderRowActions(row, actions, item));
+
+  bar.append(select, cancel);
+  row.append(bar);
+  select.focus();
+}
+
+async function performDelete(item: BookmarkItem) {
+  setStatus("Deleting…", "pending");
+  try {
+    const response = await send({
+      type: "amiro/delete-bookmark",
+      bookmarkId: item.id,
+    } satisfies ExtensionMessage);
+    if (!response.ok) {
+      throw new Error(response.error);
+    }
+    setStatus(`Deleted “${item.title}”.`, "success");
+    await loadFolders();
+    await loadBookmarks();
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete bookmark.";
+    setStatus(message, "error");
+  }
+}
+
+async function performMove(item: BookmarkItem, folderId: string) {
+  setStatus("Moving…", "pending");
+  try {
+    const response = await send({
+      type: "amiro/move-bookmark",
+      bookmarkId: item.id,
+      folderId: folderId === "unfiled" ? undefined : folderId,
+    } satisfies ExtensionMessage);
+    if (!response.ok) {
+      throw new Error(response.error);
+    }
+    setStatus(`Moved “${item.title}”.`, "success");
+    await loadFolders();
+    await loadBookmarks();
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to move bookmark.";
+    setStatus(message, "error");
+  }
 }
 
 type FormattedTag = { label: string; kind: "topic" | "type" | "plain" };

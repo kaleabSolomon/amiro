@@ -796,19 +796,14 @@ kbd {
 
 .bm-row {
   display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 11px 12px;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--card);
-  color: inherit;
-  text-decoration: none;
   box-shadow: var(--shadow-sm);
   transition:
     border-color 0.15s ease,
-    background-color 0.15s ease,
-    transform 0.1s ease;
+    background-color 0.15s ease;
 }
 
 .bm-row:hover {
@@ -816,13 +811,108 @@ kbd {
   background: var(--surface-elevated);
 }
 
-.bm-row:active {
-  transform: scale(0.99);
+.bm-row-main {
+  display: flex;
+  align-items: stretch;
 }
 
-.bm-row:focus-visible {
+.bm-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 12px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-lg);
+}
+
+.bm-open:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 35%, transparent);
+}
+
+/* ── Bookmarks: row actions ─────────────────────────────────────── */
+.bm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 8px 8px 0;
+  justify-content: center;
+}
+
+.bm-action {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.bm-action .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.bm-action:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.bm-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 35%, transparent);
+}
+
+.bm-action-danger:hover {
+  background: color-mix(in oklch, var(--destructive) 14%, transparent);
+  color: var(--destructive);
+}
+
+/* Armed (awaiting a confirming second click) */
+.bm-action.armed {
+  background: var(--destructive);
+  color: oklch(0.99 0 0);
+  border-color: var(--destructive);
+}
+
+.bm-move-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+
+.bm-move {
+  flex: 1;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  font-size: 12px;
+}
+
+.bm-move-bar .bm-action {
+  flex-shrink: 0;
+  border-color: var(--border);
+}
+
+.bm-vis-inline {
+  display: inline-flex;
+  color: var(--muted-foreground);
+}
+
+.bm-vis-inline .icon {
+  width: 12px;
+  height: 12px;
 }
 
 .bm-body {
@@ -895,18 +985,6 @@ kbd {
   background: color-mix(in oklch, var(--mint) 14%, transparent);
   color: var(--mint);
   border-color: color-mix(in oklch, var(--mint) 30%, transparent);
-}
-
-/* private/public badge on a row */
-.bm-vis {
-  flex-shrink: 0;
-  color: var(--muted-foreground);
-  margin-top: 2px;
-}
-
-.bm-vis .icon {
-  width: 13px;
-  height: 13px;
 }
 
 /* ── Bookmarks: inline states ───────────────────────────────────── */

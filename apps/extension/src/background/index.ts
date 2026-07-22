@@ -297,6 +297,67 @@ async function getBookmarks(folderId?: string, limit?: number) {
   return body.data;
 }
 
+async function postExtensionAction(
+  path: string,
+  payload: Record<string, unknown>,
+  fallbackError: string,
+) {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}${path}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    let message = `${fallbackError} (${response.status}).`;
+    try {
+      const errorBody = (await response.json()) as { error?: string };
+      if (errorBody.error) {
+        message = errorBody.error;
+      }
+    } catch {
+      // Keep the status-based fallback message.
+    }
+    throw new Error(message);
+  }
+
+  const body = (await response.json()) as { ok: boolean; error?: string };
+  if (!body.ok) {
+    throw new Error(body.error || fallbackError);
+  }
+}
+
+async function deleteBookmark(bookmarkId: string) {
+  await postExtensionAction(
+    "/api/extension/bookmarks/delete",
+    { bookmarkId },
+    "Failed to delete bookmark",
+  );
+}
+
+async function moveBookmark(bookmarkId: string, folderId?: string) {
+  await postExtensionAction(
+    "/api/extension/bookmarks/move",
+    { bookmarkId, folderId },
+    "Failed to move bookmark",
+  );
+}
+
 async function createFolder(
   name: string,
   icon?: string,
@@ -418,6 +479,36 @@ chrome.runtime.onMessage.addListener(
             error instanceof Error
               ? error.message
               : "Failed to load bookmarks.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/delete-bookmark") {
+      deleteBookmark(message.bookmarkId)
+        .then(() => {
+          sendResponse({ ok: true, deleted: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to delete bookmark.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/move-bookmark") {
+      moveBookmark(message.bookmarkId, message.folderId)
+        .then(() => {
+          sendResponse({ ok: true, moved: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to move bookmark.";
           sendResponse({ ok: false, error: errorMessage });
         });
 

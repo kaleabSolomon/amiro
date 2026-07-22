@@ -56,6 +56,8 @@ export type ExtensionMessage =
     }
   | { type: "amiro/get-folders" }
   | { type: "amiro/get-bookmarks"; folderId?: string; limit?: number }
+  | { type: "amiro/delete-bookmark"; bookmarkId: string }
+  | { type: "amiro/move-bookmark"; bookmarkId: string; folderId?: string }
   | {
       type: "amiro/create-folder";
       name: string;
@@ -78,5 +80,7 @@ export type ExtensionMessageResponse =
       started?: true;
       connected?: true;
       disconnected?: true;
+      deleted?: true;
+      moved?: true;
     }
   | { ok: false; error: string };
