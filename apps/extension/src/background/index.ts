@@ -3,9 +3,12 @@ import {
   addCaptureToQueue,
   clearAuthSession,
   getAuthSession,
+  getCaptureQueue,
   setAuthSession,
+  setCaptureQueue,
 } from "../lib/storage";
 import type {
+  AuthSessionState,
   BookmarkItem,
   CapturePayload,
   ExtensionMessage,
@@ -16,6 +19,8 @@ import type {
 } from "../types/messages";
 
 const HANDSHAKE_PATH = "/extension/connect";
+const FLUSH_ALARM = "amiro-flush-queue";
+const FLUSH_PERIOD_MINUTES = 5;
 
 type CaptureSyncResult = {
   capture: CapturePayload;
@@ -72,6 +77,55 @@ async function extractViaScripting(tabId: number) {
   }
 
   return result.result as CapturePayload;
+}
+
+type CaptureSyncOutcome =
+  | { status: "synced" }
+  // Auth failed — stop retrying and drop the session.
+  | { status: "unauthorized"; message: string }
+  // Network/server hiccup — safe to retry later.
+  | { status: "failed"; message: string };
+
+// Single place that performs the sync POST. Used by both the interactive
+// capture flow and the background queue flusher so their behavior can't drift.
+async function postCaptureToBackend(
+  session: AuthSessionState,
+  capture: CapturePayload,
+): Promise<CaptureSyncOutcome> {
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/sync`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.token}`,
+      },
+      body: JSON.stringify(capture),
+    });
+
+    if (response.ok) {
+      return { status: "synced" };
+    }
+
+    let message = `Sync failed with status ${response.status}.`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) {
+        message = body.error;
+      }
+    } catch {
+      // Ignore JSON parse failures and use the status-based message.
+    }
+
+    if (response.status === 401) {
+      return { status: "unauthorized", message };
+    }
+    return { status: "failed", message };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network error.";
+    return { status: "failed", message };
+  }
 }
 
 async function captureTab(
@@ -132,56 +186,29 @@ async function captureTab(
     } satisfies CaptureSyncResult;
   }
 
-  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/sync`;
+  const outcome = await postCaptureToBackend(session, capture);
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.token}`,
-      },
-      body: JSON.stringify(capture),
-    });
-
-    if (!response.ok) {
-      let errorMessage = `Sync failed with status ${response.status}.`;
-      try {
-        const body = (await response.json()) as { error?: string };
-        if (body.error) {
-          errorMessage = body.error;
-        }
-      } catch {
-        // Ignore JSON parse failures and use fallback message.
-      }
-
-      if (response.status === 401) {
-        await clearAuthSession();
-      }
-
-      await addCaptureToQueue(capture);
-      return {
-        capture,
-        syncStatus: "queued",
-        syncMessage: `${errorMessage} Capture queued locally.`,
-      } satisfies CaptureSyncResult;
-    }
-
+  if (outcome.status === "synced") {
+    // We're online — opportunistically drain anything queued earlier.
+    void flushQueue();
     return {
       capture,
       syncStatus: "synced",
       syncMessage: "Capture synced.",
     } satisfies CaptureSyncResult;
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Network error.";
-    await addCaptureToQueue(capture);
-    return {
-      capture,
-      syncStatus: "queued",
-      syncMessage: `${errorMessage} Capture queued locally.`,
-    } satisfies CaptureSyncResult;
   }
+
+  if (outcome.status === "unauthorized") {
+    await clearAuthSession();
+  }
+
+  await addCaptureToQueue(capture);
+  await updateQueueBadge();
+  return {
+    capture,
+    syncStatus: "queued",
+    syncMessage: `${outcome.message} Capture queued locally.`,
+  } satisfies CaptureSyncResult;
 }
 
 async function captureCurrentTab(folderId?: string, visibility?: Visibility) {
@@ -194,11 +221,74 @@ async function captureCurrentTab(folderId?: string, visibility?: Visibility) {
   return await captureTab(tab, folderId, visibility);
 }
 
-async function notifyCapture(result: CaptureSyncResult) {
+// The toolbar badge shows the number of captures still waiting to sync.
+async function updateQueueBadge(count?: number) {
+  const pending = count ?? (await getCaptureQueue()).length;
   await chrome.action.setBadgeBackgroundColor({ color: "#4D9D56" });
   await chrome.action.setBadgeText({
-    text: result.syncStatus === "synced" ? "✓" : "1",
+    text: pending > 0 ? String(pending) : "",
   });
+}
+
+// Drains the offline capture queue: retries each queued capture, drops the ones
+// that sync, keeps the ones that fail on the network for a later attempt, and
+// stops (clearing the session) if the token is rejected. Guarded so overlapping
+// triggers (alarm + popup open + a fresh capture) can't run it concurrently.
+let isFlushing = false;
+
+async function flushQueue() {
+  if (isFlushing) {
+    return;
+  }
+
+  const session = await getAuthSession();
+  if (!session?.convexSiteUrl) {
+    return; // Can't sync without a connected session.
+  }
+
+  const queue = await getCaptureQueue();
+  if (queue.length === 0) {
+    await updateQueueBadge(0);
+    return;
+  }
+
+  isFlushing = true;
+  try {
+    const remaining: CapturePayload[] = [];
+    let unauthorized = false;
+
+    for (const capture of queue) {
+      if (unauthorized) {
+        remaining.push(capture);
+        continue;
+      }
+
+      const outcome = await postCaptureToBackend(session, capture);
+      if (outcome.status === "synced") {
+        continue; // Drop from the queue.
+      }
+      if (outcome.status === "unauthorized") {
+        // No point retrying the rest until the user reconnects.
+        unauthorized = true;
+        remaining.push(capture);
+        continue;
+      }
+      remaining.push(capture); // Network/server failure — keep for next time.
+    }
+
+    await setCaptureQueue(remaining);
+    await updateQueueBadge(remaining.length);
+
+    if (unauthorized) {
+      await clearAuthSession();
+    }
+  } finally {
+    isFlushing = false;
+  }
+}
+
+async function notifyCapture(result: CaptureSyncResult) {
+  await updateQueueBadge();
   console.log("[amiro-extension] captured", {
     title: result.capture.title,
     url: result.capture.url,
@@ -455,6 +545,20 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Save page to Amiro",
     contexts: ["page", "selection", "link"],
   });
+  chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES });
+  void flushQueue();
+});
+
+// Retry queued captures when the worker wakes and on a periodic timer.
+chrome.runtime.onStartup.addListener(() => {
+  chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES });
+  void flushQueue();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === FLUSH_ALARM) {
+    void flushQueue();
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -610,12 +714,12 @@ chrome.runtime.onMessage.addListener(
         connectedAt: new Date().toISOString(),
       })
         .then(async () => {
-          await chrome.action.setBadgeBackgroundColor({ color: "#4D9D56" });
-          await chrome.action.setBadgeText({ text: "✓" });
-
           if (sender.tab?.id) {
             await chrome.tabs.remove(sender.tab.id);
           }
+
+          // Now that we're connected, drain anything captured while offline.
+          void flushQueue();
 
           sendResponse({ ok: true, connected: true });
         })
@@ -657,6 +761,20 @@ chrome.runtime.onMessage.addListener(
             error instanceof Error
               ? error.message
               : "Failed to clear auth session.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/flush-queue") {
+      flushQueue()
+        .then(() => {
+          sendResponse({ ok: true, flushed: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to flush queue.";
           sendResponse({ ok: false, error: errorMessage });
         });
 

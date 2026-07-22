@@ -15,6 +15,10 @@ export async function addCaptureToQueue(payload: CapturePayload) {
   return nextQueue;
 }
 
+export async function setCaptureQueue(queue: CapturePayload[]) {
+  await chrome.storage.local.set({ [CAPTURE_QUEUE_KEY]: queue });
+}
+
 export async function getAuthSession() {
   const result = await chrome.storage.local.get(AUTH_SESSION_KEY);
   return (result[AUTH_SESSION_KEY] as AuthSessionState | undefined) ?? null;

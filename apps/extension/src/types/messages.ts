@@ -80,7 +80,8 @@ export type ExtensionMessage =
       visibility?: Visibility;
     }
   | { type: "amiro/get-auth-state" }
-  | { type: "amiro/disconnect-auth" };
+  | { type: "amiro/disconnect-auth" }
+  | { type: "amiro/flush-queue" };
 
 export type ExtensionMessageResponse =
   | {
@@ -98,5 +99,6 @@ export type ExtensionMessageResponse =
       disconnected?: true;
       deleted?: true;
       moved?: true;
+      flushed?: true;
     }
   | { ok: false; error: string };

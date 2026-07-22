@@ -1261,6 +1261,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 window.addEventListener("focus", () => void refreshConnectionState());
 
+// Opening the popup is a good moment to retry any captures stranded offline.
+function flushQueueOnOpen() {
+  void chrome.runtime.sendMessage({
+    type: "amiro/flush-queue",
+  } satisfies ExtensionMessage);
+}
+
 void refreshConnectionState();
 void loadPagePreview();
 void setSourceLabel();
+flushQueueOnOpen();

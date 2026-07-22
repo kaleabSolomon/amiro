@@ -13,7 +13,14 @@ const manifest: ManifestV3Export = {
     service_worker: "src/background/index.ts",
     type: "module",
   },
-  permissions: ["storage", "tabs", "activeTab", "scripting", "contextMenus"],
+  permissions: [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "alarms",
+  ],
   host_permissions: ["<all_urls>"],
   content_scripts: [
     {
