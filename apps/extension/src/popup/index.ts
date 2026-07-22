@@ -49,6 +49,7 @@ const createFolderButton = $<HTMLButtonElement>("#create-folder");
 const cancelCreateFolderButton = $<HTMLButtonElement>("#cancel-create-folder");
 
 const captureButton = $<HTMLButtonElement>("#capture");
+const visHint = $<HTMLParagraphElement>("#vis-hint");
 const status = $<HTMLDivElement>("#status");
 
 const connectButton = $<HTMLButtonElement>("#connect");
@@ -218,6 +219,61 @@ function setFolderOptions(folders: FolderOption[], selectedFolderId?: string) {
   folderSelect.disabled = !currentSession;
 }
 
+// ── Visibility rule (mirrors backend) ─────────────────────────────
+// A bookmark may be public only inside a public folder. The Save toggle's
+// "Public" option is therefore only available when a public folder is picked.
+const captureVisButtons = Array.from(
+  document.querySelectorAll<HTMLButtonElement>("[data-vis]"),
+);
+
+function getSelectedFolderVisibility(): Visibility {
+  const value = folderSelect?.value ?? "";
+  const id = value === "" ? "unfiled" : value;
+  return folderTree.find((folder) => folder.id === id)?.visibility ?? "private";
+}
+
+function updateVisibilityHint() {
+  if (!visHint) {
+    return;
+  }
+  if (getSelectedFolderVisibility() !== "public") {
+    visHint.textContent =
+      "Only you can see this — save to a public folder to share it.";
+  } else if (captureVisibility === "public") {
+    visHint.textContent = "Anyone with the link can view this.";
+  } else {
+    visHint.textContent = "Only you can view this.";
+  }
+}
+
+function applyCaptureVisibility(next: Visibility) {
+  captureVisibility = next;
+  for (const button of captureVisButtons) {
+    button.setAttribute(
+      "aria-pressed",
+      button.dataset.vis === next ? "true" : "false",
+    );
+  }
+  updateVisibilityHint();
+}
+
+function updateVisibilityAvailability() {
+  const publicAllowed = getSelectedFolderVisibility() === "public";
+  const publicButton = captureVisButtons.find(
+    (button) => button.dataset.vis === "public",
+  );
+  if (publicButton) {
+    publicButton.disabled = !publicAllowed;
+  }
+  // Enforce the invariant client-side too: never leave "public" selected for a
+  // folder that can't hold public bookmarks.
+  if (!publicAllowed && captureVisibility === "public") {
+    applyCaptureVisibility("private");
+    return;
+  }
+  updateVisibilityHint();
+}
+
 async function loadFolders() {
   if (!currentSession) {
     setFolderOptions([]);
@@ -238,6 +294,7 @@ async function loadFolders() {
     // synthetic tree entry to avoid a duplicate.
     setFolderOptions(folderTree.filter((folder) => folder.id !== "unfiled"));
     renderFolderFilter();
+    updateVisibilityAvailability();
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to load folders.";
@@ -245,6 +302,7 @@ async function loadFolders() {
     setFolderOptions([]);
     folderTree = [];
     renderFolderFilter();
+    updateVisibilityAvailability();
   }
 }
 
@@ -595,6 +653,7 @@ async function handleCreateFolder() {
     if (folderSelect) {
       folderSelect.value = response.folderId;
     }
+    updateVisibilityAvailability();
     hideCreateFolderPanel();
     setStatus(`Folder “${name}” created.`, "success");
   } catch (error) {
@@ -818,12 +877,21 @@ async function setSourceLabel() {
 // ── Wiring ────────────────────────────────────────────────────────
 wireTabs();
 renderEmojiGrid();
-wireSegments("[data-vis]", "vis", (value) => {
-  captureVisibility = value;
-});
+// Capture-visibility toggle is wired directly so it can honor the public-folder
+// rule (disabled state) rather than blindly flipping like the generic segments.
+for (const button of captureVisButtons) {
+  button.addEventListener("click", () => {
+    const value = button.dataset.vis as Visibility | undefined;
+    if (!value || button.disabled) {
+      return;
+    }
+    applyCaptureVisibility(value);
+  });
+}
 wireSegments("[data-vis-folder]", "visFolder", (value) => {
   folderVisibility = value;
 });
+folderSelect?.addEventListener("change", updateVisibilityAvailability);
 
 connectButton?.addEventListener("click", () => void connectSession());
 connectSaveButton?.addEventListener("click", () => void connectSession());

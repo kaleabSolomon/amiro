@@ -129,11 +129,13 @@ export const upsertCaptureFromExtension = internalMutation({
       throw new ConvexError("Invalid capturedAt value.");
     }
 
+    let folderIsPublic = false;
     if (args.folderId) {
       const folder = await ctx.db.get(args.folderId);
       if (!folder || folder.userId !== args.userId) {
         throw new ConvexError("Invalid folder for this user.");
       }
+      folderIsPublic = (folder.visibility ?? "private") === "public";
     }
 
     const { canonicalUrl } = canonicalizeUrl(args.url);
@@ -189,10 +191,18 @@ export const upsertCaptureFromExtension = internalMutation({
       )
       .unique();
 
+    // Invariant (mirrors dashboard.moveBookmark / updateBookmarkVisibility):
+    // a bookmark may be public only inside a public folder. In Unfiled or a
+    // private folder, force private regardless of the requested visibility.
+    const requestedVisibility =
+      args.visibility ?? existing?.visibility ?? "private";
+    const resolvedVisibility =
+      folderIsPublic && requestedVisibility === "public" ? "public" : "private";
+
     if (existing) {
       await ctx.db.patch(existing._id, {
         folderId: args.folderId,
-        visibility: args.visibility ?? existing.visibility ?? "private",
+        visibility: resolvedVisibility,
         title: args.title,
         text: args.text,
         childLinks,
@@ -214,7 +224,7 @@ export const upsertCaptureFromExtension = internalMutation({
       userId: args.userId,
       source: args.source,
       folderId: args.folderId,
-      visibility: args.visibility ?? "private",
+      visibility: resolvedVisibility,
       url: args.url,
       title: args.title,
       text: args.text,
