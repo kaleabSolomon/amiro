@@ -9,6 +9,7 @@ import type {
   CapturePayload,
   ExtensionMessage,
   ExtensionMessageResponse,
+  Visibility,
 } from "../types/messages";
 
 const HANDSHAKE_PATH = "/extension/connect";
@@ -70,7 +71,11 @@ async function extractViaScripting(tabId: number) {
   return result.result as CapturePayload;
 }
 
-async function captureTab(tab: chrome.tabs.Tab, folderId?: string) {
+async function captureTab(
+  tab: chrome.tabs.Tab,
+  folderId?: string,
+  visibility?: Visibility,
+) {
   if (!tab.id) {
     throw new Error("No active tab found.");
   }
@@ -96,10 +101,11 @@ async function captureTab(tab: chrome.tabs.Tab, folderId?: string) {
     capture = await extractViaScripting(tab.id);
   }
 
-  if (folderId) {
+  if (folderId || visibility) {
     capture = {
       ...capture,
-      folderId,
+      ...(folderId ? { folderId } : {}),
+      ...(visibility ? { visibility } : {}),
     };
   }
 
@@ -175,14 +181,14 @@ async function captureTab(tab: chrome.tabs.Tab, folderId?: string) {
   }
 }
 
-async function captureCurrentTab(folderId?: string) {
+async function captureCurrentTab(folderId?: string, visibility?: Visibility) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab) {
     throw new Error("No active tab found.");
   }
 
-  return await captureTab(tab, folderId);
+  return await captureTab(tab, folderId, visibility);
 }
 
 async function notifyCapture(result: CaptureSyncResult) {
@@ -241,7 +247,11 @@ async function getFolders() {
   return body.data;
 }
 
-async function createFolder(name: string) {
+async function createFolder(
+  name: string,
+  icon?: string,
+  visibility?: Visibility,
+) {
   const trimmedName = name.trim();
   if (!trimmedName) {
     throw new Error("Folder name cannot be empty.");
@@ -262,7 +272,7 @@ async function createFolder(name: string) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.token}`,
     },
-    body: JSON.stringify({ name: trimmedName }),
+    body: JSON.stringify({ name: trimmedName, icon, visibility }),
   });
 
   if (!response.ok) {
@@ -313,7 +323,7 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response: ExtensionMessageResponse) => void,
   ) => {
     if (message.type === "amiro/capture-current-tab") {
-      captureCurrentTab(message.folderId)
+      captureCurrentTab(message.folderId, message.visibility)
         .then(async (result) => {
           await notifyCapture(result);
           sendResponse({
@@ -349,7 +359,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "amiro/create-folder") {
-      createFolder(message.name)
+      createFolder(message.name, message.icon, message.visibility)
         .then((folderId) => {
           sendResponse({ ok: true, folderId });
         })

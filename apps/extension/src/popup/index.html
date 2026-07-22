@@ -3,83 +3,300 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Amiro Clipper</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>Amiro Web Clipper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="popup">
-      <header class="popup-header">
-        <p class="kicker">Amiro</p>
-        <h1>Web Clipper</h1>
-        <p class="muted">Capture the active page into your sync queue.</p>
-      </header>
+    <!-- ── Header ─────────────────────────────────────────────── -->
+    <header class="app-header">
+      <div class="wordmark">
+        <h1>amiro</h1>
+        <span class="sub">Web Clipper</span>
+      </div>
+      <span
+        id="conn-pill"
+        class="conn-pill"
+        data-connected="false"
+        aria-live="polite"
+      >
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span id="conn-pill-label">Checking…</span>
+      </span>
+    </header>
 
-      <section class="connection">
-        <p id="connection-state" class="connection-state">Checking session…</p>
-        <div class="connection-actions">
-          <button id="connect" class="button" type="button">
-            Connect Web Session
+    <!-- ── Tab bar ────────────────────────────────────────────── -->
+    <nav class="tab-bar" role="tablist" aria-label="Clipper sections">
+      <button
+        id="tab-save"
+        class="tab"
+        role="tab"
+        type="button"
+        aria-selected="true"
+        aria-controls="panel-save"
+      >
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 3h11l3 3v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+          <path d="M8 3v5h7" />
+        </svg>
+        Save
+      </button>
+      <button
+        id="tab-bookmarks"
+        class="tab"
+        role="tab"
+        type="button"
+        aria-selected="false"
+        aria-controls="panel-bookmarks"
+      >
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+        </svg>
+        Bookmarks
+      </button>
+      <button
+        id="tab-settings"
+        class="tab tab-icon-only"
+        role="tab"
+        type="button"
+        aria-selected="false"
+        aria-controls="panel-settings"
+        aria-label="Settings"
+      >
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
+    </nav>
+
+    <div class="panels">
+      <!-- ── Save panel ───────────────────────────────────────── -->
+      <section
+        id="panel-save"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-save"
+        tabindex="0"
+      >
+        <!-- Shown when NOT connected -->
+        <div id="save-disconnected" class="notice hidden">
+          <p>Connect your amiro account to start saving pages.</p>
+          <button id="connect-save" class="btn btn-block" type="button">
+            Connect account
+          </button>
+        </div>
+
+        <!-- Shown when connected -->
+        <div id="save-form" class="stack hidden">
+          <div class="preview">
+            <span id="preview-avatar" class="avatar" aria-hidden="true">·</span>
+            <span class="preview-body">
+              <span id="preview-title" class="preview-title">Current page</span>
+              <span id="preview-domain" class="preview-domain">…</span>
+            </span>
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <label class="label" for="folder-select">Save to folder</label>
+              <button
+                id="toggle-create-folder"
+                class="icon-btn"
+                type="button"
+                aria-expanded="false"
+                aria-controls="create-folder-panel"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                New
+              </button>
+            </div>
+            <select id="folder-select" class="select" disabled>
+              <option value="">📥 Unfiled</option>
+            </select>
+
+            <!-- Inline create-folder -->
+            <div id="create-folder-panel" class="subpanel hidden">
+              <div class="field">
+                <label class="label" for="new-folder-name">Folder name</label>
+                <input
+                  id="new-folder-name"
+                  class="input"
+                  type="text"
+                  placeholder="e.g. design inspo…"
+                  maxlength="80"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+
+              <div class="field">
+                <span class="label">Icon</span>
+                <div
+                  id="emoji-grid"
+                  class="emoji-grid"
+                  role="group"
+                  aria-label="Folder icon"
+                ></div>
+              </div>
+
+              <div class="field">
+                <span class="label" id="new-folder-vis-label">Visibility</span>
+                <div
+                  class="segmented"
+                  role="group"
+                  aria-labelledby="new-folder-vis-label"
+                >
+                  <button
+                    class="segment"
+                    type="button"
+                    data-vis-folder="private"
+                    aria-pressed="true"
+                  >
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="5" y="11" width="14" height="10" rx="2" />
+                      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                    </svg>
+                    Private
+                  </button>
+                  <button
+                    class="segment"
+                    type="button"
+                    data-vis-folder="public"
+                    aria-pressed="false"
+                  >
+                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+                    </svg>
+                    Public
+                  </button>
+                </div>
+              </div>
+
+              <div class="row-2">
+                <button
+                  id="cancel-create-folder"
+                  class="btn btn-ghost"
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button id="create-folder" class="btn" type="button">
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="label" id="vis-label">Visibility</span>
+            <div class="segmented" role="group" aria-labelledby="vis-label">
+              <button
+                class="segment"
+                type="button"
+                data-vis="private"
+                aria-pressed="true"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="5" y="11" width="14" height="10" rx="2" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+                Private
+              </button>
+              <button
+                class="segment"
+                type="button"
+                data-vis="public"
+                aria-pressed="false"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
+                </svg>
+                Public
+              </button>
+            </div>
+          </div>
+
+          <button id="capture" class="btn btn-lg btn-block" type="button">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <path d="M17 21v-8H7v8M7 3v5h8" />
+            </svg>
+            Save current page
+          </button>
+        </div>
+      </section>
+
+      <!-- ── Bookmarks panel (placeholder) ────────────────────── -->
+      <section
+        id="panel-bookmarks"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-bookmarks"
+        tabindex="0"
+        hidden
+      >
+        <div class="empty">
+          <span class="empty-icon" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
+            </svg>
+          </span>
+          <span class="badge">Coming soon</span>
+          <h2 class="empty-title">Browse right from here</h2>
+          <p class="empty-text">
+            Your folders and saved pages will live in this tab — search, open,
+            and organize without leaving the page.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Settings panel ───────────────────────────────────── -->
+      <section
+        id="panel-settings"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-settings"
+        tabindex="0"
+        hidden
+      >
+        <div class="card">
+          <span class="card-title">Connection</span>
+          <p id="connection-state" class="label">Checking session…</p>
+          <button id="connect" class="btn btn-block" type="button">
+            Connect account
           </button>
           <button
             id="disconnect"
-            class="button button-secondary hidden"
+            class="btn btn-danger btn-block hidden"
             type="button"
           >
             Disconnect
           </button>
         </div>
-      </section>
 
-      <section class="folder-picker">
-        <div class="folder-header">
-          <label for="folder-select">Save to folder</label>
-          <button
-            id="toggle-create-folder"
-            class="icon-button"
-            type="button"
-            aria-label="Create folder"
-          >
-            +
-          </button>
-        </div>
-        <select id="folder-select" class="input" disabled>
-          <option value="">No folder</option>
-        </select>
-        <div id="create-folder-panel" class="folder-create hidden">
-          <input
-            id="new-folder-name"
-            class="input"
-            type="text"
-            placeholder="New folder name"
-            maxlength="80"
-          />
-          <div class="folder-create-actions">
-            <button id="create-folder" class="button" type="button">
-              Create
-            </button>
-            <button
-              id="cancel-create-folder"
-              class="button button-secondary"
-              type="button"
-            >
-              Cancel
-            </button>
+        <div class="card">
+          <span class="card-title">Details</span>
+          <div class="meta-row">
+            <span>Shortcut</span>
+            <strong><kbd>⌘ / Ctrl + Shift + Y</kbd></strong>
+          </div>
+          <div class="meta-row">
+            <span>Source</span>
+            <strong id="source-label">Detecting…</strong>
           </div>
         </div>
       </section>
+    </div>
 
-      <button id="capture" class="button" type="button">
-        Save Current Tab
-      </button>
-      <p id="status" class="status" aria-live="polite"></p>
-
-      <hr class="divider" />
-
-      <section class="meta">
-        <p><span>Shortcut</span><strong>Ctrl / ⌘ + Shift + Y</strong></p>
-        <p><span>Source</span><strong id="source-label">Detecting…</strong></p>
-      </section>
-    </main>
+    <!-- ── Status bar ───────────────────────────────────────────── -->
+    <div id="status" class="status-bar" role="status" aria-live="polite"></div>
 
     <script type="module" src="./index.ts"></script>
   </body>

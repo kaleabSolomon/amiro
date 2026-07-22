@@ -13,6 +13,7 @@ authComponent.registerRoutes(http, createAuth);
 const syncCaptureSchema = z.object({
   source: z.enum(["chrome", "telegram", "instagram", "twitter"]),
   folderId: z.string().optional(),
+  visibility: z.enum(["private", "public"]).optional(),
   url: z.string().url(),
   title: z.string().min(1),
   text: z.string().optional(),
@@ -75,6 +76,7 @@ const telegramSyncSchema = z.object({
 
 const extensionCreateFolderSchema = z.object({
   name: z.string().min(1),
+  icon: z.string().optional(),
   visibility: z.enum(["private", "public"]).optional(),
   parentFolderId: z.string().optional(),
 });
@@ -170,6 +172,7 @@ http.route({
         userId: authUser._id,
         source: parsed.data.source,
         folderId: parsed.data.folderId as Id<"folders"> | undefined,
+        visibility: parsed.data.visibility,
         url: parsed.data.url,
         title: parsed.data.title,
         text: parsed.data.text,
@@ -616,6 +619,7 @@ http.route({
         {
           userId: authUser._id,
           name: parsed.data.name,
+          icon: parsed.data.icon,
           visibility: parsed.data.visibility,
           parentFolderId: parsed.data.parentFolderId as
             | Id<"folders">

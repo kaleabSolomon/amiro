@@ -4,63 +4,140 @@ import type {
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
+  Visibility,
 } from "../types/messages";
 
-const captureButton = document.querySelector<HTMLButtonElement>("#capture");
-const connectButton = document.querySelector<HTMLButtonElement>("#connect");
-const disconnectButton =
-  document.querySelector<HTMLButtonElement>("#disconnect");
-const status = document.querySelector<HTMLParagraphElement>("#status");
-const connectionState =
-  document.querySelector<HTMLParagraphElement>("#connection-state");
-const folderSelect =
-  document.querySelector<HTMLSelectElement>("#folder-select");
-const createFolderToggle = document.querySelector<HTMLButtonElement>(
-  "#toggle-create-folder",
-);
-const createFolderPanel = document.querySelector<HTMLDivElement>(
-  "#create-folder-panel",
-);
-const newFolderNameInput =
-  document.querySelector<HTMLInputElement>("#new-folder-name");
-const createFolderButton =
-  document.querySelector<HTMLButtonElement>("#create-folder");
-const cancelCreateFolderButton = document.querySelector<HTMLButtonElement>(
-  "#cancel-create-folder",
-);
-const sourceLabel = document.querySelector<HTMLElement>("#source-label");
+// Emoji set mirrors the web app's NewFolderDialog FOLDER_ICONS.
+const FOLDER_ICONS = ["📁", "⭐", "💡", "📚", "🎨", "💼", "🔖", "🧠"];
 const AUTH_SESSION_KEY = "amiro_auth_session";
-let currentSession: AuthSessionState | null = null;
 
-function setStatus(message: string, kind: "default" | "error" = "default") {
+type TabName = "save" | "bookmarks" | "settings";
+
+// ── DOM references (grabbed once) ─────────────────────────────────
+const $ = <T extends Element>(selector: string) =>
+  document.querySelector<T>(selector);
+
+const tabs: Record<TabName, HTMLButtonElement | null> = {
+  save: $<HTMLButtonElement>("#tab-save"),
+  bookmarks: $<HTMLButtonElement>("#tab-bookmarks"),
+  settings: $<HTMLButtonElement>("#tab-settings"),
+};
+const panels: Record<TabName, HTMLElement | null> = {
+  save: $<HTMLElement>("#panel-save"),
+  bookmarks: $<HTMLElement>("#panel-bookmarks"),
+  settings: $<HTMLElement>("#panel-settings"),
+};
+
+const connPill = $<HTMLSpanElement>("#conn-pill");
+const connPillLabel = $<HTMLSpanElement>("#conn-pill-label");
+
+const saveDisconnected = $<HTMLDivElement>("#save-disconnected");
+const saveForm = $<HTMLDivElement>("#save-form");
+const connectSaveButton = $<HTMLButtonElement>("#connect-save");
+
+const previewAvatar = $<HTMLSpanElement>("#preview-avatar");
+const previewTitle = $<HTMLSpanElement>("#preview-title");
+const previewDomain = $<HTMLSpanElement>("#preview-domain");
+
+const folderSelect = $<HTMLSelectElement>("#folder-select");
+const createFolderToggle = $<HTMLButtonElement>("#toggle-create-folder");
+const createFolderPanel = $<HTMLDivElement>("#create-folder-panel");
+const newFolderNameInput = $<HTMLInputElement>("#new-folder-name");
+const emojiGrid = $<HTMLDivElement>("#emoji-grid");
+const createFolderButton = $<HTMLButtonElement>("#create-folder");
+const cancelCreateFolderButton = $<HTMLButtonElement>("#cancel-create-folder");
+
+const captureButton = $<HTMLButtonElement>("#capture");
+const status = $<HTMLDivElement>("#status");
+
+const connectButton = $<HTMLButtonElement>("#connect");
+const disconnectButton = $<HTMLButtonElement>("#disconnect");
+const connectionState = $<HTMLParagraphElement>("#connection-state");
+const sourceLabel = $<HTMLElement>("#source-label");
+
+// ── State ─────────────────────────────────────────────────────────
+let currentSession: AuthSessionState | null = null;
+let captureVisibility: Visibility = "private";
+let folderVisibility: Visibility = "private";
+let selectedIcon = FOLDER_ICONS[0];
+
+// ── Status bar ────────────────────────────────────────────────────
+type StatusKind = "default" | "pending" | "success" | "error";
+
+function setStatus(message: string, kind: StatusKind = "default") {
   if (!status) {
     return;
   }
-
   status.textContent = message;
-  status.dataset.kind = kind;
+  if (message && kind !== "default") {
+    status.dataset.kind = kind;
+  } else {
+    delete status.dataset.kind;
+  }
 }
 
-function setConnectionState(session: AuthSessionState | null) {
-  if (!connectionState || !connectButton || !disconnectButton) {
-    return;
+// ── Tab switching ─────────────────────────────────────────────────
+function activateTab(name: TabName) {
+  for (const key of Object.keys(tabs) as TabName[]) {
+    const tab = tabs[key];
+    const panel = panels[key];
+    const active = key === name;
+    tab?.setAttribute("aria-selected", active ? "true" : "false");
+    if (panel) {
+      panel.hidden = !active;
+    }
   }
+}
+
+function wireTabs() {
+  const order: TabName[] = ["save", "bookmarks", "settings"];
+  for (const name of order) {
+    tabs[name]?.addEventListener("click", () => activateTab(name));
+    tabs[name]?.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+        return;
+      }
+      event.preventDefault();
+      const index = order.indexOf(name);
+      const delta = event.key === "ArrowRight" ? 1 : -1;
+      const next = order[(index + delta + order.length) % order.length];
+      if (!next) {
+        return;
+      }
+      activateTab(next);
+      tabs[next]?.focus();
+    });
+  }
+}
+
+// ── Connection state ──────────────────────────────────────────────
+function setConnectionState(session: AuthSessionState | null) {
+  currentSession = session;
+  const connected = Boolean(session);
+
+  connPill?.setAttribute("data-connected", connected ? "true" : "false");
+  if (connPillLabel) {
+    connPillLabel.textContent = connected ? "Connected" : "Not connected";
+  }
+
+  if (connectionState) {
+    connectionState.textContent = session
+      ? `Connected to ${session.webAppUrl}`
+      : "Not connected";
+  }
+
+  connectButton?.classList.toggle("hidden", connected);
+  disconnectButton?.classList.toggle("hidden", !connected);
+
+  saveDisconnected?.classList.toggle("hidden", connected);
+  saveForm?.classList.toggle("hidden", !connected);
 
   if (!session) {
-    connectionState.textContent = "Not connected";
-    connectButton.classList.remove("hidden");
-    disconnectButton.classList.add("hidden");
-    currentSession = null;
     setFolderOptions([]);
-    return;
   }
-
-  currentSession = session;
-  connectionState.textContent = `Connected to ${session.webAppUrl}`;
-  connectButton.classList.add("hidden");
-  disconnectButton.classList.remove("hidden");
 }
 
+// ── Folder select ─────────────────────────────────────────────────
 function setFolderOptions(folders: FolderOption[], selectedFolderId?: string) {
   if (!folderSelect) {
     return;
@@ -68,9 +145,10 @@ function setFolderOptions(folders: FolderOption[], selectedFolderId?: string) {
 
   const previousSelection = folderSelect.value;
   folderSelect.innerHTML = "";
+
   const defaultOption = document.createElement("option");
   defaultOption.value = "";
-  defaultOption.textContent = "No folder";
+  defaultOption.textContent = "📥 Unfiled";
   folderSelect.append(defaultOption);
 
   for (const folder of folders) {
@@ -115,21 +193,118 @@ async function loadFolders() {
   }
 }
 
-async function createFolder(name: string) {
-  const response = (await chrome.runtime.sendMessage({
-    type: "amiro/create-folder",
-    name,
-  } satisfies ExtensionMessage)) as ExtensionMessageResponse;
-
-  if (!response.ok || !response.folderId) {
-    throw new Error(
-      response.ok ? "Folder create returned no id." : response.error,
-    );
+// ── Visibility segmented toggles ──────────────────────────────────
+function wireSegments(
+  selector: string,
+  attr: "vis" | "visFolder",
+  onChange: (value: Visibility) => void,
+) {
+  const buttons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(selector),
+  );
+  for (const button of buttons) {
+    button.addEventListener("click", () => {
+      const value = button.dataset[attr] as Visibility | undefined;
+      if (!value) {
+        return;
+      }
+      for (const sibling of buttons) {
+        sibling.setAttribute(
+          "aria-pressed",
+          sibling === button ? "true" : "false",
+        );
+      }
+      onChange(value);
+    });
   }
-
-  return response.folderId;
 }
 
+// ── Emoji picker ──────────────────────────────────────────────────
+function renderEmojiGrid() {
+  if (!emojiGrid) {
+    return;
+  }
+  emojiGrid.innerHTML = "";
+  for (const icon of FOLDER_ICONS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "emoji";
+    button.textContent = icon;
+    button.setAttribute("aria-label", `Use ${icon} icon`);
+    button.setAttribute(
+      "aria-pressed",
+      icon === selectedIcon ? "true" : "false",
+    );
+    button.addEventListener("click", () => {
+      selectedIcon = icon;
+      for (const child of Array.from(emojiGrid.children)) {
+        child.setAttribute("aria-pressed", child === button ? "true" : "false");
+      }
+    });
+    emojiGrid.append(button);
+  }
+}
+
+// ── Create folder ─────────────────────────────────────────────────
+function showCreateFolderPanel() {
+  createFolderPanel?.classList.remove("hidden");
+  createFolderToggle?.setAttribute("aria-expanded", "true");
+  newFolderNameInput?.focus();
+}
+
+function hideCreateFolderPanel() {
+  createFolderPanel?.classList.add("hidden");
+  createFolderToggle?.setAttribute("aria-expanded", "false");
+  if (newFolderNameInput) {
+    newFolderNameInput.value = "";
+  }
+}
+
+async function handleCreateFolder() {
+  if (!createFolderButton || !newFolderNameInput) {
+    return;
+  }
+
+  const name = newFolderNameInput.value.trim();
+  if (!name) {
+    setStatus("Folder name is required.", "error");
+    newFolderNameInput.focus();
+    return;
+  }
+
+  createFolderButton.disabled = true;
+  setStatus("Creating folder…", "pending");
+
+  try {
+    const response = (await chrome.runtime.sendMessage({
+      type: "amiro/create-folder",
+      name,
+      icon: selectedIcon,
+      visibility: folderVisibility,
+    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+
+    if (!response.ok || !response.folderId) {
+      throw new Error(
+        response.ok ? "Folder create returned no id." : response.error,
+      );
+    }
+
+    await loadFolders();
+    if (folderSelect) {
+      folderSelect.value = response.folderId;
+    }
+    hideCreateFolderPanel();
+    setStatus(`Folder “${name}” created.`, "success");
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to create folder.";
+    setStatus(message, "error");
+  } finally {
+    createFolderButton.disabled = false;
+  }
+}
+
+// ── Auth handshake ────────────────────────────────────────────────
 async function getAuthState() {
   const response = (await chrome.runtime.sendMessage({
     type: "amiro/get-auth-state",
@@ -149,17 +324,11 @@ async function refreshConnectionState() {
     await loadFolders();
   } catch {
     setConnectionState(null);
-    setFolderOptions([]);
   }
 }
 
 async function connectSession() {
-  if (!connectButton) {
-    return;
-  }
-
-  connectButton.disabled = true;
-  setStatus("Opening web app handshake...");
+  setStatus("Opening web app handshake…", "pending");
 
   try {
     const response = (await chrome.runtime.sendMessage({
@@ -176,8 +345,6 @@ async function connectSession() {
     const message =
       error instanceof Error ? error.message : "Failed to start handshake.";
     setStatus(message, "error");
-  } finally {
-    connectButton.disabled = false;
   }
 }
 
@@ -199,7 +366,6 @@ async function disconnectSession() {
 
     setStatus("Disconnected extension session.");
     setConnectionState(null);
-    setFolderOptions([]);
     hideCreateFolderPanel();
   } catch (error) {
     const message =
@@ -210,50 +376,79 @@ async function disconnectSession() {
   }
 }
 
-function showCreateFolderPanel() {
-  createFolderPanel?.classList.remove("hidden");
-  newFolderNameInput?.focus();
-}
-
-function hideCreateFolderPanel() {
-  createFolderPanel?.classList.add("hidden");
-  if (newFolderNameInput) {
-    newFolderNameInput.value = "";
-  }
-}
-
-async function handleCreateFolder() {
-  if (!createFolderButton || !newFolderNameInput) {
+// ── Capture ───────────────────────────────────────────────────────
+async function captureCurrentTab() {
+  if (!captureButton) {
     return;
   }
 
-  const name = newFolderNameInput.value.trim();
-  if (!name) {
-    setStatus("Folder name is required.", "error");
-    newFolderNameInput.focus();
-    return;
-  }
+  captureButton.disabled = true;
+  setStatus("Saving current page…", "pending");
 
-  createFolderButton.disabled = true;
-  setStatus("Creating folder...");
+  const folderId = folderSelect?.value || undefined;
 
   try {
-    const folderId = await createFolder(name);
-    await loadFolders();
-    if (folderSelect) {
-      folderSelect.value = folderId;
+    const response = (await chrome.runtime.sendMessage({
+      type: "amiro/capture-current-tab",
+      folderId,
+      visibility: captureVisibility,
+    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+
+    if (!response.ok || !response.data) {
+      throw new Error(
+        response.ok ? "Capture returned no data." : response.error,
+      );
     }
-    hideCreateFolderPanel();
-    setStatus(`Folder "${name}" created.`);
+
+    if (response.syncStatus === "synced") {
+      setStatus(`Saved “${response.data.title}”.`, "success");
+    } else {
+      const suffix = response.syncMessage ? ` ${response.syncMessage}` : "";
+      setStatus(`Queued “${response.data.title}”.${suffix}`);
+    }
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to create folder.";
+      error instanceof Error ? error.message : "Failed to save current page.";
     setStatus(message, "error");
   } finally {
-    createFolderButton.disabled = false;
+    captureButton.disabled = false;
   }
 }
 
+// ── Current page preview ──────────────────────────────────────────
+async function loadPagePreview() {
+  try {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (!tab) {
+      return;
+    }
+
+    const title = tab.title?.trim() || "Untitled page";
+    if (previewTitle) {
+      previewTitle.textContent = title;
+    }
+    if (previewAvatar) {
+      previewAvatar.textContent = title.charAt(0) || "·";
+    }
+    if (previewDomain && tab.url) {
+      try {
+        previewDomain.textContent = new URL(tab.url).hostname.replace(
+          /^www\./,
+          "",
+        );
+      } catch {
+        previewDomain.textContent = tab.url;
+      }
+    }
+  } catch {
+    // Non-fatal — the preview is decorative.
+  }
+}
+
+// ── Source label ──────────────────────────────────────────────────
 function getBrowserLabel(userAgent: string) {
   const ua = userAgent.toLowerCase();
   if (ua.includes("edg/")) return "Edge";
@@ -295,8 +490,7 @@ async function setSourceLabel() {
   };
   if (typeof braveNavigator.brave?.isBrave === "function") {
     try {
-      const isBrave = await braveNavigator.brave.isBrave();
-      if (isBrave) {
+      if (await braveNavigator.brave.isBrave()) {
         browser = "Brave";
       }
     } catch {
@@ -314,69 +508,30 @@ async function setSourceLabel() {
   sourceLabel.textContent = `${browser} on ${getOsLabel(platform)}`;
 }
 
-async function captureCurrentTab() {
-  if (!captureButton) {
-    return;
-  }
-
-  captureButton.disabled = true;
-  setStatus("Capturing current tab...");
-
-  const folderId = folderSelect?.value || undefined;
-
-  try {
-    const response = (await chrome.runtime.sendMessage({
-      type: "amiro/capture-current-tab",
-      folderId,
-    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
-
-    if (!response.ok || !response.data) {
-      throw new Error(
-        response.ok ? "Capture returned no data." : response.error,
-      );
-    }
-
-    const prefix = response.syncStatus === "synced" ? "Synced" : "Queued";
-    const suffix = response.syncMessage ? ` (${response.syncMessage})` : "";
-    setStatus(`${prefix}: ${response.data.title}${suffix}`);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to capture current tab.";
-    setStatus(message, "error");
-  } finally {
-    captureButton.disabled = false;
-  }
-}
-
-connectButton?.addEventListener("click", () => {
-  void connectSession();
+// ── Wiring ────────────────────────────────────────────────────────
+wireTabs();
+renderEmojiGrid();
+wireSegments("[data-vis]", "vis", (value) => {
+  captureVisibility = value;
+});
+wireSegments("[data-vis-folder]", "visFolder", (value) => {
+  folderVisibility = value;
 });
 
-disconnectButton?.addEventListener("click", () => {
-  void disconnectSession();
-});
-
-captureButton?.addEventListener("click", () => {
-  void captureCurrentTab();
-});
+connectButton?.addEventListener("click", () => void connectSession());
+connectSaveButton?.addEventListener("click", () => void connectSession());
+disconnectButton?.addEventListener("click", () => void disconnectSession());
+captureButton?.addEventListener("click", () => void captureCurrentTab());
 
 createFolderToggle?.addEventListener("click", () => {
   if (createFolderPanel?.classList.contains("hidden")) {
     showCreateFolderPanel();
-    return;
+  } else {
+    hideCreateFolderPanel();
   }
-
-  hideCreateFolderPanel();
 });
-
-cancelCreateFolderButton?.addEventListener("click", () => {
-  hideCreateFolderPanel();
-});
-
-createFolderButton?.addEventListener("click", () => {
-  void handleCreateFolder();
-});
-
+cancelCreateFolderButton?.addEventListener("click", hideCreateFolderPanel);
+createFolderButton?.addEventListener("click", () => void handleCreateFolder());
 newFolderNameInput?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
@@ -388,16 +543,14 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || !changes[AUTH_SESSION_KEY]) {
     return;
   }
-
   const nextSession = (changes[AUTH_SESSION_KEY].newValue ??
     null) as AuthSessionState | null;
   setConnectionState(nextSession);
   void loadFolders();
 });
 
-window.addEventListener("focus", () => {
-  void refreshConnectionState();
-});
+window.addEventListener("focus", () => void refreshConnectionState());
 
 void refreshConnectionState();
+void loadPagePreview();
 void setSourceLabel();

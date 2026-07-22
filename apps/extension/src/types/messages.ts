@@ -1,9 +1,12 @@
+export type Visibility = "private" | "public";
+
 export type CapturePayload = {
   url: string;
   title: string;
   text: string;
   source: "chrome";
   folderId?: string;
+  visibility?: Visibility;
   capturedAt: string;
   tags: string[];
 };
@@ -23,7 +26,11 @@ export type AuthSessionState = {
 
 export type ExtensionMessage =
   | { type: "amiro/extract-page" }
-  | { type: "amiro/capture-current-tab"; folderId?: string }
+  | {
+      type: "amiro/capture-current-tab";
+      folderId?: string;
+      visibility?: Visibility;
+    }
   | { type: "amiro/start-handshake"; webAppUrl?: string }
   | {
       type: "amiro/complete-handshake";
@@ -32,7 +39,12 @@ export type ExtensionMessage =
       convexSiteUrl: string;
     }
   | { type: "amiro/get-folders" }
-  | { type: "amiro/create-folder"; name: string }
+  | {
+      type: "amiro/create-folder";
+      name: string;
+      icon?: string;
+      visibility?: Visibility;
+    }
   | { type: "amiro/get-auth-state" }
   | { type: "amiro/disconnect-auth" };
 
