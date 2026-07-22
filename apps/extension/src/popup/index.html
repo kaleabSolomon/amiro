@@ -242,18 +242,23 @@
         tabindex="0"
         hidden
       >
-        <div class="empty">
-          <span class="empty-icon" aria-hidden="true">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
-            </svg>
-          </span>
-          <span class="badge">Coming soon</span>
-          <h2 class="empty-title">Browse right from here</h2>
-          <p class="empty-text">
-            Your folders and saved pages will live in this tab — search, open,
-            and organize without leaving the page.
-          </p>
+        <!-- Shown when NOT connected -->
+        <div id="bm-disconnected" class="notice hidden">
+          <p>Connect your amiro account to browse your bookmarks.</p>
+          <button id="connect-bm" class="btn btn-block" type="button">
+            Connect account
+          </button>
+        </div>
+
+        <!-- Shown when connected -->
+        <div id="bm-body" class="stack hidden">
+          <div
+            id="bm-folders"
+            class="folder-filter"
+            role="group"
+            aria-label="Filter by folder"
+          ></div>
+          <div id="bm-list" class="bm-list" aria-live="polite"></div>
         </div>
       </section>
 

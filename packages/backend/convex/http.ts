@@ -565,7 +565,7 @@ http.route({
       );
     }
 
-    const data = await ctx.runQuery(internal.sync.listFoldersForUser, {
+    const data = await ctx.runQuery(internal.sync.listFolderTreeForUser, {
       userId: authUser._id,
     });
 
@@ -576,6 +576,72 @@ http.route({
       }),
       { status: 200, headers: syncCorsHeaders },
     );
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: syncCorsHeaders,
+    });
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    const url = new URL(request.url);
+    const folderIdParam = url.searchParams.get("folderId");
+    const limitParam = url.searchParams.get("limit");
+
+    // "unfiled" (or an absent param) means bookmarks with no folder.
+    const folderId =
+      folderIdParam && folderIdParam !== "unfiled"
+        ? (folderIdParam as Id<"folders">)
+        : undefined;
+
+    const parsedLimit = limitParam
+      ? Number.parseInt(limitParam, 10)
+      : undefined;
+    const limit =
+      parsedLimit !== undefined && Number.isFinite(parsedLimit)
+        ? parsedLimit
+        : undefined;
+
+    try {
+      const data = await ctx.runQuery(
+        internal.sync.listBookmarksForUserFolder,
+        {
+          userId: authUser._id,
+          folderId,
+          limit,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load bookmarks.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
   }),
 });
 

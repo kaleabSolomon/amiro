@@ -6,9 +6,11 @@ import {
   setAuthSession,
 } from "../lib/storage";
 import type {
+  BookmarkItem,
   CapturePayload,
   ExtensionMessage,
   ExtensionMessageResponse,
+  FolderOption,
   Visibility,
 } from "../types/messages";
 
@@ -236,12 +238,60 @@ async function getFolders() {
 
   const body = (await response.json()) as {
     ok: boolean;
-    data?: Array<{ id: string; name: string; parentFolderId: string | null }>;
+    data?: FolderOption[];
     error?: string;
   };
 
   if (!body.ok || !body.data) {
     throw new Error(body.error || "Failed to load folders.");
+  }
+
+  return body.data;
+}
+
+async function getBookmarks(folderId?: string, limit?: number) {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const params = new URLSearchParams();
+  if (folderId) {
+    params.set("folderId", folderId);
+  }
+  if (limit) {
+    params.set("limit", String(limit));
+  }
+  const query = params.toString();
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/bookmarks${
+    query ? `?${query}` : ""
+  }`;
+
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${session.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    throw new Error(`Failed to load bookmarks (${response.status}).`);
+  }
+
+  const body = (await response.json()) as {
+    ok: boolean;
+    data?: BookmarkItem[];
+    error?: string;
+  };
+
+  if (!body.ok || !body.data) {
+    throw new Error(body.error || "Failed to load bookmarks.");
   }
 
   return body.data;
@@ -352,6 +402,22 @@ chrome.runtime.onMessage.addListener(
         .catch((error: unknown) => {
           const errorMessage =
             error instanceof Error ? error.message : "Failed to load folders.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/get-bookmarks") {
+      getBookmarks(message.folderId, message.limit)
+        .then((bookmarks) => {
+          sendResponse({ ok: true, bookmarks });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to load bookmarks.";
           sendResponse({ ok: false, error: errorMessage });
         });
 

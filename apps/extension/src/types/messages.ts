@@ -11,10 +11,26 @@ export type CapturePayload = {
   tags: string[];
 };
 
+export type BookmarkSource = "chrome" | "telegram" | "instagram" | "twitter";
+
 export type FolderOption = {
   id: string;
   name: string;
   parentFolderId: string | null;
+  icon?: string | null;
+  visibility?: Visibility;
+  itemCount?: number;
+};
+
+export type BookmarkItem = {
+  id: string;
+  title: string;
+  url: string;
+  source: BookmarkSource;
+  tags: string[];
+  visibility: Visibility;
+  text: string;
+  capturedAt: number;
 };
 
 export type AuthSessionState = {
@@ -39,6 +55,7 @@ export type ExtensionMessage =
       convexSiteUrl: string;
     }
   | { type: "amiro/get-folders" }
+  | { type: "amiro/get-bookmarks"; folderId?: string; limit?: number }
   | {
       type: "amiro/create-folder";
       name: string;
@@ -56,6 +73,7 @@ export type ExtensionMessageResponse =
       syncMessage?: string;
       session?: AuthSessionState | null;
       folders?: FolderOption[];
+      bookmarks?: BookmarkItem[];
       folderId?: string;
       started?: true;
       connected?: true;

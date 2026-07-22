@@ -717,6 +717,208 @@ kbd {
   text-wrap: pretty;
 }
 
+/* ── Bookmarks: folder filter ───────────────────────────────────── */
+.folder-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.folder-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.folder-pill:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.folder-pill:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 35%, transparent);
+}
+
+.folder-pill[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.folder-pill .count {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.folder-pill-name {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Bookmarks: list & rows ─────────────────────────────────────── */
+.bm-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bm-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.bm-row:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+}
+
+.bm-row:active {
+  transform: scale(0.99);
+}
+
+.bm-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 35%, transparent);
+}
+
+.bm-body {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  flex: 1;
+}
+
+.bm-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bm-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  min-width: 0;
+}
+
+.bm-domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bm-dot {
+  opacity: 0.5;
+}
+
+.bm-time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.bm-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border: 1px solid var(--border);
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-topic {
+  background: color-mix(in oklch, var(--mint) 14%, transparent);
+  color: var(--mint);
+  border-color: color-mix(in oklch, var(--mint) 30%, transparent);
+}
+
+/* private/public badge on a row */
+.bm-vis {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.bm-vis .icon {
+  width: 13px;
+  height: 13px;
+}
+
+/* ── Bookmarks: inline states ───────────────────────────────────── */
+.bm-state {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  text-align: center;
+}
+
+.bm-state p {
+  font-size: 12.5px;
+  color: var(--muted-foreground);
+  text-wrap: pretty;
+  max-width: 26ch;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 2px solid
+    color-mix(in oklch, var(--muted-foreground) 30%, transparent);
+  border-top-color: var(--primary);
+  animation: spin 0.7s linear infinite;
+}
+
 /* ── Status bar ─────────────────────────────────────────────────── */
 .status-bar {
   min-height: 20px;

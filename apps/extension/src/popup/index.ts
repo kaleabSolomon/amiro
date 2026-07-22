@@ -1,6 +1,7 @@
 import { DEFAULT_WEB_APP_URL } from "../lib/config";
 import type {
   AuthSessionState,
+  BookmarkItem,
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
@@ -55,11 +56,23 @@ const disconnectButton = $<HTMLButtonElement>("#disconnect");
 const connectionState = $<HTMLParagraphElement>("#connection-state");
 const sourceLabel = $<HTMLElement>("#source-label");
 
+const connectBmButton = $<HTMLButtonElement>("#connect-bm");
+const bmDisconnected = $<HTMLDivElement>("#bm-disconnected");
+const bmBody = $<HTMLDivElement>("#bm-body");
+const bmFolders = $<HTMLDivElement>("#bm-folders");
+const bmList = $<HTMLDivElement>("#bm-list");
+
 // ── State ─────────────────────────────────────────────────────────
 let currentSession: AuthSessionState | null = null;
 let captureVisibility: Visibility = "private";
 let folderVisibility: Visibility = "private";
 let selectedIcon = FOLDER_ICONS[0];
+let folderTree: FolderOption[] = [];
+let selectedBmFolderId = "unfiled";
+let bookmarksInitialized = false;
+
+// Auto tags applied on capture are noise in the row UI; hide them.
+const HIDDEN_TAG_PREFIXES = ["source:", "domain:", "captured:"];
 
 // ── Status bar ────────────────────────────────────────────────────
 type StatusKind = "default" | "pending" | "success" | "error";
@@ -76,6 +89,24 @@ function setStatus(message: string, kind: StatusKind = "default") {
   }
 }
 
+// Wraps runtime messaging. When the background service worker is stale (e.g. it
+// lacks a newly-added handler after an update), sendMessage resolves to
+// undefined and the channel closes — surface that as an actionable error
+// instead of a cryptic "reading 'ok' of undefined".
+async function send(
+  message: ExtensionMessage,
+): Promise<ExtensionMessageResponse> {
+  const response = (await chrome.runtime.sendMessage(message)) as
+    | ExtensionMessageResponse
+    | undefined;
+  if (!response) {
+    throw new Error(
+      "Extension background isn’t responding. Reload the extension from chrome://extensions and try again.",
+    );
+  }
+  return response;
+}
+
 // ── Tab switching ─────────────────────────────────────────────────
 function activateTab(name: TabName) {
   for (const key of Object.keys(tabs) as TabName[]) {
@@ -86,6 +117,12 @@ function activateTab(name: TabName) {
     if (panel) {
       panel.hidden = !active;
     }
+  }
+
+  // Lazily load bookmarks the first time the tab is opened.
+  if (name === "bookmarks" && currentSession && !bookmarksInitialized) {
+    bookmarksInitialized = true;
+    void loadBookmarks();
   }
 }
 
@@ -132,8 +169,20 @@ function setConnectionState(session: AuthSessionState | null) {
   saveDisconnected?.classList.toggle("hidden", connected);
   saveForm?.classList.toggle("hidden", !connected);
 
+  bmDisconnected?.classList.toggle("hidden", connected);
+  bmBody?.classList.toggle("hidden", !connected);
+
   if (!session) {
     setFolderOptions([]);
+    folderTree = [];
+    selectedBmFolderId = "unfiled";
+    bookmarksInitialized = false;
+    if (bmFolders) {
+      bmFolders.innerHTML = "";
+    }
+    if (bmList) {
+      bmList.innerHTML = "";
+    }
   }
 }
 
@@ -176,21 +225,274 @@ async function loadFolders() {
   }
 
   try {
-    const response = (await chrome.runtime.sendMessage({
+    const response = await send({
       type: "amiro/get-folders",
-    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+    } satisfies ExtensionMessage);
 
     if (!response.ok) {
       throw new Error(response.error);
     }
 
-    setFolderOptions(response.folders ?? []);
+    folderTree = response.folders ?? [];
+    // The Save-tab select carries its own "Unfiled" default option, so drop the
+    // synthetic tree entry to avoid a duplicate.
+    setFolderOptions(folderTree.filter((folder) => folder.id !== "unfiled"));
+    renderFolderFilter();
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to load folders.";
     setStatus(message, "error");
     setFolderOptions([]);
+    folderTree = [];
+    renderFolderFilter();
   }
+}
+
+// ── Bookmarks tab ─────────────────────────────────────────────────
+function renderFolderFilter() {
+  if (!bmFolders) {
+    return;
+  }
+  bmFolders.innerHTML = "";
+
+  if (!folderTree.some((folder) => folder.id === selectedBmFolderId)) {
+    selectedBmFolderId = "unfiled";
+  }
+
+  for (const folder of folderTree) {
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = "folder-pill";
+    pill.dataset.folderId = folder.id;
+    pill.setAttribute(
+      "aria-pressed",
+      folder.id === selectedBmFolderId ? "true" : "false",
+    );
+
+    const icon = document.createElement("span");
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = folder.icon || "📁";
+
+    const name = document.createElement("span");
+    name.className = "folder-pill-name";
+    name.textContent = folder.name;
+
+    const count = document.createElement("span");
+    count.className = "count";
+    count.textContent = String(folder.itemCount ?? 0);
+
+    pill.append(icon, name, count);
+    pill.addEventListener("click", () => {
+      if (selectedBmFolderId === folder.id) {
+        return;
+      }
+      selectedBmFolderId = folder.id;
+      for (const child of Array.from(bmFolders.children)) {
+        child.setAttribute(
+          "aria-pressed",
+          (child as HTMLElement).dataset.folderId === folder.id
+            ? "true"
+            : "false",
+        );
+      }
+      void loadBookmarks();
+    });
+    bmFolders.append(pill);
+  }
+}
+
+function renderBmState(kind: "loading" | "empty" | "error", message?: string) {
+  if (!bmList) {
+    return;
+  }
+  bmList.innerHTML = "";
+  const state = document.createElement("div");
+  state.className = "bm-state";
+
+  if (kind === "loading") {
+    const spinner = document.createElement("div");
+    spinner.className = "spinner";
+    spinner.setAttribute("aria-hidden", "true");
+    const text = document.createElement("p");
+    text.textContent = "Loading bookmarks…";
+    state.append(spinner, text);
+  } else {
+    const text = document.createElement("p");
+    if (kind === "empty") {
+      text.textContent = "No bookmarks in this folder yet.";
+    } else {
+      text.textContent = message || "Failed to load bookmarks.";
+    }
+    state.append(text);
+  }
+
+  bmList.append(state);
+}
+
+async function loadBookmarks() {
+  if (!currentSession || !bmList) {
+    return;
+  }
+
+  renderBmState("loading");
+
+  try {
+    const folderId =
+      selectedBmFolderId === "unfiled" ? undefined : selectedBmFolderId;
+    const response = await send({
+      type: "amiro/get-bookmarks",
+      folderId,
+      limit: 50,
+    } satisfies ExtensionMessage);
+
+    if (!response.ok) {
+      throw new Error(response.error);
+    }
+
+    renderBookmarks(response.bookmarks ?? []);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to load bookmarks.";
+    renderBmState("error", message);
+  }
+}
+
+function renderBookmarks(items: BookmarkItem[]) {
+  if (!bmList) {
+    return;
+  }
+
+  if (items.length === 0) {
+    renderBmState("empty");
+    return;
+  }
+
+  bmList.innerHTML = "";
+  for (const item of items) {
+    bmList.append(buildBookmarkRow(item));
+  }
+}
+
+function buildBookmarkRow(item: BookmarkItem) {
+  const row = document.createElement("a");
+  row.className = "bm-row";
+  row.href = item.url;
+  row.target = "_blank";
+  row.rel = "noopener noreferrer";
+
+  const avatar = document.createElement("span");
+  avatar.className = "avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = item.title.charAt(0) || "·";
+
+  const body = document.createElement("span");
+  body.className = "bm-body";
+
+  const title = document.createElement("span");
+  title.className = "bm-title";
+  title.textContent = item.title;
+
+  const meta = document.createElement("span");
+  meta.className = "bm-meta";
+  const domain = document.createElement("span");
+  domain.className = "bm-domain";
+  domain.textContent = domainFromUrl(item.url);
+  const dot = document.createElement("span");
+  dot.className = "bm-dot";
+  dot.setAttribute("aria-hidden", "true");
+  dot.textContent = "·";
+  const time = document.createElement("span");
+  time.className = "bm-time";
+  time.textContent = relativeTime(item.capturedAt);
+  meta.append(domain, dot, time);
+
+  body.append(title, meta);
+
+  const tags = formatTags(item.tags);
+  if (tags.length > 0) {
+    const tagRow = document.createElement("span");
+    tagRow.className = "bm-tags";
+    for (const tag of tags) {
+      const chip = document.createElement("span");
+      chip.className = tag.kind === "topic" ? "chip chip-topic" : "chip";
+      chip.textContent = tag.label;
+      tagRow.append(chip);
+    }
+    body.append(tagRow);
+  }
+
+  row.append(avatar, body);
+
+  if (item.visibility === "public") {
+    const vis = document.createElement("span");
+    vis.className = "bm-vis";
+    vis.title = "Public";
+    vis.innerHTML =
+      '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
+    const label = document.createElement("span");
+    label.className = "sr-only";
+    label.textContent = "Public";
+    vis.append(label);
+    row.append(vis);
+  }
+
+  return row;
+}
+
+type FormattedTag = { label: string; kind: "topic" | "type" | "plain" };
+
+function formatTags(tags: string[]): FormattedTag[] {
+  return tags
+    .filter(
+      (tag) => !HIDDEN_TAG_PREFIXES.some((prefix) => tag.startsWith(prefix)),
+    )
+    .slice(0, 2)
+    .map((tag) => {
+      const kind = tag.startsWith("topic:")
+        ? "topic"
+        : tag.startsWith("type:")
+          ? "type"
+          : "plain";
+      const label = tag.includes(":") ? tag.slice(tag.indexOf(":") + 1) : tag;
+      return { label, kind };
+    });
+}
+
+function domainFromUrl(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function relativeTime(ms: number) {
+  const diff = Date.now() - ms;
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) {
+    return "just now";
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return `${days}d ago`;
+  }
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) {
+    return `${weeks}w ago`;
+  }
+  const months = Math.floor(days / 30);
+  if (months < 12) {
+    return `${months}mo ago`;
+  }
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 // ── Visibility segmented toggles ──────────────────────────────────
@@ -276,12 +578,12 @@ async function handleCreateFolder() {
   setStatus("Creating folder…", "pending");
 
   try {
-    const response = (await chrome.runtime.sendMessage({
+    const response = await send({
       type: "amiro/create-folder",
       name,
       icon: selectedIcon,
       visibility: folderVisibility,
-    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+    } satisfies ExtensionMessage);
 
     if (!response.ok || !response.folderId) {
       throw new Error(
@@ -306,9 +608,9 @@ async function handleCreateFolder() {
 
 // ── Auth handshake ────────────────────────────────────────────────
 async function getAuthState() {
-  const response = (await chrome.runtime.sendMessage({
+  const response = await send({
     type: "amiro/get-auth-state",
-  } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+  } satisfies ExtensionMessage);
 
   if (!response.ok) {
     throw new Error(response.error);
@@ -331,10 +633,10 @@ async function connectSession() {
   setStatus("Opening web app handshake…", "pending");
 
   try {
-    const response = (await chrome.runtime.sendMessage({
+    const response = await send({
       type: "amiro/start-handshake",
       webAppUrl: DEFAULT_WEB_APP_URL,
-    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+    } satisfies ExtensionMessage);
 
     if (!response.ok) {
       throw new Error(response.error);
@@ -356,9 +658,9 @@ async function disconnectSession() {
   disconnectButton.disabled = true;
 
   try {
-    const response = (await chrome.runtime.sendMessage({
+    const response = await send({
       type: "amiro/disconnect-auth",
-    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+    } satisfies ExtensionMessage);
 
     if (!response.ok) {
       throw new Error(response.error);
@@ -388,11 +690,11 @@ async function captureCurrentTab() {
   const folderId = folderSelect?.value || undefined;
 
   try {
-    const response = (await chrome.runtime.sendMessage({
+    const response = await send({
       type: "amiro/capture-current-tab",
       folderId,
       visibility: captureVisibility,
-    } satisfies ExtensionMessage)) as ExtensionMessageResponse;
+    } satisfies ExtensionMessage);
 
     if (!response.ok || !response.data) {
       throw new Error(
@@ -402,6 +704,11 @@ async function captureCurrentTab() {
 
     if (response.syncStatus === "synced") {
       setStatus(`Saved “${response.data.title}”.`, "success");
+      // Refresh folder counts and, if already viewing bookmarks, the list.
+      await loadFolders();
+      if (bookmarksInitialized) {
+        await loadBookmarks();
+      }
     } else {
       const suffix = response.syncMessage ? ` ${response.syncMessage}` : "";
       setStatus(`Queued “${response.data.title}”.${suffix}`);
@@ -520,6 +827,7 @@ wireSegments("[data-vis-folder]", "visFolder", (value) => {
 
 connectButton?.addEventListener("click", () => void connectSession());
 connectSaveButton?.addEventListener("click", () => void connectSession());
+connectBmButton?.addEventListener("click", () => void connectSession());
 disconnectButton?.addEventListener("click", () => void disconnectSession());
 captureButton?.addEventListener("click", () => void captureCurrentTab());
 

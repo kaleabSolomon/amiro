@@ -283,8 +283,61 @@ export const listBookmarksForUserFolder = internalQuery({
       title: bookmark.title,
       url: bookmark.url,
       source: bookmark.source,
+      tags: bookmark.tags,
+      visibility: bookmark.visibility ?? "private",
+      // Short snippet for row previews; full text stays server-side.
+      text: bookmark.text ? bookmark.text.slice(0, 200) : "",
       capturedAt: bookmark.capturedAt,
     }));
+  },
+});
+
+// Folders (plus a synthetic "Unfiled" bucket) with per-folder item counts.
+// Mirrors the web app's dashboard.getFolderTree shape for the extension's
+// browse-by-folder view. Exposed to the extension via GET /api/extension/folders.
+export const listFolderTreeForUser = internalQuery({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const [folders, bookmarks] = await Promise.all([
+      ctx.db
+        .query("folders")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+      ctx.db
+        .query("syncedBookmarks")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+    ]);
+
+    const counts = new Map<string, number>();
+    for (const bookmark of bookmarks) {
+      const key = bookmark.folderId ?? "unfiled";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    const realFolders = folders
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((folder) => ({
+        id: folder._id as string,
+        name: folder.name,
+        icon: folder.icon ?? null,
+        visibility: folder.visibility ?? ("private" as const),
+        parentFolderId: folder.parentFolderId ?? null,
+        itemCount: counts.get(folder._id) ?? 0,
+      }));
+
+    const unfiled = {
+      id: "unfiled",
+      name: "Unfiled",
+      icon: "📥",
+      visibility: "private" as const,
+      parentFolderId: null,
+      itemCount: counts.get("unfiled") ?? 0,
+    };
+
+    return [unfiled, ...realFolders];
   },
 });
 
