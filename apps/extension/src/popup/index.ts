@@ -2,6 +2,7 @@ import { DEFAULT_WEB_APP_URL } from "../lib/config";
 import type {
   AuthSessionState,
   BookmarkItem,
+  CapturePayload,
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
@@ -12,6 +13,7 @@ import type {
 // Emoji set mirrors the web app's NewFolderDialog FOLDER_ICONS.
 const FOLDER_ICONS = ["📁", "⭐", "💡", "📚", "🎨", "💼", "🔖", "🧠"];
 const AUTH_SESSION_KEY = "amiro_auth_session";
+const CAPTURE_QUEUE_KEY = "amiro_capture_queue";
 
 type TabName = "save" | "bookmarks" | "settings";
 
@@ -33,9 +35,9 @@ const panels: Record<TabName, HTMLElement | null> = {
 const connPill = $<HTMLSpanElement>("#conn-pill");
 const connPillLabel = $<HTMLSpanElement>("#conn-pill-label");
 
-const saveDisconnected = $<HTMLDivElement>("#save-disconnected");
-const saveForm = $<HTMLDivElement>("#save-form");
-const connectSaveButton = $<HTMLButtonElement>("#connect-save");
+const saveFolderField = $<HTMLDivElement>("#save-folder-field");
+const saveVisibilityField = $<HTMLDivElement>("#save-visibility-field");
+const saveOfflineHint = $<HTMLParagraphElement>("#save-offline-hint");
 
 const previewAvatar = $<HTMLSpanElement>("#preview-avatar");
 const previewTitle = $<HTMLSpanElement>("#preview-title");
@@ -59,7 +61,9 @@ const connectionState = $<HTMLParagraphElement>("#connection-state");
 const sourceLabel = $<HTMLElement>("#source-label");
 
 const connectBmButton = $<HTMLButtonElement>("#connect-bm");
-const bmDisconnected = $<HTMLDivElement>("#bm-disconnected");
+const bmConnectNudge = $<HTMLDivElement>("#bm-connect-nudge");
+const bmPending = $<HTMLDivElement>("#bm-pending");
+const bmPendingList = $<HTMLDivElement>("#bm-pending-list");
 const bmBody = $<HTMLDivElement>("#bm-body");
 const bmFolders = $<HTMLDivElement>("#bm-folders");
 const bmList = $<HTMLDivElement>("#bm-list");
@@ -172,10 +176,15 @@ function setConnectionState(session: AuthSessionState | null) {
   connectButton?.classList.toggle("hidden", connected);
   disconnectButton?.classList.toggle("hidden", !connected);
 
-  saveDisconnected?.classList.toggle("hidden", connected);
-  saveForm?.classList.toggle("hidden", !connected);
+  // Save tab: the form is always available (saving works offline). Folder and
+  // visibility controls only make sense once connected; otherwise the capture
+  // is queued locally.
+  saveFolderField?.classList.toggle("hidden", !connected);
+  saveVisibilityField?.classList.toggle("hidden", !connected);
+  saveOfflineHint?.classList.toggle("hidden", connected);
 
-  bmDisconnected?.classList.toggle("hidden", connected);
+  // Bookmarks tab: browsing needs a connection; nudge otherwise.
+  bmConnectNudge?.classList.toggle("hidden", connected);
   bmBody?.classList.toggle("hidden", !connected);
 
   if (!session) {
@@ -191,6 +200,9 @@ function setConnectionState(session: AuthSessionState | null) {
       bmList.innerHTML = "";
     }
   }
+
+  // Pending (queued) captures show on the Bookmarks tab regardless of state.
+  void refreshPending();
 }
 
 // ── Folder select ─────────────────────────────────────────────────
@@ -302,9 +314,11 @@ async function loadFolders() {
     renderFolderFilter();
     updateVisibilityAvailability();
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to load folders.";
-    setStatus(message, "error");
+    // Folder loading runs automatically (on open / reconnect). A failure here is
+    // usually a stale session returning 401 — which the background clears,
+    // flipping the UI to disconnected via storage.onChanged. So don't nag the
+    // user with an error; just reset quietly.
+    console.warn("[amiro] failed to load folders", error);
     setFolderOptions([]);
     folderTree = [];
     renderFolderFilter();
@@ -435,6 +449,75 @@ function renderBookmarks(items: BookmarkItem[]) {
   for (const item of items) {
     bmList.append(buildBookmarkRow(item));
   }
+}
+
+// ── Pending (offline queue) ───────────────────────────────────────
+async function getQueue(): Promise<CapturePayload[]> {
+  const result = await chrome.storage.local.get(CAPTURE_QUEUE_KEY);
+  return (result[CAPTURE_QUEUE_KEY] as CapturePayload[] | undefined) ?? [];
+}
+
+async function refreshPending() {
+  renderPending(await getQueue());
+}
+
+function renderPending(queue: CapturePayload[]) {
+  bmPending?.classList.toggle("hidden", queue.length === 0);
+  if (!bmPendingList) {
+    return;
+  }
+  bmPendingList.innerHTML = "";
+  for (const capture of queue) {
+    bmPendingList.append(buildPendingRow(capture));
+  }
+}
+
+function buildPendingRow(capture: CapturePayload) {
+  const row = document.createElement("div");
+  row.className = "pending-row";
+
+  const avatar = document.createElement("span");
+  avatar.className = "avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = capture.title.charAt(0) || "·";
+
+  const body = document.createElement("span");
+  body.className = "bm-body";
+
+  const title = document.createElement("span");
+  title.className = "bm-title";
+  title.textContent = capture.title;
+
+  const meta = document.createElement("span");
+  meta.className = "bm-meta";
+  const domain = document.createElement("span");
+  domain.className = "bm-domain";
+  domain.textContent = domainFromUrl(capture.url);
+  meta.append(domain);
+
+  // capturedAt is an ISO string in the queue (vs a number on synced rows).
+  const parsedAt = Date.parse(capture.capturedAt);
+  if (!Number.isNaN(parsedAt)) {
+    const dot = document.createElement("span");
+    dot.className = "bm-dot";
+    dot.setAttribute("aria-hidden", "true");
+    dot.textContent = "·";
+    const time = document.createElement("span");
+    time.className = "bm-time";
+    time.textContent = relativeTime(parsedAt);
+    meta.append(dot, time);
+  }
+
+  const tagRow = document.createElement("span");
+  tagRow.className = "bm-tags";
+  const chip = document.createElement("span");
+  chip.className = "chip chip-queued";
+  chip.textContent = "Queued";
+  tagRow.append(chip);
+
+  body.append(title, meta, tagRow);
+  row.append(avatar, body);
+  return row;
 }
 
 // ── Search ────────────────────────────────────────────────────────
@@ -1212,7 +1295,6 @@ wireSegments("[data-vis-folder]", "visFolder", (value) => {
 folderSelect?.addEventListener("change", updateVisibilityAvailability);
 
 connectButton?.addEventListener("click", () => void connectSession());
-connectSaveButton?.addEventListener("click", () => void connectSession());
 connectBmButton?.addEventListener("click", () => void connectSession());
 disconnectButton?.addEventListener("click", () => void disconnectSession());
 captureButton?.addEventListener("click", () => void captureCurrentTab());
@@ -1250,13 +1332,19 @@ newFolderNameInput?.addEventListener("keydown", (event) => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !changes[AUTH_SESSION_KEY]) {
+  if (areaName !== "local") {
     return;
   }
-  const nextSession = (changes[AUTH_SESSION_KEY].newValue ??
-    null) as AuthSessionState | null;
-  setConnectionState(nextSession);
-  void loadFolders();
+  if (changes[AUTH_SESSION_KEY]) {
+    const nextSession = (changes[AUTH_SESSION_KEY].newValue ??
+      null) as AuthSessionState | null;
+    setConnectionState(nextSession);
+    void loadFolders();
+  }
+  // Keep the pending list live as captures are queued or drained.
+  if (changes[CAPTURE_QUEUE_KEY]) {
+    void refreshPending();
+  }
 });
 
 window.addEventListener("focus", () => void refreshConnectionState());

@@ -243,7 +243,9 @@ async function flushQueue() {
 
   const session = await getAuthSession();
   if (!session?.convexSiteUrl) {
-    return; // Can't sync without a connected session.
+    // Can't sync without a session, but still surface any backlog on the badge.
+    await updateQueueBadge();
+    return;
   }
 
   const queue = await getCaptureQueue();
@@ -265,6 +267,10 @@ async function flushQueue() {
 
       const outcome = await postCaptureToBackend(session, capture);
       if (outcome.status === "synced") {
+        console.log("[amiro-extension] flushed queued capture", {
+          title: capture.title,
+          url: capture.url,
+        });
         continue; // Drop from the queue.
       }
       if (outcome.status === "unauthorized") {
@@ -546,12 +552,14 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ["page", "selection", "link"],
   });
   chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES });
+  void updateQueueBadge();
   void flushQueue();
 });
 
 // Retry queued captures when the worker wakes and on a periodic timer.
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES });
+  void updateQueueBadge();
   void flushQueue();
 });
 

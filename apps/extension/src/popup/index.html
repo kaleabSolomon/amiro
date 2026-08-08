@@ -81,16 +81,9 @@
         aria-labelledby="tab-save"
         tabindex="0"
       >
-        <!-- Shown when NOT connected -->
-        <div id="save-disconnected" class="notice hidden">
-          <p>Connect your amiro account to start saving pages.</p>
-          <button id="connect-save" class="btn btn-block" type="button">
-            Connect account
-          </button>
-        </div>
-
-        <!-- Shown when connected -->
-        <div id="save-form" class="stack hidden">
+        <!-- Saving works offline: no connection required. Folder + visibility
+             controls only appear once connected. -->
+        <div id="save-form" class="stack">
           <div class="preview">
             <span id="preview-avatar" class="avatar" aria-hidden="true">·</span>
             <span class="preview-body">
@@ -99,7 +92,7 @@
             </span>
           </div>
 
-          <div class="field">
+          <div id="save-folder-field" class="field">
             <div class="field-head">
               <label class="label" for="folder-select">Save to folder</label>
               <button
@@ -193,7 +186,7 @@
             </div>
           </div>
 
-          <div class="field">
+          <div id="save-visibility-field" class="field">
             <span class="label" id="vis-label">Visibility</span>
             <div class="segmented" role="group" aria-labelledby="vis-label">
               <button
@@ -224,6 +217,11 @@
             <p id="vis-hint" class="hint">Only you can view this.</p>
           </div>
 
+          <p id="save-offline-hint" class="hint hidden">
+            Not connected — this page will be queued locally and synced when you
+            connect.
+          </p>
+
           <button id="capture" class="btn btn-lg btn-block" type="button">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -243,12 +241,20 @@
         tabindex="0"
         hidden
       >
-        <!-- Shown when NOT connected -->
-        <div id="bm-disconnected" class="notice hidden">
-          <p>Connect your amiro account to browse your bookmarks.</p>
-          <button id="connect-bm" class="btn btn-block" type="button">
-            Connect account
+        <!-- Nudge shown when NOT connected (browsing/sync needs a connection) -->
+        <div id="bm-connect-nudge" class="nudge hidden">
+          <span class="nudge-text">
+            Connect your amiro account to sync and browse your bookmarks.
+          </span>
+          <button id="connect-bm" class="btn btn-sm" type="button">
+            Connect
           </button>
+        </div>
+
+        <!-- Locally queued captures awaiting sync (shown whenever non-empty) -->
+        <div id="bm-pending" class="stack hidden">
+          <p class="bm-section-label">Pending sync</p>
+          <div id="bm-pending-list" class="bm-list"></div>
         </div>
 
         <!-- Shown when connected -->

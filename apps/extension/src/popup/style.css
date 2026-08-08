@@ -788,6 +788,49 @@ kbd {
   white-space: nowrap;
 }
 
+/* ── Bookmarks: connect nudge ───────────────────────────────────── */
+.nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--primary) 8%, var(--card));
+}
+
+.nudge-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--foreground);
+  text-wrap: pretty;
+}
+
+.btn-sm {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* ── Bookmarks: pending (queued, unsynced) rows ─────────────────── */
+.pending-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+}
+
+.chip-queued {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  border-color: var(--border-strong);
+}
+
 /* ── Bookmarks: search ──────────────────────────────────────────── */
 .bm-search {
   display: flex;
