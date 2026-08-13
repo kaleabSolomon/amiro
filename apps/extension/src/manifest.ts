@@ -6,14 +6,33 @@ const manifest: ManifestV3Export = {
   description:
     "Capture pages from your browser and prepare them for sync into your global bookmark workspace.",
   version: "0.1.0",
+  icons: {
+    16: "src/icons/icon-16.png",
+    32: "src/icons/icon-32.png",
+    48: "src/icons/icon-48.png",
+    128: "src/icons/icon-128.png",
+  },
   action: {
     default_popup: "src/popup/index.html",
+    default_icon: {
+      16: "src/icons/icon-16.png",
+      32: "src/icons/icon-32.png",
+      48: "src/icons/icon-48.png",
+      128: "src/icons/icon-128.png",
+    },
   },
   background: {
     service_worker: "src/background/index.ts",
     type: "module",
   },
-  permissions: ["storage", "tabs", "activeTab", "scripting", "contextMenus"],
+  permissions: [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "contextMenus",
+    "alarms",
+  ],
   host_permissions: ["<all_urls>"],
   content_scripts: [
     {

@@ -3,15 +3,24 @@ import {
   addCaptureToQueue,
   clearAuthSession,
   getAuthSession,
+  getCaptureQueue,
   setAuthSession,
+  setCaptureQueue,
 } from "../lib/storage";
 import type {
+  AuthSessionState,
+  BookmarkItem,
   CapturePayload,
   ExtensionMessage,
   ExtensionMessageResponse,
+  FolderOption,
+  SearchResult,
+  Visibility,
 } from "../types/messages";
 
 const HANDSHAKE_PATH = "/extension/connect";
+const FLUSH_ALARM = "amiro-flush-queue";
+const FLUSH_PERIOD_MINUTES = 5;
 
 type CaptureSyncResult = {
   capture: CapturePayload;
@@ -70,7 +79,60 @@ async function extractViaScripting(tabId: number) {
   return result.result as CapturePayload;
 }
 
-async function captureTab(tab: chrome.tabs.Tab, folderId?: string) {
+type CaptureSyncOutcome =
+  | { status: "synced" }
+  // Auth failed — stop retrying and drop the session.
+  | { status: "unauthorized"; message: string }
+  // Network/server hiccup — safe to retry later.
+  | { status: "failed"; message: string };
+
+// Single place that performs the sync POST. Used by both the interactive
+// capture flow and the background queue flusher so their behavior can't drift.
+async function postCaptureToBackend(
+  session: AuthSessionState,
+  capture: CapturePayload,
+): Promise<CaptureSyncOutcome> {
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/sync`;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.token}`,
+      },
+      body: JSON.stringify(capture),
+    });
+
+    if (response.ok) {
+      return { status: "synced" };
+    }
+
+    let message = `Sync failed with status ${response.status}.`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body.error) {
+        message = body.error;
+      }
+    } catch {
+      // Ignore JSON parse failures and use the status-based message.
+    }
+
+    if (response.status === 401) {
+      return { status: "unauthorized", message };
+    }
+    return { status: "failed", message };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Network error.";
+    return { status: "failed", message };
+  }
+}
+
+async function captureTab(
+  tab: chrome.tabs.Tab,
+  folderId?: string,
+  visibility?: Visibility,
+) {
   if (!tab.id) {
     throw new Error("No active tab found.");
   }
@@ -96,10 +158,11 @@ async function captureTab(tab: chrome.tabs.Tab, folderId?: string) {
     capture = await extractViaScripting(tab.id);
   }
 
-  if (folderId) {
+  if (folderId || visibility) {
     capture = {
       ...capture,
-      folderId,
+      ...(folderId ? { folderId } : {}),
+      ...(visibility ? { visibility } : {}),
     };
   }
 
@@ -123,73 +186,115 @@ async function captureTab(tab: chrome.tabs.Tab, folderId?: string) {
     } satisfies CaptureSyncResult;
   }
 
-  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/sync`;
+  const outcome = await postCaptureToBackend(session, capture);
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.token}`,
-      },
-      body: JSON.stringify(capture),
-    });
-
-    if (!response.ok) {
-      let errorMessage = `Sync failed with status ${response.status}.`;
-      try {
-        const body = (await response.json()) as { error?: string };
-        if (body.error) {
-          errorMessage = body.error;
-        }
-      } catch {
-        // Ignore JSON parse failures and use fallback message.
-      }
-
-      if (response.status === 401) {
-        await clearAuthSession();
-      }
-
-      await addCaptureToQueue(capture);
-      return {
-        capture,
-        syncStatus: "queued",
-        syncMessage: `${errorMessage} Capture queued locally.`,
-      } satisfies CaptureSyncResult;
-    }
-
+  if (outcome.status === "synced") {
+    // We're online — opportunistically drain anything queued earlier.
+    void flushQueue();
     return {
       capture,
       syncStatus: "synced",
       syncMessage: "Capture synced.",
     } satisfies CaptureSyncResult;
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Network error.";
-    await addCaptureToQueue(capture);
-    return {
-      capture,
-      syncStatus: "queued",
-      syncMessage: `${errorMessage} Capture queued locally.`,
-    } satisfies CaptureSyncResult;
   }
+
+  if (outcome.status === "unauthorized") {
+    await clearAuthSession();
+  }
+
+  await addCaptureToQueue(capture);
+  await updateQueueBadge();
+  return {
+    capture,
+    syncStatus: "queued",
+    syncMessage: `${outcome.message} Capture queued locally.`,
+  } satisfies CaptureSyncResult;
 }
 
-async function captureCurrentTab(folderId?: string) {
+async function captureCurrentTab(folderId?: string, visibility?: Visibility) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab) {
     throw new Error("No active tab found.");
   }
 
-  return await captureTab(tab, folderId);
+  return await captureTab(tab, folderId, visibility);
+}
+
+// The toolbar badge shows the number of captures still waiting to sync.
+async function updateQueueBadge(count?: number) {
+  const pending = count ?? (await getCaptureQueue()).length;
+  await chrome.action.setBadgeBackgroundColor({ color: "#4D9D56" });
+  await chrome.action.setBadgeText({
+    text: pending > 0 ? String(pending) : "",
+  });
+}
+
+// Drains the offline capture queue: retries each queued capture, drops the ones
+// that sync, keeps the ones that fail on the network for a later attempt, and
+// stops (clearing the session) if the token is rejected. Guarded so overlapping
+// triggers (alarm + popup open + a fresh capture) can't run it concurrently.
+let isFlushing = false;
+
+async function flushQueue() {
+  if (isFlushing) {
+    return;
+  }
+
+  const session = await getAuthSession();
+  if (!session?.convexSiteUrl) {
+    // Can't sync without a session, but still surface any backlog on the badge.
+    await updateQueueBadge();
+    return;
+  }
+
+  const queue = await getCaptureQueue();
+  if (queue.length === 0) {
+    await updateQueueBadge(0);
+    return;
+  }
+
+  isFlushing = true;
+  try {
+    const remaining: CapturePayload[] = [];
+    let unauthorized = false;
+
+    for (const capture of queue) {
+      if (unauthorized) {
+        remaining.push(capture);
+        continue;
+      }
+
+      const outcome = await postCaptureToBackend(session, capture);
+      if (outcome.status === "synced") {
+        console.log("[amiro-extension] flushed queued capture", {
+          title: capture.title,
+          url: capture.url,
+        });
+        continue; // Drop from the queue.
+      }
+      if (outcome.status === "unauthorized") {
+        // No point retrying the rest until the user reconnects.
+        unauthorized = true;
+        remaining.push(capture);
+        continue;
+      }
+      remaining.push(capture); // Network/server failure — keep for next time.
+    }
+
+    await setCaptureQueue(remaining);
+    await updateQueueBadge(remaining.length);
+
+    if (unauthorized) {
+      await clearAuthSession();
+    }
+  } finally {
+    isFlushing = false;
+  }
 }
 
 async function notifyCapture(result: CaptureSyncResult) {
-  await chrome.action.setBadgeBackgroundColor({ color: "#4D9D56" });
-  await chrome.action.setBadgeText({
-    text: result.syncStatus === "synced" ? "✓" : "1",
-  });
+  await updateQueueBadge();
   console.log("[amiro-extension] captured", {
     title: result.capture.title,
     url: result.capture.url,
@@ -230,7 +335,7 @@ async function getFolders() {
 
   const body = (await response.json()) as {
     ok: boolean;
-    data?: Array<{ id: string; name: string; parentFolderId: string | null }>;
+    data?: FolderOption[];
     error?: string;
   };
 
@@ -241,7 +346,162 @@ async function getFolders() {
   return body.data;
 }
 
-async function createFolder(name: string) {
+async function getBookmarks(folderId?: string, limit?: number) {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const params = new URLSearchParams();
+  if (folderId) {
+    params.set("folderId", folderId);
+  }
+  if (limit) {
+    params.set("limit", String(limit));
+  }
+  const query = params.toString();
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/bookmarks${
+    query ? `?${query}` : ""
+  }`;
+
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${session.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    throw new Error(`Failed to load bookmarks (${response.status}).`);
+  }
+
+  const body = (await response.json()) as {
+    ok: boolean;
+    data?: BookmarkItem[];
+    error?: string;
+  };
+
+  if (!body.ok || !body.data) {
+    throw new Error(body.error || "Failed to load bookmarks.");
+  }
+
+  return body.data;
+}
+
+async function searchBookmarks(query: string, limit?: number) {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const params = new URLSearchParams({ q: query });
+  if (limit) {
+    params.set("limit", String(limit));
+  }
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/search?${params.toString()}`;
+
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${session.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    throw new Error(`Search failed (${response.status}).`);
+  }
+
+  const body = (await response.json()) as {
+    ok: boolean;
+    data?: SearchResult;
+    error?: string;
+  };
+
+  if (!body.ok || !body.data) {
+    throw new Error(body.error || "Search failed.");
+  }
+
+  return body.data;
+}
+
+async function postExtensionAction(
+  path: string,
+  payload: Record<string, unknown>,
+  fallbackError: string,
+) {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}${path}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    let message = `${fallbackError} (${response.status}).`;
+    try {
+      const errorBody = (await response.json()) as { error?: string };
+      if (errorBody.error) {
+        message = errorBody.error;
+      }
+    } catch {
+      // Keep the status-based fallback message.
+    }
+    throw new Error(message);
+  }
+
+  const body = (await response.json()) as { ok: boolean; error?: string };
+  if (!body.ok) {
+    throw new Error(body.error || fallbackError);
+  }
+}
+
+async function deleteBookmark(bookmarkId: string) {
+  await postExtensionAction(
+    "/api/extension/bookmarks/delete",
+    { bookmarkId },
+    "Failed to delete bookmark",
+  );
+}
+
+async function moveBookmark(bookmarkId: string, folderId?: string) {
+  await postExtensionAction(
+    "/api/extension/bookmarks/move",
+    { bookmarkId, folderId },
+    "Failed to move bookmark",
+  );
+}
+
+async function createFolder(
+  name: string,
+  icon?: string,
+  visibility?: Visibility,
+) {
   const trimmedName = name.trim();
   if (!trimmedName) {
     throw new Error("Folder name cannot be empty.");
@@ -262,7 +522,7 @@ async function createFolder(name: string) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.token}`,
     },
-    body: JSON.stringify({ name: trimmedName }),
+    body: JSON.stringify({ name: trimmedName, icon, visibility }),
   });
 
   if (!response.ok) {
@@ -291,6 +551,22 @@ chrome.runtime.onInstalled.addListener(() => {
     title: "Save page to Amiro",
     contexts: ["page", "selection", "link"],
   });
+  chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES });
+  void updateQueueBadge();
+  void flushQueue();
+});
+
+// Retry queued captures when the worker wakes and on a periodic timer.
+chrome.runtime.onStartup.addListener(() => {
+  chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES });
+  void updateQueueBadge();
+  void flushQueue();
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === FLUSH_ALARM) {
+    void flushQueue();
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -313,7 +589,7 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response: ExtensionMessageResponse) => void,
   ) => {
     if (message.type === "amiro/capture-current-tab") {
-      captureCurrentTab(message.folderId)
+      captureCurrentTab(message.folderId, message.visibility)
         .then(async (result) => {
           await notifyCapture(result);
           sendResponse({
@@ -348,8 +624,68 @@ chrome.runtime.onMessage.addListener(
       return true;
     }
 
+    if (message.type === "amiro/get-bookmarks") {
+      getBookmarks(message.folderId, message.limit)
+        .then((bookmarks) => {
+          sendResponse({ ok: true, bookmarks });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to load bookmarks.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/search") {
+      searchBookmarks(message.query, message.limit)
+        .then((search) => {
+          sendResponse({ ok: true, search });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Search failed.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/delete-bookmark") {
+      deleteBookmark(message.bookmarkId)
+        .then(() => {
+          sendResponse({ ok: true, deleted: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to delete bookmark.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/move-bookmark") {
+      moveBookmark(message.bookmarkId, message.folderId)
+        .then(() => {
+          sendResponse({ ok: true, moved: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to move bookmark.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
     if (message.type === "amiro/create-folder") {
-      createFolder(message.name)
+      createFolder(message.name, message.icon, message.visibility)
         .then((folderId) => {
           sendResponse({ ok: true, folderId });
         })
@@ -386,12 +722,12 @@ chrome.runtime.onMessage.addListener(
         connectedAt: new Date().toISOString(),
       })
         .then(async () => {
-          await chrome.action.setBadgeBackgroundColor({ color: "#4D9D56" });
-          await chrome.action.setBadgeText({ text: "✓" });
-
           if (sender.tab?.id) {
             await chrome.tabs.remove(sender.tab.id);
           }
+
+          // Now that we're connected, drain anything captured while offline.
+          void flushQueue();
 
           sendResponse({ ok: true, connected: true });
         })
@@ -433,6 +769,20 @@ chrome.runtime.onMessage.addListener(
             error instanceof Error
               ? error.message
               : "Failed to clear auth session.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/flush-queue") {
+      flushQueue()
+        .then(() => {
+          sendResponse({ ok: true, flushed: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to flush queue.";
           sendResponse({ ok: false, error: errorMessage });
         });
 

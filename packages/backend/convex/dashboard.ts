@@ -718,6 +718,73 @@ export const moveBookmark = mutation({
   },
 });
 
+// Extension-facing (bearer-auth) counterparts of deleteBookmark / moveBookmark.
+// The public mutations resolve the user from the Convex session; these take an
+// explicit userId so the HTTP layer can call them after validating the token.
+export const deleteBookmarkForUser = internalMutation({
+  args: {
+    userId: v.string(),
+    bookmarkId: v.id("syncedBookmarks"),
+  },
+  handler: async (ctx, args) => {
+    const bookmark = await ctx.db.get(args.bookmarkId);
+    if (!bookmark || bookmark.userId !== args.userId) {
+      throw new ConvexError("Bookmark not found.");
+    }
+
+    await ctx.db.delete(args.bookmarkId);
+    return { ok: true as const };
+  },
+});
+
+export const moveBookmarkForUser = internalMutation({
+  args: {
+    userId: v.string(),
+    bookmarkId: v.id("syncedBookmarks"),
+    folderId: v.optional(v.id("folders")), // undefined = Unfiled
+  },
+  handler: async (ctx, args) => {
+    const bookmark = await ctx.db.get(args.bookmarkId);
+    if (!bookmark || bookmark.userId !== args.userId) {
+      throw new ConvexError("Bookmark not found.");
+    }
+
+    let destinationIsPublic = false;
+    if (args.folderId) {
+      const folder = await ctx.db.get(args.folderId);
+      if (!folder || folder.userId !== args.userId) {
+        throw new ConvexError("Folder not found.");
+      }
+      destinationIsPublic = (folder.visibility ?? "private") === "public";
+    }
+
+    if ((bookmark.folderId ?? undefined) === (args.folderId ?? undefined)) {
+      return {
+        id: bookmark._id,
+        folderId: args.folderId ?? null,
+        visibility: bookmark.visibility ?? "private",
+      };
+    }
+
+    // Same invariant as moveBookmark: public only inside a public folder.
+    const nextVisibility = destinationIsPublic
+      ? (bookmark.visibility ?? "private")
+      : "private";
+
+    await ctx.db.patch(bookmark._id, {
+      folderId: args.folderId,
+      visibility: nextVisibility,
+      lastSyncedAt: Date.now(),
+    });
+
+    return {
+      id: bookmark._id,
+      folderId: args.folderId ?? null,
+      visibility: nextVisibility,
+    };
+  },
+});
+
 export const getConnectedSources = query({
   args: {},
   handler: async (ctx) => {

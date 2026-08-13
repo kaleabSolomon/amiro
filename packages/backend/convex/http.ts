@@ -13,6 +13,7 @@ authComponent.registerRoutes(http, createAuth);
 const syncCaptureSchema = z.object({
   source: z.enum(["chrome", "telegram", "instagram", "twitter"]),
   folderId: z.string().optional(),
+  visibility: z.enum(["private", "public"]).optional(),
   url: z.string().url(),
   title: z.string().min(1),
   text: z.string().optional(),
@@ -75,8 +76,19 @@ const telegramSyncSchema = z.object({
 
 const extensionCreateFolderSchema = z.object({
   name: z.string().min(1),
+  icon: z.string().optional(),
   visibility: z.enum(["private", "public"]).optional(),
   parentFolderId: z.string().optional(),
+});
+
+const extensionDeleteBookmarkSchema = z.object({
+  bookmarkId: z.string().min(1),
+});
+
+const extensionMoveBookmarkSchema = z.object({
+  bookmarkId: z.string().min(1),
+  // Absent / "unfiled" means move to Unfiled (no folder).
+  folderId: z.string().optional(),
 });
 
 const syncCorsHeaders = {
@@ -170,6 +182,7 @@ http.route({
         userId: authUser._id,
         source: parsed.data.source,
         folderId: parsed.data.folderId as Id<"folders"> | undefined,
+        visibility: parsed.data.visibility,
         url: parsed.data.url,
         title: parsed.data.title,
         text: parsed.data.text,
@@ -562,7 +575,7 @@ http.route({
       );
     }
 
-    const data = await ctx.runQuery(internal.sync.listFoldersForUser, {
+    const data = await ctx.runQuery(internal.sync.listFolderTreeForUser, {
       userId: authUser._id,
     });
 
@@ -573,6 +586,263 @@ http.route({
       }),
       { status: 200, headers: syncCorsHeaders },
     );
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, {
+      status: 204,
+      headers: syncCorsHeaders,
+    });
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    const url = new URL(request.url);
+    const folderIdParam = url.searchParams.get("folderId");
+    const limitParam = url.searchParams.get("limit");
+
+    // "unfiled" (or an absent param) means bookmarks with no folder.
+    const folderId =
+      folderIdParam && folderIdParam !== "unfiled"
+        ? (folderIdParam as Id<"folders">)
+        : undefined;
+
+    const parsedLimit = limitParam
+      ? Number.parseInt(limitParam, 10)
+      : undefined;
+    const limit =
+      parsedLimit !== undefined && Number.isFinite(parsedLimit)
+        ? parsedLimit
+        : undefined;
+
+    try {
+      const data = await ctx.runQuery(
+        internal.sync.listBookmarksForUserFolder,
+        {
+          userId: authUser._id,
+          folderId,
+          limit,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load bookmarks.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/delete",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: syncCorsHeaders });
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/delete",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = extensionDeleteBookmarkSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid delete payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const data = await ctx.runMutation(
+        internal.dashboard.deleteBookmarkForUser,
+        {
+          userId: authUser._id,
+          bookmarkId: parsed.data.bookmarkId as Id<"syncedBookmarks">,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to delete bookmark.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/move",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: syncCorsHeaders });
+  }),
+});
+
+http.route({
+  path: "/api/extension/bookmarks/move",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    let payload: unknown;
+    try {
+      payload = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body." }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const parsed = extensionMoveBookmarkSchema.safeParse(payload);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Invalid move payload.",
+          issues: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 400, headers: syncCorsHeaders },
+      );
+    }
+
+    const folderId =
+      parsed.data.folderId && parsed.data.folderId !== "unfiled"
+        ? (parsed.data.folderId as Id<"folders">)
+        : undefined;
+
+    try {
+      const data = await ctx.runMutation(
+        internal.dashboard.moveBookmarkForUser,
+        {
+          userId: authUser._id,
+          bookmarkId: parsed.data.bookmarkId as Id<"syncedBookmarks">,
+          folderId,
+        },
+      );
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to move bookmark.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/extension/search",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: syncCorsHeaders });
+  }),
+});
+
+http.route({
+  path: "/api/extension/search",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    const url = new URL(request.url);
+    const query = url.searchParams.get("q") ?? "";
+    const limitParam = url.searchParams.get("limit");
+    const parsedLimit = limitParam
+      ? Number.parseInt(limitParam, 10)
+      : undefined;
+    const limit =
+      parsedLimit !== undefined && Number.isFinite(parsedLimit)
+        ? parsedLimit
+        : undefined;
+
+    try {
+      const data = await ctx.runQuery(internal.sync.searchBookmarksForUser, {
+        userId: authUser._id,
+        query,
+        limit,
+      });
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to search.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
   }),
 });
 
@@ -616,6 +886,7 @@ http.route({
         {
           userId: authUser._id,
           name: parsed.data.name,
+          icon: parsed.data.icon,
           visibility: parsed.data.visibility,
           parentFolderId: parsed.data.parentFolderId as
             | Id<"folders">

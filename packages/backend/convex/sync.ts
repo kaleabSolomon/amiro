@@ -129,11 +129,13 @@ export const upsertCaptureFromExtension = internalMutation({
       throw new ConvexError("Invalid capturedAt value.");
     }
 
+    let folderIsPublic = false;
     if (args.folderId) {
       const folder = await ctx.db.get(args.folderId);
       if (!folder || folder.userId !== args.userId) {
         throw new ConvexError("Invalid folder for this user.");
       }
+      folderIsPublic = (folder.visibility ?? "private") === "public";
     }
 
     const { canonicalUrl } = canonicalizeUrl(args.url);
@@ -189,10 +191,18 @@ export const upsertCaptureFromExtension = internalMutation({
       )
       .unique();
 
+    // Invariant (mirrors dashboard.moveBookmark / updateBookmarkVisibility):
+    // a bookmark may be public only inside a public folder. In Unfiled or a
+    // private folder, force private regardless of the requested visibility.
+    const requestedVisibility =
+      args.visibility ?? existing?.visibility ?? "private";
+    const resolvedVisibility =
+      folderIsPublic && requestedVisibility === "public" ? "public" : "private";
+
     if (existing) {
       await ctx.db.patch(existing._id, {
         folderId: args.folderId,
-        visibility: args.visibility ?? existing.visibility ?? "private",
+        visibility: resolvedVisibility,
         title: args.title,
         text: args.text,
         childLinks,
@@ -214,7 +224,7 @@ export const upsertCaptureFromExtension = internalMutation({
       userId: args.userId,
       source: args.source,
       folderId: args.folderId,
-      visibility: args.visibility ?? "private",
+      visibility: resolvedVisibility,
       url: args.url,
       title: args.title,
       text: args.text,
@@ -283,8 +293,176 @@ export const listBookmarksForUserFolder = internalQuery({
       title: bookmark.title,
       url: bookmark.url,
       source: bookmark.source,
+      tags: bookmark.tags,
+      visibility: bookmark.visibility ?? "private",
+      // Short snippet for row previews; full text stays server-side.
+      text: bookmark.text ? bookmark.text.slice(0, 200) : "",
+      folderId: bookmark.folderId ?? null,
       capturedAt: bookmark.capturedAt,
     }));
+  },
+});
+
+// Folders (plus a synthetic "Unfiled" bucket) with per-folder item counts.
+// Mirrors the web app's dashboard.getFolderTree shape for the extension's
+// browse-by-folder view. Exposed to the extension via GET /api/extension/folders.
+export const listFolderTreeForUser = internalQuery({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const [folders, bookmarks] = await Promise.all([
+      ctx.db
+        .query("folders")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+      ctx.db
+        .query("syncedBookmarks")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+    ]);
+
+    const counts = new Map<string, number>();
+    for (const bookmark of bookmarks) {
+      const key = bookmark.folderId ?? "unfiled";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    const realFolders = folders
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((folder) => ({
+        id: folder._id as string,
+        name: folder.name,
+        icon: folder.icon ?? null,
+        visibility: folder.visibility ?? ("private" as const),
+        parentFolderId: folder.parentFolderId ?? null,
+        itemCount: counts.get(folder._id) ?? 0,
+      }));
+
+    const unfiled = {
+      id: "unfiled",
+      name: "Unfiled",
+      icon: "📥",
+      visibility: "private" as const,
+      parentFolderId: null,
+      itemCount: counts.get("unfiled") ?? 0,
+    };
+
+    return [unfiled, ...realFolders];
+  },
+});
+
+// Workspace search for the extension — mirrors dashboard.searchWorkspace.
+// Matches bookmarks on name/tags/url/text (full-text index) plus a legacy blob
+// pass (covers folder name and tag: prefixes), and matches folders by name.
+export const searchBookmarksForUser = internalQuery({
+  args: {
+    userId: v.string(),
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const searchQuery = args.query.trim().toLowerCase();
+    if (!searchQuery) {
+      return { folders: [], bookmarks: [] };
+    }
+
+    const limit = Math.max(5, Math.min(args.limit ?? 30, 50));
+
+    const folders = await ctx.db
+      .query("folders")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
+
+    const matchedFolders = folders
+      .filter((folder) => folder.name.toLowerCase().includes(searchQuery))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 12)
+      .map((folder) => ({
+        id: folder._id as string,
+        name: folder.name,
+        icon: folder.icon ?? null,
+      }));
+
+    const bookmarksFromSearch = await ctx.db
+      .query("syncedBookmarks")
+      .withSearchIndex("search_by_user_document", (q) =>
+        q.search("searchDocument", searchQuery).eq("userId", args.userId),
+      )
+      .take(limit);
+
+    // Fallback pass so folder-name and tag matches work even without a
+    // search-document hit (also covers pre-index legacy rows).
+    const legacyRecent = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_last_synced_at", (q) =>
+        q.eq("userId", args.userId),
+      )
+      .order("desc")
+      .take(300);
+
+    const legacyMatches = legacyRecent.filter((bookmark) => {
+      const folderName = bookmark.folderId
+        ? (folderMap.get(bookmark.folderId)?.name ?? "")
+        : "unfiled";
+      const searchBlob = [
+        bookmark.title,
+        bookmark.url,
+        bookmark.text ?? "",
+        bookmark.source,
+        `source:${bookmark.source}`,
+        folderName,
+        ...bookmark.tags,
+        ...bookmark.tags.map((tag) => `tag:${tag}`),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return searchBlob.includes(searchQuery);
+    });
+
+    const matchedFolderIds = new Set(
+      matchedFolders.map((folder) => folder.id as Id<"folders">),
+    );
+    const folderMatchBookmarks = (
+      await Promise.all(
+        [...matchedFolderIds].map((folderId) =>
+          ctx.db
+            .query("syncedBookmarks")
+            .withIndex("by_user_and_folder", (q) =>
+              q.eq("userId", args.userId).eq("folderId", folderId),
+            )
+            .order("desc")
+            .take(8),
+        ),
+      )
+    ).flat();
+
+    const bookmarkById = new Map(
+      [...bookmarksFromSearch, ...legacyMatches, ...folderMatchBookmarks].map(
+        (bookmark) => [bookmark._id, bookmark],
+      ),
+    );
+
+    const bookmarks = [...bookmarkById.values()]
+      .sort((a, b) => b.lastSyncedAt - a.lastSyncedAt)
+      .slice(0, limit)
+      .map((bookmark) => ({
+        id: bookmark._id,
+        title: bookmark.title,
+        url: bookmark.url,
+        source: bookmark.source,
+        tags: bookmark.tags,
+        visibility: bookmark.visibility ?? "private",
+        text: bookmark.text ? bookmark.text.slice(0, 200) : "",
+        capturedAt: bookmark.capturedAt,
+        folderId: bookmark.folderId ?? null,
+        folderName: bookmark.folderId
+          ? (folderMap.get(bookmark.folderId)?.name ?? "Unknown folder")
+          : "Unfiled",
+      }));
+
+    return { folders: matchedFolders, bookmarks };
   },
 });
 
