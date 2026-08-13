@@ -387,7 +387,15 @@ export function createTelegramBot() {
 
   bot.command("help", async (ctx) => {
     await ctx.reply(
-      "Send me a link or forward a post and I'll save it instantly.\nCommands: /folders, /bookmarks, /newfolder.",
+      [
+        "Two ways to save to Amiro:",
+        "• Send me a link or forward a post here in our chat.",
+        "• Reply to any message with /amiro — works in groups too.",
+        "",
+        "Everything saves privately to Unfiled; organize it later in the Amiro app.",
+        "",
+        "Manage: /folders · /bookmarks · /newfolder",
+      ].join("\n"),
     );
   });
 
