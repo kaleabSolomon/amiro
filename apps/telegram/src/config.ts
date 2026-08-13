@@ -15,7 +15,8 @@ const envSchema = z
     TELEGRAM_WEBHOOK_URL: z.string().url().optional(),
     TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
     TELEGRAM_WEBHOOK_PATH: z.string().optional().default("/telegram/webhook"),
-    TELEGRAM_PORT: z.coerce.number().int().positive().optional().default(3020),
+    TELEGRAM_PORT: z.coerce.number().int().positive().optional(),
+    PORT: z.coerce.number().int().positive().optional().default(3020),
     TELEGRAM_ALLOWED_UPDATES: z
       .string()
       .optional()
@@ -47,7 +48,7 @@ export const config = {
   webhookUrl: env.TELEGRAM_WEBHOOK_URL,
   webhookSecret: env.TELEGRAM_WEBHOOK_SECRET,
   webhookPath: env.TELEGRAM_WEBHOOK_PATH,
-  port: env.TELEGRAM_PORT,
+  port: env.TELEGRAM_PORT ?? env.PORT,
   allowedUpdates: [
     ...new Set(
       env.TELEGRAM_ALLOWED_UPDATES.split(",")

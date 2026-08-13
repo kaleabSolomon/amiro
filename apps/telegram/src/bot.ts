@@ -326,6 +326,27 @@ function formatErrorMessage(error: unknown) {
   return truncateText(cleaned, 280);
 }
 
+/**
+ * Build a permalink for a Telegram message.
+ * Returns null for basic groups where no permalink is possible.
+ */
+function buildMessagePermalink(
+  chat: { id: number; username?: string; type: string },
+  messageId: number,
+): string | null {
+  if (chat.username) {
+    return `https://t.me/${chat.username}/${messageId}`;
+  }
+
+  const chatIdStr = String(chat.id);
+  if (chatIdStr.startsWith("-100")) {
+    const internalId = chatIdStr.slice(4);
+    return `https://t.me/c/${internalId}/${messageId}`;
+  }
+
+  return null;
+}
+
 export function createTelegramBot() {
   const bot = new Bot(config.botToken);
 
@@ -449,6 +470,128 @@ export function createTelegramBot() {
       expiresAt: Date.now() + 5 * 60 * 1000,
     });
     await ctx.reply("Send the folder name to create it. Example: Work Leads");
+  });
+
+  bot.command("amiro", async (ctx) => {
+    if (!ctx.from) return;
+
+    const repliedMessage = ctx.message?.reply_to_message;
+    const isPrivateChat = ctx.chat.type === "private";
+
+    // No reply → usage hint in DMs only; stay silent in groups.
+    if (!repliedMessage) {
+      if (isPrivateChat) {
+        await ctx.reply(
+          "Reply to a message with /amiro to save it. You can also send me a link directly.",
+        );
+      }
+      return;
+    }
+
+    // Ignore replies to the bot's own messages.
+    if (repliedMessage.from?.id === ctx.me.id) {
+      return;
+    }
+
+    // Extract text from the replied message.
+    const repliedText =
+      ("text" in repliedMessage ? repliedMessage.text : undefined) ||
+      ("caption" in repliedMessage ? repliedMessage.caption : undefined) ||
+      "";
+
+    const repliedTitle =
+      repliedMessage.from?.first_name ||
+      ("title" in ctx.chat ? ctx.chat.title : undefined) ||
+      ("username" in ctx.chat ? ctx.chat.username : undefined) ||
+      "Telegram bookmark";
+
+    // Try standard URL / forwarded-channel-post extraction first.
+    let capture = toCapturePayload({
+      message: repliedMessage as unknown as Record<string, unknown>,
+      text: repliedText,
+      timestampSeconds: repliedMessage.date,
+      title: repliedTitle,
+    });
+
+    // If no URL found, fall back to the message permalink.
+    if (!capture) {
+      const permalink = buildMessagePermalink(
+        ctx.chat as { id: number; username?: string; type: string },
+        repliedMessage.message_id,
+      );
+
+      if (!permalink) {
+        // Basic group — no permalink possible.
+        const noLinkText = "Couldn't find a link in that message.";
+        if (isPrivateChat) {
+          await ctx.reply(noLinkText);
+        } else {
+          try {
+            await ctx.api.sendMessage(ctx.from.id, noLinkText);
+          } catch {
+            await ctx.reply(noLinkText);
+          }
+        }
+        return;
+      }
+
+      capture = {
+        source: "telegram",
+        url: permalink,
+        title: truncateText(repliedText || "Telegram message", 200),
+        text: repliedText,
+        tags: config.defaultTags,
+        capturedAt: new Date(repliedMessage.date * 1000).toISOString(),
+      };
+    }
+
+    // Save instantly to private + Unfiled.
+    try {
+      const enrichedLinks = await enrichChildLinks(capture.additionalLinks);
+      await syncTelegramCapture({
+        telegramUserId: ctx.from.id,
+        url: capture.url,
+        title: capture.title,
+        text: capture.text,
+        additionalLinks: enrichedLinks,
+        tags: capture.tags,
+        capturedAt: capture.capturedAt,
+      });
+
+      const confirmationText = `✓ Saved "${truncateText(capture.title, 120)}"\n${capture.url}`;
+
+      if (isPrivateChat) {
+        await ctx.reply(confirmationText);
+      } else {
+        // DM the saver; the group stays silent.
+        try {
+          await ctx.api.sendMessage(ctx.from.id, confirmationText);
+        } catch {
+          // DM failed (user never /start-ed or blocked the bot) → group fallback.
+          await ctx.reply(
+            "✓ Saved — open a chat with me to manage your bookmarks.",
+          );
+        }
+      }
+    } catch (error) {
+      // Detect unlinked Telegram accounts (backend throws "Telegram account is not linked.").
+      const rawMsg = error instanceof Error ? error.message.toLowerCase() : "";
+      const isUnlinked = rawMsg.includes("not linked");
+
+      const errorText = isUnlinked
+        ? "Your Telegram isn't connected to Amiro yet. Link your account in the Amiro web app settings to start saving."
+        : `Could not save: ${formatErrorMessage(error)}`;
+
+      if (isPrivateChat) {
+        await ctx.reply(errorText);
+      } else {
+        try {
+          await ctx.api.sendMessage(ctx.from.id, errorText);
+        } catch {
+          await ctx.reply(errorText);
+        }
+      }
+    }
   });
 
   bot.on("message", async (ctx) => {
