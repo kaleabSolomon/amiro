@@ -6,13 +6,31 @@ async function main() {
   const bot = createTelegramBot();
   const me = await bot.api.getMe();
 
-  await bot.api.setMyCommands([
-    { command: "start", description: "Start or link the bot" },
-    { command: "help", description: "Show available commands" },
-    { command: "folders", description: "List your folders" },
-    { command: "bookmarks", description: "List bookmarks by folder" },
-    { command: "newfolder", description: "Create a new folder" },
-  ]);
+  // Private chats get the full management set...
+  await bot.api.setMyCommands(
+    [
+      { command: "amiro", description: "Reply to a message to save it" },
+      { command: "bookmarks", description: "List bookmarks by folder" },
+      { command: "folders", description: "List your folders" },
+      { command: "newfolder", description: "Create a new folder" },
+      { command: "help", description: "Show what I can do" },
+      { command: "start", description: "Start or link the bot" },
+    ],
+    { scope: { type: "all_private_chats" } },
+  );
+
+  // ...while groups only surface the reply-to-save command (management
+  // commands would leak your private folders into shared chats).
+  await bot.api.setMyCommands(
+    [
+      {
+        command: "amiro",
+        description: "Reply to a message to save it to Amiro",
+      },
+      { command: "help", description: "Show what I can do" },
+    ],
+    { scope: { type: "all_group_chats" } },
+  );
 
   console.log("[telegram] bot", {
     id: me.id,
