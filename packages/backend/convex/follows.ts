@@ -112,3 +112,85 @@ export const isFollowing = query({
     return { following: Boolean(edge) };
   },
 });
+
+/* ─── Query: getFollowing ─────────────────────────────────── */
+
+// The signed-in user's own subscription list (for a "Following" management
+// view). Resolves each followee to display info; bounded to your own follows.
+export const getFollowing = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      userId: v.string(),
+      name: v.string(),
+      username: v.union(v.string(), v.null()),
+      image: v.union(v.string(), v.null()),
+      followedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return [];
+    }
+
+    const edges = await ctx.db
+      .query("follows")
+      .withIndex("by_follower", (q) => q.eq("followerId", authUser._id))
+      .order("desc")
+      .collect();
+
+    const people = await Promise.all(
+      edges.map(async (edge) => {
+        const user = (await ctx.runQuery(
+          components.betterAuth.adapter.findOne,
+          {
+            model: "user",
+            where: [{ field: "_id", value: edge.followeeId }],
+          },
+        )) as {
+          _id: string;
+          name?: string | null;
+          username?: string | null;
+          image?: string | null;
+        } | null;
+
+        if (!user) {
+          // Followee account was deleted — skip the dangling edge.
+          return null;
+        }
+
+        return {
+          userId: edge.followeeId,
+          name: user.name ?? "Amiro user",
+          username: user.username ?? null,
+          image: user.image ?? null,
+          followedAt: edge.createdAt,
+        };
+      }),
+    );
+
+    return people.filter(
+      (person): person is NonNullable<typeof person> => person !== null,
+    );
+  },
+});
+
+/* ─── Query: getFollowingCount ────────────────────────────── */
+
+// How many people a user follows. Utilitarian (not a public scoreboard) — there
+// is intentionally no follower count.
+export const getFollowingCount = query({
+  args: {
+    userId: v.string(),
+  },
+  returns: v.object({ count: v.number() }),
+  handler: async (ctx, args) => {
+    const edges = await ctx.db
+      .query("follows")
+      .withIndex("by_follower", (q) => q.eq("followerId", args.userId))
+      .collect();
+
+    return { count: edges.length };
+  },
+});
