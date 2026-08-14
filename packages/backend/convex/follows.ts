@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import type { MutationCtx } from "./_generated/server";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
 
 /**
@@ -59,5 +59,56 @@ export const followUser = mutation({
     });
 
     return { following: true };
+  },
+});
+
+/* ─── Mutation: unfollowUser ──────────────────────────────── */
+
+export const unfollowUser = mutation({
+  args: {
+    followeeId: v.string(),
+  },
+  returns: v.object({ following: v.boolean() }),
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+
+    // Idempotent: delete the edge if present, no-op otherwise.
+    const existing = await ctx.db
+      .query("follows")
+      .withIndex("by_follower_and_followee", (q) =>
+        q.eq("followerId", authUser._id).eq("followeeId", args.followeeId),
+      )
+      .unique();
+
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+
+    return { following: false };
+  },
+});
+
+/* ─── Query: isFollowing ──────────────────────────────────── */
+
+// Drives the Follow button state. Returns false when signed out.
+export const isFollowing = query({
+  args: {
+    userId: v.string(),
+  },
+  returns: v.object({ following: v.boolean() }),
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return { following: false };
+    }
+
+    const edge = await ctx.db
+      .query("follows")
+      .withIndex("by_follower_and_followee", (q) =>
+        q.eq("followerId", authUser._id).eq("followeeId", args.userId),
+      )
+      .unique();
+
+    return { following: Boolean(edge) };
   },
 });
