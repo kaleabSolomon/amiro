@@ -1133,18 +1133,6 @@ function BookmarkRow({
             {totalStars}
           </button>
         </div>
-
-        <div className="flex items-center gap-1 pb-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-          <a
-            href={bookmark.url}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Open link"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        </div>
       </div>
     </article>
   );

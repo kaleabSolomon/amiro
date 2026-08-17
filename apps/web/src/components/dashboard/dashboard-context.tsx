@@ -81,7 +81,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Auto-correct if selected folder no longer exists
   useEffect(() => {
-    if (selectedFolderId === "recent" || selectedFolderId === "shared") {
+    if (
+      selectedFolderId === "recent" ||
+      selectedFolderId === "shared" ||
+      selectedFolderId === "feed"
+    ) {
       return;
     }
     if (!folderMap.has(selectedFolderId) && folders.length > 0) {

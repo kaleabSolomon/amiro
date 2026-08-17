@@ -233,7 +233,8 @@ export function DashboardMainPanel({
 
   const isRecentView = selectedFolder.id === "recent";
   const isSharedView = selectedFolder.id === "shared";
-  const isFeedView = isRecentView || isSharedView;
+  const isFeedFollowingView = selectedFolder.id === "feed";
+  const isFeedView = isRecentView || isSharedView || isFeedFollowingView;
   const folderIsPublic = selectedFolder.visibility === "public";
   const folderVisibilityLocked = selectedFolder.id === "unfiled";
   const feedTimestamp = useMemo(
@@ -381,9 +382,9 @@ export function DashboardMainPanel({
 
           {isFeedView && bookmark.folderName ? (
             <p className="mt-1 text-muted-foreground text-xs">
-              {isSharedView && bookmark.savedFrom ? (
+              {(isSharedView || isFeedFollowingView) && bookmark.savedFrom ? (
                 <>
-                  Saved from{" "}
+                  {isFeedFollowingView ? "From" : "Saved from"}{" "}
                   <span className="font-medium text-foreground/80">
                     {bookmark.savedFrom.username
                       ? `@${bookmark.savedFrom.username}`
@@ -492,15 +493,6 @@ export function DashboardMainPanel({
           </div>
 
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <a
-              href={bookmark.url}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Open link"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
             <MoveBookmarkDialog
               folders={folders}
               currentFolderId={currentFolderId}
@@ -578,6 +570,8 @@ export function DashboardMainPanel({
                 " · last 7 days"
               ) : isSharedView ? (
                 " · saved from others"
+              ) : isFeedFollowingView ? (
+                " · from people you follow"
               ) : (
                 <span className="inline-flex items-center gap-1">
                   {" · "}
@@ -717,7 +711,9 @@ export function DashboardMainPanel({
             ? "Recent bookmarks from the last 7 days"
             : isSharedView
               ? "Bookmarks you saved from others"
-              : `Bookmarks in ${selectedFolder.name}`}
+              : isFeedFollowingView
+                ? "The latest public saves from people you follow"
+                : `Bookmarks in ${selectedFolder.name}`}
         </p>
 
         {bookmarksLoading ? (
@@ -732,7 +728,9 @@ export function DashboardMainPanel({
               ? "No bookmarks saved in the last 7 days."
               : isSharedView
                 ? "Nothing here yet. Bookmarks you save from other people will show up here."
-                : "No bookmarks in this folder yet."}
+                : isFeedFollowingView
+                  ? "Your feed is empty. Follow people whose taste you trust — their public saves will show up here."
+                  : "No bookmarks in this folder yet."}
           </div>
         ) : (
           <div className="rounded-xl border border-border/60 bg-card/50">

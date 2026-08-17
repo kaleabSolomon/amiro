@@ -9,6 +9,7 @@ import {
   Plus,
   Share,
   Sparkles,
+  Users,
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
@@ -140,6 +141,18 @@ export function DashboardFolderSidebar({
                   <span>Shared with me</span>
                 </SidebarMenuButton>
                 <SidebarMenuBadge>{sharedCount}</SidebarMenuBadge>
+              </SidebarMenuItem>
+            </SidebarMenu>
+            <SidebarMenu>
+              <SidebarMenuItem key="feed">
+                <SidebarMenuButton
+                  isActive={selectedFolderId === "feed"}
+                  onClick={() => onSelectFolder("feed")}
+                  tooltip="Feed"
+                >
+                  <Users className="h-4 w-4 text-sidebar-foreground/40" />
+                  <span>Feed</span>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
