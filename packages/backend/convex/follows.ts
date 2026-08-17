@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
-import type { MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
 
@@ -192,5 +193,152 @@ export const getFollowingCount = query({
       .collect();
 
     return { count: edges.length };
+  },
+});
+
+/* ─── Query: getFollowingFeed ─────────────────────────────── */
+
+// How many recent bookmarks to scan per followed user before filtering to
+// public ones. Bounds the fan-in query for the MVP.
+const FEED_PER_USER_SCAN = 25;
+
+async function getFeedEngagement(
+  ctx: QueryCtx,
+  bookmark: Doc<"syncedBookmarks">,
+  viewerId: string,
+) {
+  const [saveStats, starStats, starClaim] = await Promise.all([
+    ctx.db
+      .query("bookmarkSaveStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    ctx.db
+      .query("bookmarkStarStats")
+      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
+      .unique(),
+    ctx.db
+      .query("bookmarkStarClaims")
+      .withIndex("by_starred_by_and_bookmark", (q) =>
+        q.eq("starredBy", viewerId).eq("bookmarkId", bookmark._id),
+      )
+      .unique(),
+  ]);
+
+  return {
+    totalSaves: saveStats?.totalAttributedSaves ?? 0,
+    totalStars: starStats?.totalStars ?? 0,
+    viewerHasStarred: Boolean(starClaim),
+  };
+}
+
+// The payoff: recent PUBLIC bookmarks from everyone you follow, newest first,
+// attributed to the person who saved them. A pull query — no notification
+// fan-out. Scales fine for modest follow counts; see FEED_PER_USER_SCAN and the
+// scaling note in following.md if that changes.
+export const getFollowingFeed = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return { bookmarks: [] };
+    }
+
+    const limit = Math.max(1, Math.min(args.limit ?? 30, 50));
+
+    const followees = await ctx.db
+      .query("follows")
+      .withIndex("by_follower", (q) => q.eq("followerId", authUser._id))
+      .collect();
+
+    if (followees.length === 0) {
+      return { bookmarks: [] };
+    }
+
+    type Candidate = { doc: Doc<"syncedBookmarks">; folderName: string };
+    const candidates: Candidate[] = [];
+
+    for (const edge of followees) {
+      const folders = await ctx.db
+        .query("folders")
+        .withIndex("by_user", (q) => q.eq("userId", edge.followeeId))
+        .collect();
+      const folderById = new Map(folders.map((folder) => [folder._id, folder]));
+
+      const docs = await ctx.db
+        .query("syncedBookmarks")
+        .withIndex("by_user_and_last_synced_at", (q) =>
+          q.eq("userId", edge.followeeId),
+        )
+        .order("desc")
+        .take(FEED_PER_USER_SCAN);
+
+      for (const doc of docs) {
+        if ((doc.visibility ?? "private") !== "public") {
+          continue;
+        }
+        const folder = doc.folderId ? folderById.get(doc.folderId) : null;
+        // Public bookmarks only surface when Unfiled or inside a public folder
+        // (defensive — matches the profile visibility rule).
+        if (doc.folderId && (folder?.visibility ?? "private") !== "public") {
+          continue;
+        }
+        candidates.push({ doc, folderName: folder?.name ?? "Unfiled" });
+      }
+    }
+
+    candidates.sort((a, b) => b.doc.lastSyncedAt - a.doc.lastSyncedAt);
+    const top = candidates.slice(0, limit);
+
+    // Resolve each owner once (feed rows are grouped by a small set of authors).
+    const ownerIds = [...new Set(top.map((c) => c.doc.userId))];
+    const ownerEntries = await Promise.all(
+      ownerIds.map(async (id) => {
+        const user = (await ctx.runQuery(
+          components.betterAuth.adapter.findOne,
+          {
+            model: "user",
+            where: [{ field: "_id", value: id }],
+          },
+        )) as {
+          _id: string;
+          name?: string | null;
+          username?: string | null;
+          image?: string | null;
+        } | null;
+        return [id, user] as const;
+      }),
+    );
+    const ownerById = new Map(ownerEntries);
+
+    const bookmarks = await Promise.all(
+      top.map(async ({ doc, folderName }) => {
+        const owner = ownerById.get(doc.userId);
+        const engagement = await getFeedEngagement(ctx, doc, authUser._id);
+        return {
+          id: doc._id,
+          url: doc.url,
+          title: doc.title,
+          text: doc.text ? doc.text.slice(0, 300) : "",
+          tags: doc.tags,
+          source: doc.source,
+          visibility: doc.visibility ?? ("public" as const),
+          folderId: doc.folderId ?? null,
+          folderName,
+          capturedAt: doc.capturedAt,
+          lastSyncedAt: doc.lastSyncedAt,
+          owner: {
+            id: doc.userId,
+            name: owner?.name ?? "Amiro user",
+            username: owner?.username ?? null,
+            image: owner?.image ?? null,
+          },
+          ...engagement,
+        };
+      }),
+    );
+
+    return { bookmarks };
   },
 });

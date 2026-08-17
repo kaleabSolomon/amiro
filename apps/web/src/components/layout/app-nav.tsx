@@ -2,7 +2,8 @@
 
 import { api } from "@amiro/backend/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { Bell, FolderPlus } from "lucide-react";
+import { Bell, FolderPlus, Users } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
 import { useDashboard } from "@/components/dashboard/dashboard-context";
@@ -35,6 +36,18 @@ export function AppNav() {
         />
 
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            render={
+              <Link href="/feed">
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">Following</span>
+              </Link>
+            }
+          />
+
           <NewFolderDialog
             onCreateFolder={async (input) => {
               await createFolder({
