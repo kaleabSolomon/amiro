@@ -241,6 +241,22 @@ export default defineSchema({
   })
     .index("by_recipient_and_created_at", ["recipientId", "createdAt"])
     .index("by_recipient_and_read", ["recipientId", "read"]),
+  // --- Follow graph (subscription model) ---
+  // One row per (follower → followee) relationship. Following a user subscribes
+  // you to their public saves — it's a content subscription, not a popularity
+  // metric, so there are deliberately no denormalized follower counts. Better
+  // Auth user ids are strings, so both sides are stored as strings (consistent
+  // with the rest of the schema).
+  follows: defineTable({
+    followerId: v.string(),
+    followeeId: v.string(),
+    createdAt: v.number(),
+  })
+    // "who I follow" (drives the feed) and "who follows me"
+    .index("by_follower", ["followerId"])
+    .index("by_followee", ["followeeId"])
+    // uniqueness + fast isFollowing check
+    .index("by_follower_and_followee", ["followerId", "followeeId"]),
   // --- AI tagging infrastructure ---
   // Caches AI-generated topic tags keyed by canonical URL. When the exact same
   // link is saved by multiple users the cache hit avoids a redundant AI call.

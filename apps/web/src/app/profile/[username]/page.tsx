@@ -16,6 +16,7 @@ import {
   Save,
   Star,
   Sun,
+  UserMinus,
   UserPlus,
 } from "lucide-react";
 import Link from "next/link";
@@ -166,6 +167,52 @@ export default function ProfilePage({
   const folders = (profileData?.folders ?? []) as ProfileFolder[];
   const bookmarks = (profileData?.bookmarks ?? []) as ProfileBookmark[];
   const canUseAuthenticatedActions = Boolean(currentUser);
+
+  // Following (subscription) — no counts vanity; just the button + utility count.
+  const followUser = useMutation(api.follows.followUser);
+  const unfollowUser = useMutation(api.follows.unfollowUser);
+  const followState = useQuery(
+    api.follows.isFollowing,
+    profileUser?.id && !isOwner ? { userId: profileUser.id } : "skip",
+  );
+  const followingCountData = useQuery(
+    api.follows.getFollowingCount,
+    profileUser?.id ? { userId: profileUser.id } : "skip",
+  );
+  const [optimisticFollowing, setOptimisticFollowing] = useState<
+    boolean | null
+  >(null);
+  const [followPending, setFollowPending] = useState(false);
+  const isFollowing = optimisticFollowing ?? followState?.following ?? false;
+  const followingCount = followingCountData?.count ?? 0;
+
+  async function handleToggleFollow() {
+    if (!profileUser?.id) {
+      return;
+    }
+    if (!canUseAuthenticatedActions) {
+      router.push("/auth");
+      return;
+    }
+
+    const next = !isFollowing;
+    setOptimisticFollowing(next);
+    setFollowPending(true);
+    try {
+      if (next) {
+        await followUser({ followeeId: profileUser.id });
+      } else {
+        await unfollowUser({ followeeId: profileUser.id });
+      }
+    } catch (error) {
+      setOptimisticFollowing(!next); // revert
+      toast.error(
+        error instanceof Error ? error.message : "Could not update follow.",
+      );
+    } finally {
+      setFollowPending(false);
+    }
+  }
 
   useEffect(() => {
     if (profileUser?.name) setDisplayName(profileUser.name);
@@ -444,9 +491,24 @@ export default function ProfilePage({
 
                 <div className="flex gap-2 md:pt-8">
                   {!isOwner ? (
-                    <Button type="button" variant="secondary" size="sm">
-                      <UserPlus className="h-4 w-4" />
-                      Follow
+                    <Button
+                      type="button"
+                      variant={isFollowing ? "secondary" : "default"}
+                      size="sm"
+                      onClick={handleToggleFollow}
+                      disabled={followPending || followState === undefined}
+                    >
+                      {isFollowing ? (
+                        <>
+                          <UserMinus className="h-4 w-4" />
+                          Following
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="h-4 w-4" />
+                          Follow
+                        </>
+                      )}
                     </Button>
                   ) : (
                     <Button
@@ -484,9 +546,8 @@ export default function ProfilePage({
                 </span>
               </div>
 
-              <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile label="Followers" value="0" />
-                <StatTile label="Following" value="0" />
+              <div className="mt-7 grid gap-3 sm:grid-cols-3">
+                <StatTile label="Following" value={followingCount} />
                 <StatTile
                   label="Public bookmarks"
                   value={publicBookmarks.length}
