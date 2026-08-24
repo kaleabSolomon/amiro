@@ -2,8 +2,7 @@
 
 import { api } from "@amiro/backend/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
-import { Bell, FolderPlus, Users } from "lucide-react";
-import Link from "next/link";
+import { Bell, FolderPlus, Menu } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardCommandPalette } from "@/components/dashboard/dashboard-command-palette";
 import { useDashboard } from "@/components/dashboard/dashboard-context";
@@ -11,9 +10,11 @@ import { NewFolderDialog } from "@/components/dashboard/new-folder-dialog";
 import { ModeToggle } from "@/components/mode-toggle";
 import { NotificationPanel } from "@/components/notifications/notification-panel";
 import { Button } from "@/components/ui/button";
+import { useSidebar } from "@/components/ui/sidebar";
 
 export function AppNav() {
   const { commandPalette } = useDashboard();
+  const { toggleSidebar } = useSidebar();
   const createFolder = useMutation(api.dashboard.createFolder);
 
   const unreadCountResponse = useQuery(api.notifications.getUnreadCount);
@@ -21,7 +22,21 @@ export function AppNav() {
 
   return (
     <nav className="sticky top-0 z-40 border-foreground-muted/20 border-b bg-background/80 backdrop-blur-md">
-      <div className="flex w-full items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+      <div className="flex w-full items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6">
+        {/* The sidebar's own trigger lives inside the sidebar, which is an
+            off-canvas sheet on mobile — so it's unreachable there. This opens
+            it. (SidebarTrigger renders a collapse chevron driven by desktop
+            state, so we use a menu button instead.) */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="-ml-1 shrink-0 md:hidden"
+          aria-label="Open folders menu"
+          onClick={toggleSidebar}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+
         <DashboardCommandPalette
           open={commandPalette.open}
           query={commandPalette.query}
@@ -46,10 +61,9 @@ export function AppNav() {
               toast.success("Folder created");
             }}
             trigger={
-              <Button size="sm" className="gap-1.5">
+              <Button size="sm" className="gap-1.5" aria-label="New folder">
                 <FolderPlus className="h-4 w-4" />
                 <span className="hidden sm:inline">New folder</span>
-                <span className="sm:hidden">Folder</span>
               </Button>
             }
           />

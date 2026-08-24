@@ -6,6 +6,8 @@ import { useMutation, useQuery } from "convex/react";
 import {
   Bookmark as BookmarkIcon,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Globe2,
   Link2,
@@ -79,6 +81,8 @@ type ConnectedSource = {
 
 type ProfileTab = "profile" | "settings";
 
+const BOOKMARKS_PAGE_SIZE = 20;
+
 function getInitials(name?: string | null) {
   if (!name) {
     return "U";
@@ -149,6 +153,7 @@ export default function ProfilePage({
   const [activeFolderFilter, setActiveFolderFilter] = useState<string | null>(
     null,
   );
+  const [bookmarkPage, setBookmarkPage] = useState(1);
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
   const [displayName, setDisplayName] = useState("");
   const [usernameValue, setUsernameValue] = useState("");
@@ -285,6 +290,11 @@ export default function ProfilePage({
     [profileUser?.name],
   );
 
+  // Changing the folder filter should start at page 1.
+  useEffect(() => {
+    setBookmarkPage(1);
+  }, [activeFolderFilter]);
+
   const filteredBookmarks = useMemo(() => {
     const next = activeFolderFilter
       ? bookmarks.filter((bookmark) => bookmark.folderId === activeFolderFilter)
@@ -292,6 +302,18 @@ export default function ProfilePage({
 
     return [...next].sort((a, b) => b.lastSyncedAt - a.lastSyncedAt);
   }, [bookmarks, activeFolderFilter]);
+
+  // Paginate — a profile with hundreds of public bookmarks would otherwise
+  // render one endless page.
+  const bookmarkPageCount = Math.max(
+    1,
+    Math.ceil(filteredBookmarks.length / BOOKMARKS_PAGE_SIZE),
+  );
+  const safeBookmarkPage = Math.min(bookmarkPage, bookmarkPageCount);
+  const visibleBookmarks = filteredBookmarks.slice(
+    (safeBookmarkPage - 1) * BOOKMARKS_PAGE_SIZE,
+    safeBookmarkPage * BOOKMARKS_PAGE_SIZE,
+  );
 
   const publicFolders = folders.filter(
     (folder) => folder.visibility === "public",
@@ -660,7 +682,7 @@ export default function ProfilePage({
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-border/60 bg-card/50">
                     <div className="divide-y divide-border/40">
-                      {filteredBookmarks.map((bookmark) => (
+                      {visibleBookmarks.map((bookmark) => (
                         <BookmarkRow
                           key={bookmark.id}
                           bookmark={bookmark}
@@ -674,6 +696,44 @@ export default function ProfilePage({
                         />
                       ))}
                     </div>
+
+                    {bookmarkPageCount > 1 ? (
+                      <div className="flex items-center justify-between gap-3 border-border/60 border-t px-3 py-3 sm:px-5">
+                        <p className="text-muted-foreground text-xs">
+                          Page {safeBookmarkPage} of {bookmarkPageCount}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            disabled={safeBookmarkPage === 1}
+                            onClick={() =>
+                              setBookmarkPage((current) =>
+                                Math.max(1, current - 1),
+                              )
+                            }
+                            aria-label="Previous page"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            disabled={safeBookmarkPage === bookmarkPageCount}
+                            onClick={() =>
+                              setBookmarkPage((current) =>
+                                Math.min(bookmarkPageCount, current + 1),
+                              )
+                            }
+                            aria-label="Next page"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </section>

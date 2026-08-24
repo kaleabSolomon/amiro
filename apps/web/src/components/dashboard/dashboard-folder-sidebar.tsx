@@ -37,6 +37,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
 import { NewFolderDialog } from "./new-folder-dialog";
@@ -67,7 +68,7 @@ export function DashboardFolderSidebar({
   recentCount = 0,
   sharedCount = 0,
   creatingFolder = false,
-  onSelectFolder,
+  onSelectFolder: onSelectFolderProp,
   onCreateFolder,
 }: {
   folders: DashboardFolder[];
@@ -86,6 +87,16 @@ export function DashboardFolderSidebar({
 }) {
   const currentUser = useQuery(api.auth.getCurrentUser);
   const router = useRouter();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  // On mobile the sidebar is an overlay sheet — dismiss it after picking a
+  // folder so the bookmarks it reveals are actually visible.
+  const onSelectFolder = (folderId: string) => {
+    onSelectFolderProp(folderId);
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
   const profileHref = currentUser?.username
     ? (`/profile/${currentUser.username}` as Route)
     : "/dashboard";
@@ -108,7 +119,9 @@ export function DashboardFolderSidebar({
               <span className="font-light font-serif text-2xl tracking-tight group-data-[collapsible=icon]:hidden">
                 Amiro
               </span>
-              <SidebarTrigger />
+              {/* Desktop collapse control only — on mobile the sheet has its
+                  own close button. */}
+              <SidebarTrigger className="hidden md:inline-flex" />
             </div>
           </SidebarMenuItem>
         </SidebarMenu>

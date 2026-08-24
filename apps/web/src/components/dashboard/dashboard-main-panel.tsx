@@ -19,7 +19,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { MoveBookmarkDialog } from "@/components/dashboard/move-bookmark-dialog";
@@ -56,7 +56,7 @@ function getLetterAvatar(url: string): string {
 
 const SORT_OPTIONS = ["Recent", "Most starred", "Most saved"] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
-const RECENT_PAGE_SIZE = 20;
+const PAGE_SIZE = 20;
 
 function getDayKey(timestamp: number) {
   return new Date(timestamp).toISOString().slice(0, 10);
@@ -112,7 +112,10 @@ function BookmarkSkeletonList() {
   return (
     <div className="divide-y divide-border/60">
       {BOOKMARK_SKELETONS.map((skeletonId) => (
-        <div key={skeletonId} className="flex items-start gap-4 px-5 py-5">
+        <div
+          key={skeletonId}
+          className="flex items-start gap-3 px-3 py-5 sm:gap-4 sm:px-5"
+        >
           <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1 space-y-2">
             <Skeleton className="h-4 w-3/5" />
@@ -193,9 +196,16 @@ export function DashboardMainPanel({
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("Recent");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-  const [recentPage, setRecentPage] = useState(1);
+  const [page, setPage] = useState(1);
 
   const { folders } = useDashboard();
+
+  // Switching folder (or re-sorting) should start at the top of the list, not
+  // whatever page number the previous folder was on.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on folder/sort, not page
+  useEffect(() => {
+    setPage(1);
+  }, [selectedFolder.id, sortBy]);
 
   const createBookmark = useMutation(api.sync.createBookmark);
   const updateFolderVisibility = useMutation(
@@ -252,11 +262,11 @@ export function DashboardMainPanel({
       ? feedTimestamp(bookmarks[0])
       : null
     : selectedFolder.updatedAtMs;
-  const recentPageCount = Math.max(
+  const pageCount = Math.max(
     1,
-    Math.ceil(filteredBookmarks.length / RECENT_PAGE_SIZE),
+    Math.ceil(filteredBookmarks.length / PAGE_SIZE),
   );
-  const safeRecentPage = Math.min(recentPage, recentPageCount);
+  const safePage = Math.min(page, pageCount);
   const sortedBookmarks = useMemo(() => {
     const next = [...filteredBookmarks];
     if (sortBy === "Most starred") {
@@ -267,12 +277,12 @@ export function DashboardMainPanel({
     }
     return next.sort((a, b) => feedTimestamp(b) - feedTimestamp(a));
   }, [filteredBookmarks, sortBy, feedTimestamp]);
-  const visibleBookmarks = isFeedView
-    ? sortedBookmarks.slice(
-        (safeRecentPage - 1) * RECENT_PAGE_SIZE,
-        safeRecentPage * RECENT_PAGE_SIZE,
-      )
-    : sortedBookmarks;
+  // Paginate every view — a large folder would otherwise render every bookmark
+  // in one endless page.
+  const visibleBookmarks = sortedBookmarks.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
   const feedBookmarkGroups = useMemo(
     () => groupBookmarksByDay(visibleBookmarks, feedTimestamp),
     [visibleBookmarks, feedTimestamp],
@@ -296,9 +306,9 @@ export function DashboardMainPanel({
     return (
       <div
         key={bookmark.id}
-        className="group flex items-start gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
+        className="group flex items-start gap-3 px-3 py-4 transition-colors hover:bg-muted/50 sm:gap-4 sm:px-5"
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground text-sm">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground text-sm sm:h-10 sm:w-10">
           {letter}
         </div>
 
@@ -313,7 +323,9 @@ export function DashboardMainPanel({
               {bookmark.title}
             </a>
             <div className="relative flex items-center">
-              <div className="flex items-center opacity-100 transition-opacity group-hover:opacity-0">
+              {/* Static indicator: swapped for the toggle on hover/focus (pointer
+                  devices only — on touch the toggle would have no way to appear). */}
+              <div className="flex items-center opacity-100 transition-opacity md:group-hover:opacity-0 md:group-focus-within:opacity-0">
                 {bookmarkIsPublic ? (
                   <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
                 ) : (
@@ -321,7 +333,7 @@ export function DashboardMainPanel({
                 )}
               </div>
 
-              <div className="pointer-events-none absolute top-1/2 left-0 z-10 flex -translate-y-1/2 items-center rounded-md border border-border bg-background/80 p-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+              <div className="pointer-events-none absolute top-1/2 left-0 z-10 hidden -translate-y-1/2 items-center rounded-md border border-border bg-background/80 p-0.5 opacity-0 transition-opacity md:flex md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100">
                 <VisibilityToggle
                   active={!bookmarkIsPublic}
                   icon={Lock}
@@ -439,8 +451,8 @@ export function DashboardMainPanel({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col items-end justify-between self-stretch">
-          <div className="flex items-center gap-4 pt-0.5 text-muted-foreground">
+        <div className="flex shrink-0 flex-col items-end justify-between gap-2 self-stretch">
+          <div className="flex items-center gap-3 pt-0.5 text-muted-foreground sm:gap-4">
             <span className="flex items-center gap-1 text-xs" title="Saves">
               <BookmarkIcon className="h-3.5 w-3.5" />
               {totalSaves}
@@ -492,7 +504,9 @@ export function DashboardMainPanel({
             </button>
           </div>
 
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {/* Always visible on touch (no hover to reveal them); hover-reveal on
+              pointer devices to keep rows calm. */}
+          <div className="flex items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
             <MoveBookmarkDialog
               folders={folders}
               currentFolderId={currentFolderId}
@@ -554,10 +568,12 @@ export function DashboardMainPanel({
     <div>
       {/* Header section */}
       <header className="mb-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        {/* Stacks on mobile: the action group is ~340px wide and shrink-0, so
+            side-by-side would crush the title into a one-word column. */}
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <h1 className="mb-4 font-serif text-5xl tracking-tight">
-              <span className="mr-3 align-middle text-4xl">
+            <h1 className="mb-4 break-words font-serif text-3xl tracking-tight sm:text-4xl lg:text-5xl">
+              <span className="mr-2 align-middle text-2xl sm:mr-3 sm:text-3xl lg:text-4xl">
                 {selectedFolder.icon ?? "📁"}
               </span>
               {selectedFolder.name}
@@ -602,7 +618,7 @@ export function DashboardMainPanel({
           </div>
 
           {!isFeedView ? (
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
               <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
                 <VisibilityToggle
                   active={!folderIsPublic}
@@ -735,16 +751,16 @@ export function DashboardMainPanel({
         ) : (
           <div className="rounded-xl border border-border/60 bg-card/50">
             {/* ─── Filter bar + sort ───────────────────── */}
-            <div className="flex items-center justify-between gap-3 border-border/60 border-b px-5 py-3">
+            <div className="flex flex-col gap-2 border-border/60 border-b px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-5">
               {/* Tag filters */}
-              <div className="flex flex-wrap items-center gap-2 overflow-x-auto">
+              <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-x-visible sm:px-0 sm:pb-0">
                 <button
                   type="button"
                   onClick={() => {
                     setActiveTag(null);
-                    setRecentPage(1);
+                    setPage(1);
                   }}
-                  className={`rounded-full px-3 py-1 font-medium text-xs transition-colors ${
+                  className={`shrink-0 rounded-full px-3 py-1 font-medium text-xs transition-colors ${
                     activeTag === null
                       ? "bg-foreground text-background"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -758,10 +774,10 @@ export function DashboardMainPanel({
                     type="button"
                     onClick={() => {
                       setActiveTag(activeTag === tag.raw ? null : tag.raw);
-                      setRecentPage(1);
+                      setPage(1);
                     }}
                     className={cn(
-                      "rounded-full border px-3 py-1 font-medium text-xs transition-colors",
+                      "shrink-0 whitespace-nowrap rounded-full border px-3 py-1 font-medium text-xs transition-colors",
                       activeTag === tag.raw
                         ? "border-transparent bg-foreground text-background"
                         : cn(tagFacetClass(tag.facet), "hover:opacity-80"),
@@ -773,7 +789,7 @@ export function DashboardMainPanel({
               </div>
 
               {/* Sort dropdown */}
-              <div className="relative shrink-0">
+              <div className="relative shrink-0 self-end sm:self-auto">
                 <button
                   type="button"
                   onClick={() => setSortDropdownOpen((prev) => !prev)}
@@ -844,21 +860,19 @@ export function DashboardMainPanel({
               </div>
             )}
 
-            {isFeedView && recentPageCount > 1 ? (
-              <div className="flex items-center justify-between border-border/60 border-t px-5 py-3">
+            {pageCount > 1 ? (
+              <div className="flex items-center justify-between gap-3 border-border/60 border-t px-3 py-3 sm:px-5">
                 <p className="text-muted-foreground text-xs">
-                  Page {safeRecentPage} of {recentPageCount}
+                  Page {safePage} of {pageCount}
                 </p>
                 <div className="flex items-center gap-1">
                   <Button
                     type="button"
                     variant="outline"
                     size="icon-sm"
-                    disabled={safeRecentPage === 1}
-                    onClick={() =>
-                      setRecentPage((page) => Math.max(1, page - 1))
-                    }
-                    aria-label="Previous recent page"
+                    disabled={safePage === 1}
+                    onClick={() => setPage((page) => Math.max(1, page - 1))}
+                    aria-label="Previous page"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -866,13 +880,11 @@ export function DashboardMainPanel({
                     type="button"
                     variant="outline"
                     size="icon-sm"
-                    disabled={safeRecentPage === recentPageCount}
+                    disabled={safePage === pageCount}
                     onClick={() =>
-                      setRecentPage((page) =>
-                        Math.min(recentPageCount, page + 1),
-                      )
+                      setPage((page) => Math.min(pageCount, page + 1))
                     }
-                    aria-label="Next recent page"
+                    aria-label="Next page"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
