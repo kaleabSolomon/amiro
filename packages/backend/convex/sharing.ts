@@ -527,6 +527,53 @@ export const createShare = mutation({
       throw new ConvexError("Bookmark groups are not available yet.");
     }
 
+    // Reuse an existing, still-valid share for this resource rather than minting
+    // a new link. The share dialog calls this on every open, so inserting
+    // unconditionally produced duplicate rows, live public links the owner could
+    // no longer enumerate or revoke, and an inflated totalSharesCreated.
+    const existingShares = await ctx.db
+      .query("shares")
+      .withIndex("by_shared_by_and_resource", (q) =>
+        q
+          .eq("sharedBy", authUser._id)
+          .eq("resourceType", args.resourceType)
+          .eq("resourceId", args.resourceId),
+      )
+      .order("desc")
+      .collect();
+
+    const reusable = existingShares.find(
+      // Same liveness test as resolveShare (sharing.ts:183) so the two never disagree.
+      (share) => !share.expiresAt || share.expiresAt > now,
+    );
+
+    if (reusable) {
+      // Explicitly-passed options still take effect; omitted ones (undefined)
+      // must not clobber what is already stored.
+      const nextVisibility = args.visibility ?? reusable.visibility;
+      const nextCampaign = args.campaign ?? reusable.campaign;
+      const nextExpiresAt = args.expiresAt ?? reusable.expiresAt;
+
+      if (
+        nextVisibility !== reusable.visibility ||
+        nextCampaign !== reusable.campaign ||
+        nextExpiresAt !== reusable.expiresAt
+      ) {
+        await ctx.db.patch(reusable._id, {
+          visibility: nextVisibility,
+          campaign: nextCampaign,
+          expiresAt: nextExpiresAt,
+          updatedAt: now,
+        });
+      }
+
+      return {
+        id: reusable._id,
+        publicId: reusable.publicId,
+        shareUrlPath: `/share/${reusable.publicId}`,
+      };
+    }
+
     const publicId = await ensureUniquePublicId(ctx);
     const id = await ctx.db.insert("shares", {
       publicId,
