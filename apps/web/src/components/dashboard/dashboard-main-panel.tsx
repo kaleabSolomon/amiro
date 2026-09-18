@@ -31,10 +31,17 @@ import {
   CustomTooltipContent,
   CustomTooltipTrigger,
 } from "@/components/ui/custom-tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { useDashboard } from "./dashboard-context";
+import { FolderActionsMenu } from "./folder-actions-menu";
 import { type DisplayTag, tagFacetClass, toDisplayTags } from "./tag-display";
 import { formatRelativeTime } from "./time";
 import type { DashboardBookmark, DashboardFolder } from "./types";
@@ -176,6 +183,9 @@ function VisibilityToggle({
 
 /* ─── Main component ──────────────────────────────────────── */
 
+// Tag chips shown inline before the rest collapse into a dropdown.
+const VISIBLE_TAG_LIMIT = 6;
+
 export function DashboardMainPanel({
   selectedFolder,
   bookmarks,
@@ -234,6 +244,33 @@ export function DashboardMainPanel({
     }
     return out;
   }, [bookmarks]);
+
+  /* The filter bar is a single row — a folder with a few dozen distinct tags
+     used to wrap to three lines and push the list off screen. Everything past
+     the cap moves into a dropdown, and an active tag is always pulled into
+     view so the current filter is never hidden behind "+N". */
+  const { visibleTags, overflowTags } = useMemo(() => {
+    if (allTags.length <= VISIBLE_TAG_LIMIT) {
+      return { visibleTags: allTags, overflowTags: [] as DisplayTag[] };
+    }
+
+    const head = allTags.slice(0, VISIBLE_TAG_LIMIT);
+    const tail = allTags.slice(VISIBLE_TAG_LIMIT);
+    const hiddenActive = activeTag
+      ? tail.find((tag) => tag.raw === activeTag)
+      : undefined;
+
+    if (!hiddenActive) {
+      return { visibleTags: head, overflowTags: tail };
+    }
+
+    const promoted = [...head.slice(0, VISIBLE_TAG_LIMIT - 1), hiddenActive];
+    const promotedRaw = new Set(promoted.map((tag) => tag.raw));
+    return {
+      visibleTags: promoted,
+      overflowTags: allTags.filter((tag) => !promotedRaw.has(tag.raw)),
+    };
+  }, [allTags, activeTag]);
 
   /* Filter bookmarks by active tag */
   const filteredBookmarks = useMemo(() => {
@@ -715,6 +752,10 @@ export function DashboardMainPanel({
                   </Button>
                 }
               />
+              {/* Unfiled is a synthetic bucket with no row to rename or delete. */}
+              {selectedFolder.id !== "unfiled" ? (
+                <FolderActionsMenu folder={selectedFolder} />
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -753,7 +794,7 @@ export function DashboardMainPanel({
             {/* ─── Filter bar + sort ───────────────────── */}
             <div className="flex flex-col gap-2 border-border/60 border-b px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-5">
               {/* Tag filters */}
-              <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-x-visible sm:px-0 sm:pb-0">
+              <div className="-mx-1 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:px-0 sm:pb-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -768,7 +809,7 @@ export function DashboardMainPanel({
                 >
                   All
                 </button>
-                {allTags.map((tag) => (
+                {visibleTags.map((tag) => (
                   <button
                     key={tag.raw}
                     type="button"
@@ -786,6 +827,43 @@ export function DashboardMainPanel({
                     {tag.label}
                   </button>
                 ))}
+
+                {overflowTags.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border bg-muted px-3 py-1 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted/80"
+                      aria-label={`Show ${overflowTags.length} more tags`}
+                    >
+                      +{overflowTags.length}
+                      <ChevronDown className="h-3 w-3" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="max-h-72 w-52 overflow-y-auto"
+                    >
+                      {overflowTags.map((tag) => (
+                        <DropdownMenuItem
+                          key={tag.raw}
+                          onClick={() => {
+                            setActiveTag(
+                              activeTag === tag.raw ? null : tag.raw,
+                            );
+                            setPage(1);
+                          }}
+                        >
+                          <span
+                            className={cn(
+                              "h-2 w-2 shrink-0 rounded-full border",
+                              tagFacetClass(tag.facet),
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate">{tag.label}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
 
               {/* Sort dropdown */}

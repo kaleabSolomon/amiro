@@ -1,3 +1,8 @@
+import {
+  buildNetscapeHtml,
+  flattenBookmarkTree,
+  folderNameForPath,
+} from "../lib/bookmark-transfer";
 import { DEFAULT_WEB_APP_URL } from "../lib/config";
 import {
   addCaptureToQueue,
@@ -7,13 +12,17 @@ import {
   setAuthSession,
   setCaptureQueue,
 } from "../lib/storage";
+import { isWebUrl } from "../lib/url";
 import type {
   AuthSessionState,
   BookmarkItem,
   CapturePayload,
+  ExportSummary,
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
+  ImportStrategy,
+  ImportSummary,
   SearchResult,
   Visibility,
 } from "../types/messages";
@@ -29,17 +38,7 @@ type CaptureSyncResult = {
 };
 
 function isCapturableUrl(url?: string) {
-  if (!url) {
-    return false;
-  }
-
-  return !(
-    url.startsWith("chrome://") ||
-    url.startsWith("chrome-extension://") ||
-    url.startsWith("edge://") ||
-    url.startsWith("about:") ||
-    url.startsWith("view-source:")
-  );
+  return url ? isWebUrl(url) : false;
 }
 
 async function extractViaContentScript(tabId: number) {
@@ -589,6 +588,163 @@ async function createFolder(
   return body.data.id;
 }
 
+/**
+ * Imports the browser's own bookmarks through the existing capture queue.
+ *
+ * Everything is enqueued in one storage write and then flushed by the normal
+ * drain loop, so a half-finished import survives a closed popup, a dead
+ * service worker or an offline spell — the queue is already built to resume.
+ */
+async function importBrowserBookmarks(
+  strategy: ImportStrategy,
+): Promise<ImportSummary> {
+  const granted = await chrome.permissions.contains({
+    permissions: ["bookmarks"],
+  });
+  if (!granted) {
+    throw new Error("Permission to read browser bookmarks was not granted.");
+  }
+
+  const entries = flattenBookmarkTree(await chrome.bookmarks.getTree());
+  if (entries.length === 0) {
+    return { queued: 0, foldersCreated: 0 };
+  }
+
+  const folderIdByName = new Map<string, string>();
+  let foldersCreated = 0;
+
+  if (strategy === "keep-folders") {
+    const session = await getAuthSession();
+    if (!session) {
+      throw new Error(
+        "Connect your account to recreate folders, or import to Unfiled instead.",
+      );
+    }
+    // Reuse folders that already exist so a second import doesn't fork them.
+    // The folders endpoint leads with a synthetic "Unfiled" bucket whose id is
+    // the literal string "unfiled" — mapping a browser folder of that name
+    // onto it would send an id the backend can't resolve to a document.
+    for (const folder of await getFolders()) {
+      if (folder.id === "unfiled") {
+        continue;
+      }
+      folderIdByName.set(folder.name, folder.id);
+    }
+  }
+
+  const capturedAt = new Date().toISOString();
+  const captures: CapturePayload[] = [];
+
+  for (const entry of entries) {
+    let folderId: string | undefined;
+
+    if (strategy === "keep-folders") {
+      const folderName = folderNameForPath(entry.path);
+      if (folderName) {
+        let existingId = folderIdByName.get(folderName);
+        if (!existingId) {
+          existingId = await createFolder(folderName, "📁", "private");
+          folderIdByName.set(folderName, existingId);
+          foldersCreated += 1;
+        }
+        folderId = existingId;
+      }
+    }
+
+    captures.push({
+      url: entry.url,
+      title: entry.title,
+      text: "",
+      source: "chrome",
+      folderId,
+      capturedAt,
+      tags: ["imported"],
+    });
+  }
+
+  // One write, not one per bookmark: addCaptureToQueue re-reads and rewrites
+  // the whole array each call, which is quadratic across a few thousand rows.
+  const queue = await getCaptureQueue();
+  await setCaptureQueue([...captures, ...queue]);
+  await updateQueueBadge();
+
+  void flushQueue();
+
+  return { queued: captures.length, foldersCreated };
+}
+
+async function exportBookmarks(): Promise<ExportSummary> {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error("Connect your web session first.");
+  }
+  if (!session.convexSiteUrl) {
+    throw new Error("Session missing Convex URL. Reconnect extension.");
+  }
+
+  const endpoint = `${session.convexSiteUrl.replace(/\/$/, "")}/api/extension/export`;
+  const response = await fetch(endpoint, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${session.token}` },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      await clearAuthSession();
+    }
+    throw new Error(`Failed to export bookmarks (${response.status}).`);
+  }
+
+  const body = (await response.json()) as {
+    ok: boolean;
+    data?: {
+      truncated: boolean;
+      folders: Array<{ id: string; name: string }>;
+      bookmarks: BookmarkItem[];
+    };
+    error?: string;
+  };
+
+  if (!body.ok || !body.data) {
+    throw new Error(body.error || "Failed to export bookmarks.");
+  }
+
+  const { bookmarks, folders, truncated } = body.data;
+  const byFolder = new Map<string | null, BookmarkItem[]>();
+  for (const bookmark of bookmarks) {
+    const key = bookmark.folderId ?? null;
+    const bucket = byFolder.get(key);
+    if (bucket) {
+      bucket.push(bookmark);
+    } else {
+      byFolder.set(key, [bookmark]);
+    }
+  }
+
+  // Unfiled first so loose bookmarks land at the top level of the file.
+  const groups = [
+    { folderName: null, bookmarks: byFolder.get(null) ?? [] },
+    ...folders.map((folder) => ({
+      folderName: folder.name,
+      bookmarks: byFolder.get(folder.id) ?? [],
+    })),
+  ];
+
+  return {
+    html: buildNetscapeHtml(groups),
+    count: bookmarks.length,
+    truncated,
+  };
+}
+
+async function discardQueuedCapture(url: string) {
+  const queue = await getCaptureQueue();
+  const remaining = queue.filter((capture) => capture.url !== url);
+  await setCaptureQueue(remaining);
+  await updateQueueBadge(remaining.length);
+  return remaining.length;
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
   // removeAll first so re-running this on update can't hit a duplicate-id error.
   await chrome.contextMenus.removeAll();
@@ -661,6 +817,52 @@ chrome.runtime.onMessage.addListener(
             error instanceof Error
               ? error.message
               : "Failed to capture current tab.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/discard-queued-capture") {
+      discardQueuedCapture(message.url)
+        .then(() => {
+          sendResponse({ ok: true, discarded: true });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to discard.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/import-browser-bookmarks") {
+      importBrowserBookmarks(message.strategy)
+        .then((imported) => {
+          sendResponse({ ok: true, imported });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to import browser bookmarks.";
+          sendResponse({ ok: false, error: errorMessage });
+        });
+
+      return true;
+    }
+
+    if (message.type === "amiro/export-bookmarks") {
+      exportBookmarks()
+        .then((exported) => {
+          sendResponse({ ok: true, exported });
+        })
+        .catch((error: unknown) => {
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to export bookmarks.";
           sendResponse({ ok: false, error: errorMessage });
         });
 

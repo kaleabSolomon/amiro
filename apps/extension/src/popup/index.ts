@@ -6,6 +6,7 @@ import type {
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
+  ImportStrategy,
   SearchResult,
   Visibility,
 } from "../types/messages";
@@ -59,6 +60,9 @@ const connectButton = $<HTMLButtonElement>("#connect");
 const disconnectButton = $<HTMLButtonElement>("#disconnect");
 const connectionState = $<HTMLParagraphElement>("#connection-state");
 const sourceLabel = $<HTMLElement>("#source-label");
+const importButton = $<HTMLButtonElement>("#import-bookmarks");
+const exportButton = $<HTMLButtonElement>("#export-bookmarks");
+const transferState = $<HTMLParagraphElement>("#transfer-state");
 
 const connectBmButton = $<HTMLButtonElement>("#connect-bm");
 const bmConnectNudge = $<HTMLDivElement>("#bm-connect-nudge");
@@ -79,6 +83,7 @@ let folderTree: FolderOption[] = [];
 let selectedBmFolderId = "unfiled";
 let bookmarksInitialized = false;
 let searchQuery = "";
+let importStrategy: ImportStrategy = "keep-folders";
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Auto tags applied on capture are noise in the row UI; hide them.
@@ -515,8 +520,44 @@ function buildPendingRow(capture: CapturePayload) {
   chip.textContent = "Queued";
   tagRow.append(chip);
 
+  // Without this there's no way to get a bad capture out of the queue — it
+  // would sync to the account on the next connect, wrong or not.
+  const discard = document.createElement("button");
+  discard.type = "button";
+  discard.className = "icon-btn";
+  discard.setAttribute(
+    "aria-label",
+    `Discard queued capture: ${capture.title}`,
+  );
+  discard.textContent = "✕";
+  discard.addEventListener("click", () => {
+    void (async () => {
+      discard.disabled = true;
+      try {
+        const response = await send({
+          type: "amiro/discard-queued-capture",
+          url: capture.url,
+        });
+        if (!response.ok) {
+          setStatus(response.error, "error");
+          discard.disabled = false;
+          return;
+        }
+        row.remove();
+        renderPending(await getQueue());
+        setStatus("Removed from queue.");
+      } catch (error) {
+        setStatus(
+          error instanceof Error ? error.message : "Failed to discard.",
+          "error",
+        );
+        discard.disabled = false;
+      }
+    })();
+  });
+
   body.append(title, meta, tagRow);
-  row.append(avatar, body);
+  row.append(avatar, body, discard);
   return row;
 }
 
@@ -1293,6 +1334,154 @@ wireSegments("[data-vis-folder]", "visFolder", (value) => {
   folderVisibility = value;
 });
 folderSelect?.addEventListener("change", updateVisibilityAvailability);
+
+function setTransferState(message: string) {
+  if (transferState) {
+    transferState.textContent = message;
+  }
+}
+
+async function importBrowserBookmarks() {
+  if (!importButton) {
+    return;
+  }
+
+  // chrome.permissions.request only works inside a user gesture, and a
+  // service worker never has one — so the prompt has to happen here, in the
+  // popup, before handing the work to the background.
+  let granted = false;
+  try {
+    granted = await chrome.permissions.request({ permissions: ["bookmarks"] });
+  } catch {
+    granted = false;
+  }
+
+  if (!granted) {
+    setStatus("Bookmark access is needed to import.", "error");
+    setTransferState("Permission declined.");
+    return;
+  }
+
+  importButton.disabled = true;
+  setStatus("Reading browser bookmarks…");
+  setTransferState("Reading browser bookmarks…");
+
+  try {
+    const response = await send({
+      type: "amiro/import-browser-bookmarks",
+      strategy: importStrategy,
+    });
+
+    if (!response.ok) {
+      setStatus(response.error, "error");
+      setTransferState(response.error);
+      return;
+    }
+
+    const summary = response.imported;
+    if (!summary || summary.queued === 0) {
+      setStatus("No importable bookmarks found.");
+      setTransferState("No importable bookmarks found.");
+      return;
+    }
+
+    const folderNote =
+      summary.foldersCreated > 0
+        ? `, ${summary.foldersCreated} ${
+            summary.foldersCreated === 1 ? "folder" : "folders"
+          } created`
+        : "";
+    // They sync through the normal queue, so the badge is the progress bar.
+    const message = `Queued ${summary.queued} ${
+      summary.queued === 1 ? "bookmark" : "bookmarks"
+    }${folderNote}. Syncing in the background.`;
+    setStatus(message, "success");
+    setTransferState(message);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to import bookmarks.";
+    setStatus(message, "error");
+    setTransferState(message);
+  } finally {
+    importButton.disabled = false;
+  }
+}
+
+async function exportBookmarks() {
+  if (!exportButton) {
+    return;
+  }
+
+  exportButton.disabled = true;
+  setStatus("Preparing export…");
+  setTransferState("Preparing export…");
+
+  let objectUrl: string | null = null;
+  try {
+    const response = await send({ type: "amiro/export-bookmarks" });
+
+    if (!response.ok) {
+      setStatus(response.error, "error");
+      setTransferState(response.error);
+      return;
+    }
+
+    const summary = response.exported;
+    if (!summary) {
+      setStatus("Export failed.", "error");
+      return;
+    }
+
+    const blob = new Blob([summary.html], { type: "text/html" });
+    objectUrl = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `amiro-bookmarks-${stamp}.html`;
+    link.click();
+
+    const message = summary.truncated
+      ? `Exported the ${summary.count} most recent bookmarks (export limit reached).`
+      : `Exported ${summary.count} ${
+          summary.count === 1 ? "bookmark" : "bookmarks"
+        }.`;
+    setStatus(message, summary.truncated ? "default" : "success");
+    setTransferState(message);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to export bookmarks.";
+    setStatus(message, "error");
+    setTransferState(message);
+  } finally {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    exportButton.disabled = false;
+  }
+}
+
+for (const button of Array.from(
+  document.querySelectorAll<HTMLButtonElement>("[data-import-strategy]"),
+)) {
+  button.addEventListener("click", () => {
+    const value = button.dataset.importStrategy as ImportStrategy | undefined;
+    if (!value) {
+      return;
+    }
+    importStrategy = value;
+    for (const sibling of Array.from(
+      document.querySelectorAll<HTMLButtonElement>("[data-import-strategy]"),
+    )) {
+      sibling.setAttribute(
+        "aria-pressed",
+        sibling === button ? "true" : "false",
+      );
+    }
+  });
+}
+
+importButton?.addEventListener("click", () => void importBrowserBookmarks());
+exportButton?.addEventListener("click", () => void exportBookmarks());
 
 connectButton?.addEventListener("click", () => void connectSession());
 connectBmButton?.addEventListener("click", () => void connectSession());

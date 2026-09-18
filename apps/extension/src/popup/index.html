@@ -319,6 +319,57 @@
         </div>
 
         <div class="card">
+          <span class="card-title">Browser bookmarks</span>
+          <p class="label">
+            Bring in the bookmarks already in this browser. Re-importing
+            updates existing saves instead of duplicating them.
+          </p>
+          <div class="field">
+            <span class="label" id="import-strategy-label">Folders</span>
+            <div
+              class="segmented"
+              role="group"
+              aria-labelledby="import-strategy-label"
+            >
+              <button
+                class="segment"
+                type="button"
+                data-import-strategy="keep-folders"
+                aria-pressed="true"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+                Keep structure
+              </button>
+              <button
+                class="segment"
+                type="button"
+                data-import-strategy="unfiled"
+                aria-pressed="false"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 12h4l2 3h6l2-3h4" />
+                  <path d="M5 5h14l2 7v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z" />
+                </svg>
+                All to Unfiled
+              </button>
+            </div>
+          </div>
+          <button id="import-bookmarks" class="btn btn-block" type="button">
+            Import from browser
+          </button>
+          <button
+            id="export-bookmarks"
+            class="btn btn-ghost btn-block"
+            type="button"
+          >
+            Export as HTML
+          </button>
+          <p id="transfer-state" class="label"></p>
+        </div>
+
+        <div class="card">
           <span class="card-title">Details</span>
           <div class="meta-row">
             <span>Shortcut</span>

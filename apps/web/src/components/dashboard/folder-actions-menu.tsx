@@ -1,5 +1,8 @@
 "use client";
 
+import { api } from "@amiro/backend/convex/_generated/api";
+import type { Id } from "@amiro/backend/convex/_generated/dataModel";
+import { useMutation } from "convex/react";
 import { FolderInput, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -22,28 +25,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SidebarMenuAction } from "@/components/ui/sidebar";
+import { useDashboard } from "./dashboard-context";
 import { FOLDER_ICONS } from "./new-folder-dialog";
 import type { DashboardFolder, FolderBookmarkDisposition } from "./types";
 
 type Props = {
   folder: DashboardFolder;
-  onRenameFolder: (input: {
-    folderId: string;
-    name: string;
-    icon: string;
-  }) => Promise<void>;
-  onDeleteFolder: (input: {
-    folderId: string;
-    bookmarks: FolderBookmarkDisposition;
-  }) => Promise<void>;
 };
 
-export function FolderActionsMenu({
-  folder,
-  onRenameFolder,
-  onDeleteFolder,
-}: Props) {
+export function FolderActionsMenu({ folder }: Props) {
+  const updateFolder = useMutation(api.dashboard.updateFolder);
+  const deleteFolder = useMutation(api.dashboard.deleteFolder);
+  const { selectFolder } = useDashboard();
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [name, setName] = useState(folder.name);
@@ -69,14 +62,18 @@ export function FolderActionsMenu({
 
     setBusy(true);
     try {
-      await onRenameFolder({
-        folderId: folder.id,
+      await updateFolder({
+        folderId: folder.id as Id<"folders">,
         name: trimmedName,
         icon: icon.trim() || FOLDER_ICONS[0],
       });
+      toast.success("Folder updated.");
       setRenameOpen(false);
-    } catch {
-      // The caller surfaces the error; keep the dialog open so the edit isn't lost.
+    } catch (error) {
+      // Keep the dialog open so the edit isn't lost.
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update folder.",
+      );
     } finally {
       setBusy(false);
     }
@@ -92,10 +89,32 @@ export function FolderActionsMenu({
   async function handleDelete() {
     setBusy(true);
     try {
-      await onDeleteFolder({ folderId: folder.id, bookmarks: disposition });
+      const result = await deleteFolder({
+        folderId: folder.id as Id<"folders">,
+        bookmarks: disposition,
+      });
+
+      const plural = (count: number) =>
+        count === 1 ? "bookmark" : "bookmarks";
+      if (result.deletedBookmarks > 0) {
+        toast.success(
+          `Folder deleted, along with ${result.deletedBookmarks} ${plural(result.deletedBookmarks)}.`,
+        );
+      } else if (result.movedToUnfiled > 0) {
+        toast.success(
+          `Folder deleted. ${result.movedToUnfiled} ${plural(result.movedToUnfiled)} moved to Unfiled.`,
+        );
+      } else {
+        toast.success("Folder deleted.");
+      }
+
       setDeleteOpen(false);
-    } catch {
-      // Same as rename — the caller toasts, we just stay put.
+      // The panel is showing a folder that no longer exists.
+      selectFolder("unfiled");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete folder.",
+      );
     } finally {
       setBusy(false);
     }
@@ -106,15 +125,17 @@ export function FolderActionsMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <SidebarMenuAction
-              showOnHover
-              aria-label={`Folder options for ${folder.name}`}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`More options for ${folder.name}`}
             />
           }
         >
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="bottom" className="w-44">
+        <DropdownMenuContent align="end" side="bottom" className="w-44">
           <DropdownMenuItem onClick={openRename}>
             <Pencil className="h-4 w-4" />
             Rename

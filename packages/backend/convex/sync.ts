@@ -101,6 +101,10 @@ export function buildSearchDocument(args: {
   return parts.join(" ").toLowerCase();
 }
 
+// Upper bound on a single export. Well above any realistic bookmark bar,
+// and low enough to stay inside a Convex query's document budget.
+const EXPORT_BOOKMARK_LIMIT = 5000;
+
 export const upsertCaptureFromExtension = internalMutation({
   args: {
     userId: v.string(),
@@ -300,6 +304,50 @@ export const listBookmarksForUserFolder = internalQuery({
       folderId: bookmark.folderId ?? null,
       capturedAt: bookmark.capturedAt,
     }));
+  },
+});
+
+// Every bookmark the user owns, for the extension's "export bookmarks" action.
+// Separate from listBookmarksForUserFolder, which caps at 50 for the popup's
+// scrolling list — an export that silently stopped at 50 would be worse than
+// no export at all. Exposed via GET /api/extension/export.
+export const listAllBookmarksForExport = internalQuery({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const [folders, bookmarks] = await Promise.all([
+      ctx.db
+        .query("folders")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect(),
+      ctx.db
+        .query("syncedBookmarks")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .order("desc")
+        .take(EXPORT_BOOKMARK_LIMIT),
+    ]);
+
+    return {
+      // Signals a truncated export so the caller can warn rather than hand
+      // the user a silently incomplete file.
+      truncated: bookmarks.length === EXPORT_BOOKMARK_LIMIT,
+      folders: folders.map((folder) => ({
+        id: folder._id,
+        name: folder.name,
+      })),
+      bookmarks: bookmarks.map((bookmark) => ({
+        id: bookmark._id,
+        title: bookmark.title,
+        url: bookmark.url,
+        source: bookmark.source,
+        tags: bookmark.tags,
+        visibility: bookmark.visibility ?? "private",
+        text: bookmark.text ?? "",
+        folderId: bookmark.folderId ?? null,
+        capturedAt: bookmark.capturedAt,
+      })),
+    };
   },
 });
 

@@ -12,7 +12,7 @@ export function LandingShell({
   hideAuth?: boolean;
 }) {
   return (
-    <div className="landing-canvas min-h-screen flex flex-col">
+    <div className="landing-canvas flex min-h-screen flex-col">
       <LandingNav hideAuth={hideAuth} />
       <main className="relative flex-1">{children}</main>
       <Footer />

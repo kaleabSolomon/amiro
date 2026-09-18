@@ -40,9 +40,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
-import { FolderActionsMenu } from "./folder-actions-menu";
 import { NewFolderDialog } from "./new-folder-dialog";
-import type { DashboardFolder, FolderBookmarkDisposition } from "./types";
+import type { DashboardFolder } from "./types";
 
 const WORKSPACE_FOLDER_SKELETONS = [
   "workspace-folder-skeleton-1",
@@ -71,8 +70,6 @@ export function DashboardFolderSidebar({
   creatingFolder = false,
   onSelectFolder: onSelectFolderProp,
   onCreateFolder,
-  onRenameFolder,
-  onDeleteFolder,
 }: {
   folders: DashboardFolder[];
   selectedFolderId: string;
@@ -86,15 +83,6 @@ export function DashboardFolderSidebar({
     name: string;
     icon: string;
     visibility: "private" | "public";
-  }) => Promise<void>;
-  onRenameFolder: (input: {
-    folderId: string;
-    name: string;
-    icon: string;
-  }) => Promise<void>;
-  onDeleteFolder: (input: {
-    folderId: string;
-    bookmarks: FolderBookmarkDisposition;
   }) => Promise<void>;
 }) {
   const currentUser = useQuery(api.auth.getCurrentUser);
@@ -230,23 +218,7 @@ export function DashboardFolderSidebar({
                       )}
                       <span>{folder.name}</span>
                     </SidebarMenuButton>
-                    {/* "Unfiled" is a synthetic bucket, not a real folder row,
-                        so it has nothing to rename or delete. Real folders
-                        reserve space for the action button beside the count. */}
-                    <SidebarMenuBadge
-                      className={
-                        folder.id === "unfiled" ? undefined : "right-7"
-                      }
-                    >
-                      {folder.itemCount}
-                    </SidebarMenuBadge>
-                    {folder.id !== "unfiled" && (
-                      <FolderActionsMenu
-                        folder={folder}
-                        onRenameFolder={onRenameFolder}
-                        onDeleteFolder={onDeleteFolder}
-                      />
-                    )}
+                    <SidebarMenuBadge>{folder.itemCount}</SidebarMenuBadge>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
