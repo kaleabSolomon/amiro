@@ -627,6 +627,124 @@ export const updateFolderVisibility = mutation({
   },
 });
 
+export const updateFolder = mutation({
+  args: {
+    folderId: v.id("folders"),
+    name: v.optional(v.string()),
+    icon: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || folder.userId !== authUser._id) {
+      throw new ConvexError("Folder not found.");
+    }
+
+    let name = folder.name;
+    if (args.name !== undefined) {
+      name = args.name.trim();
+      if (!name) {
+        throw new ConvexError("Folder name cannot be empty.");
+      }
+    }
+
+    // An explicitly-passed empty icon clears it; an omitted icon is left alone.
+    const icon =
+      args.icon === undefined ? folder.icon : args.icon.trim() || undefined;
+
+    await ctx.db.patch(folder._id, {
+      name,
+      icon,
+      updatedAt: Date.now(),
+    });
+
+    return { id: folder._id, name, icon: icon ?? null };
+  },
+});
+
+export const deleteFolder = mutation({
+  args: {
+    folderId: v.id("folders"),
+    // What to do with the bookmarks inside. Defaults to the non-destructive
+    // option so an older client that omits it can never delete anything.
+    bookmarks: v.optional(
+      v.union(v.literal("move-to-unfiled"), v.literal("delete")),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || folder.userId !== authUser._id) {
+      throw new ConvexError("Folder not found.");
+    }
+
+    const now = Date.now();
+    const deleteContainedBookmarks = args.bookmarks === "delete";
+
+    const contained = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_folder", (q) =>
+        q.eq("userId", authUser._id).eq("folderId", folder._id),
+      )
+      .collect();
+
+    for (const bookmark of contained) {
+      if (deleteContainedBookmarks) {
+        // Matches deleteBookmark, which also drops only the bookmark row.
+        await ctx.db.delete(bookmark._id);
+        continue;
+      }
+
+      // Unfiled cannot hold public bookmarks, so they are downgraded to
+      // private — the same rule moveBookmark applies when the destination
+      // isn't public.
+      await ctx.db.patch(bookmark._id, {
+        folderId: undefined,
+        visibility: "private",
+        lastSyncedAt: now,
+      });
+    }
+
+    // Nesting is creatable through the API even though the UI never exposes it.
+    // Lift any children to the root so they can't become unreachable.
+    const children = await ctx.db
+      .query("folders")
+      .withIndex("by_user_and_parent_folder", (q) =>
+        q.eq("userId", authUser._id).eq("parentFolderId", folder._id),
+      )
+      .collect();
+
+    for (const child of children) {
+      await ctx.db.patch(child._id, {
+        parentFolderId: undefined,
+        updatedAt: now,
+      });
+    }
+
+    // Any share link to this folder can no longer resolve to anything; drop the
+    // rows rather than leaving links that fail for whoever still holds them.
+    const folderShares = await ctx.db
+      .query("shares")
+      .withIndex("by_resource", (q) =>
+        q.eq("resourceType", "folder").eq("resourceId", folder._id),
+      )
+      .collect();
+
+    for (const share of folderShares) {
+      await ctx.db.delete(share._id);
+    }
+
+    await ctx.db.delete(folder._id);
+
+    return {
+      id: folder._id,
+      movedToUnfiled: deleteContainedBookmarks ? 0 : contained.length,
+      deletedBookmarks: deleteContainedBookmarks ? contained.length : 0,
+      revokedShares: folderShares.length,
+    };
+  },
+});
+
 export const updateBookmarkVisibility = mutation({
   args: {
     bookmarkId: v.id("syncedBookmarks"),

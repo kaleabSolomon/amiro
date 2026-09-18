@@ -166,6 +166,12 @@ async function captureTab(
     };
   }
 
+  return await syncOrQueueCapture(capture);
+}
+
+async function syncOrQueueCapture(
+  capture: CapturePayload,
+): Promise<CaptureSyncResult> {
   const session = await getAuthSession();
   if (!session) {
     await addCaptureToQueue(capture);
@@ -209,6 +215,44 @@ async function captureTab(
     syncStatus: "queued",
     syncMessage: `${outcome.message} Capture queued locally.`,
   } satisfies CaptureSyncResult;
+}
+
+// Right-clicking a link has no page to extract from, so derive a readable title
+// from the URL itself (Chrome's OnClickData exposes linkUrl but no link text).
+function titleFromUrl(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.replace(/^www\./, "");
+    const lastSegment = url.pathname.split("/").filter(Boolean).pop() ?? "";
+    const readable = decodeURIComponent(lastSegment)
+      // Only strip real page extensions — a bare /\.\d+/ is often part of the
+      // identifier (e.g. arXiv's /abs/1234.5678).
+      .replace(/\.(html?|php|aspx?|jsp)$/i, "")
+      .replace(/[-_]+/g, " ")
+      .trim();
+    // Generic filenames carry no information; the host alone reads better.
+    const isGeneric = /^(index|default|home)$/i.test(readable);
+    return readable && !isGeneric ? `${readable} — ${host}` : host;
+  } catch {
+    return rawUrl;
+  }
+}
+
+async function captureLinkUrl(linkUrl: string, selectionText?: string) {
+  if (!isCapturableUrl(linkUrl)) {
+    throw new Error("That link cannot be saved.");
+  }
+
+  const capture: CapturePayload = {
+    url: linkUrl,
+    title: titleFromUrl(linkUrl),
+    text: selectionText?.trim() ?? "",
+    source: "chrome",
+    capturedAt: new Date().toISOString(),
+    tags: [],
+  };
+
+  return await syncOrQueueCapture(capture);
 }
 
 async function captureCurrentTab(folderId?: string, visibility?: Visibility) {
@@ -545,11 +589,18 @@ async function createFolder(
   return body.data.id;
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
+  // removeAll first so re-running this on update can't hit a duplicate-id error.
+  await chrome.contextMenus.removeAll();
   chrome.contextMenus.create({
     id: "amiro-capture-page",
     title: "Save page to Amiro",
-    contexts: ["page", "selection", "link"],
+    contexts: ["page", "selection"],
+  });
+  chrome.contextMenus.create({
+    id: "amiro-capture-link",
+    title: "Save link to Amiro",
+    contexts: ["link"],
   });
   chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: FLUSH_PERIOD_MINUTES });
   void updateQueueBadge();
@@ -570,13 +621,19 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== "amiro-capture-page" || !tab) {
-    return;
-  }
-
   try {
-    const result = await captureTab(tab);
-    await notifyCapture(result);
+    // Save the link that was right-clicked, not the page it happens to sit on.
+    if (info.menuItemId === "amiro-capture-link" && info.linkUrl) {
+      const result = await captureLinkUrl(info.linkUrl, info.selectionText);
+      await notifyCapture(result);
+      return;
+    }
+
+    if (info.menuItemId === "amiro-capture-page" && tab) {
+      // Any highlighted text is better context than nothing.
+      const result = await captureTab(tab);
+      await notifyCapture(result);
+    }
   } catch (error) {
     console.error("[amiro-extension] context capture failed", error);
   }

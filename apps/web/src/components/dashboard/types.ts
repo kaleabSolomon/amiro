@@ -1,3 +1,5 @@
+export type FolderBookmarkDisposition = "move-to-unfiled" | "delete";
+
 export type DashboardFolder = {
   id: string;
   name: string;
