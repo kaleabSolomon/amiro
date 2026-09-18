@@ -326,20 +326,25 @@ async function bumpBookmarkStats(
     .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
     .unique();
 
+  const nextTotal = Math.max(0, (stats?.totalAttributedSaves ?? 0) + amount);
+
   if (stats) {
     await ctx.db.patch(stats._id, {
       totalAttributedSaves: stats.totalAttributedSaves + amount,
       updatedAt: now,
     });
-    return;
+  } else {
+    await ctx.db.insert("bookmarkSaveStats", {
+      bookmarkId: bookmark._id,
+      ownerId: bookmark.userId,
+      totalAttributedSaves: amount,
+      updatedAt: now,
+    });
   }
 
-  await ctx.db.insert("bookmarkSaveStats", {
-    bookmarkId: bookmark._id,
-    ownerId: bookmark.userId,
-    totalAttributedSaves: amount,
-    updatedAt: now,
-  });
+  // Mirror onto the bookmark so list queries can sort and read the count
+  // without touching this table. Kept here so the two can't drift.
+  await ctx.db.patch(bookmark._id, { totalSaves: nextTotal });
 }
 
 async function bumpBookmarkStarStats(
@@ -353,24 +358,27 @@ async function bumpBookmarkStarStats(
     .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
     .unique();
 
+  const nextTotal = Math.max(0, (stats?.totalStars ?? 0) + amount);
+
   if (stats) {
     await ctx.db.patch(stats._id, {
-      totalStars: Math.max(0, stats.totalStars + amount),
+      totalStars: nextTotal,
       updatedAt: now,
     });
-    return;
+  } else {
+    if (amount <= 0) {
+      return;
+    }
+    await ctx.db.insert("bookmarkStarStats", {
+      bookmarkId: bookmark._id,
+      ownerId: bookmark.userId,
+      totalStars: amount,
+      updatedAt: now,
+    });
   }
 
-  if (amount <= 0) {
-    return;
-  }
-
-  await ctx.db.insert("bookmarkStarStats", {
-    bookmarkId: bookmark._id,
-    ownerId: bookmark.userId,
-    totalStars: amount,
-    updatedAt: now,
-  });
+  // See bumpBookmarkStats — same mirroring, same reason.
+  await ctx.db.patch(bookmark._id, { totalStars: nextTotal });
 }
 
 async function bumpShareBookmarkStats(
@@ -525,6 +533,53 @@ export const createShare = mutation({
       }
     } else {
       throw new ConvexError("Bookmark groups are not available yet.");
+    }
+
+    // Reuse an existing, still-valid share for this resource rather than minting
+    // a new link. The share dialog calls this on every open, so inserting
+    // unconditionally produced duplicate rows, live public links the owner could
+    // no longer enumerate or revoke, and an inflated totalSharesCreated.
+    const existingShares = await ctx.db
+      .query("shares")
+      .withIndex("by_shared_by_and_resource", (q) =>
+        q
+          .eq("sharedBy", authUser._id)
+          .eq("resourceType", args.resourceType)
+          .eq("resourceId", args.resourceId),
+      )
+      .order("desc")
+      .collect();
+
+    const reusable = existingShares.find(
+      // Same liveness test as resolveShare (sharing.ts:183) so the two never disagree.
+      (share) => !share.expiresAt || share.expiresAt > now,
+    );
+
+    if (reusable) {
+      // Explicitly-passed options still take effect; omitted ones (undefined)
+      // must not clobber what is already stored.
+      const nextVisibility = args.visibility ?? reusable.visibility;
+      const nextCampaign = args.campaign ?? reusable.campaign;
+      const nextExpiresAt = args.expiresAt ?? reusable.expiresAt;
+
+      if (
+        nextVisibility !== reusable.visibility ||
+        nextCampaign !== reusable.campaign ||
+        nextExpiresAt !== reusable.expiresAt
+      ) {
+        await ctx.db.patch(reusable._id, {
+          visibility: nextVisibility,
+          campaign: nextCampaign,
+          expiresAt: nextExpiresAt,
+          updatedAt: now,
+        });
+      }
+
+      return {
+        id: reusable._id,
+        publicId: reusable.publicId,
+        shareUrlPath: `/share/${reusable.publicId}`,
+      };
     }
 
     const publicId = await ensureUniquePublicId(ctx);

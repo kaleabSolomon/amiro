@@ -106,7 +106,7 @@ export function DashboardCommandPalette({
 
       {/* Dropdown results */}
       {showDropdown ? (
-        <div className="absolute top-full left-0 z-50 mt-1.5 w-full min-w-[360px] rounded-xl border border-border bg-background shadow-xl">
+        <div className="absolute top-full left-0 z-50 mt-1.5 w-full rounded-xl border border-border bg-background shadow-xl sm:min-w-[360px]">
           <div className="max-h-[360px] overflow-y-auto p-2">
             {loading ? (
               <p className="px-2 py-8 text-center text-muted-foreground text-sm">

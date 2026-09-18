@@ -31,8 +31,8 @@ interface DashboardContextValue {
   selectFolder: (folderId: string) => void;
   folders: DashboardFolder[];
   foldersLoading: boolean;
-  recentCount: number;
-  sharedCount: number;
+  recentCount: string;
+  sharedCount: string;
   commandPalette: CommandPaletteState;
 }
 
@@ -44,6 +44,15 @@ export function useDashboard() {
     throw new Error("useDashboard must be used within a DashboardProvider");
   }
   return context;
+}
+
+// The count queries cap their scan, so past the cap they report hasMore
+// instead of a number that would simply be wrong.
+function formatCount(result: { count: number; hasMore: boolean } | undefined) {
+  if (!result) {
+    return "0";
+  }
+  return result.hasMore ? `${result.count}+` : String(result.count);
 }
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
@@ -81,7 +90,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Auto-correct if selected folder no longer exists
   useEffect(() => {
-    if (selectedFolderId === "recent" || selectedFolderId === "shared") {
+    if (
+      selectedFolderId === "recent" ||
+      selectedFolderId === "shared" ||
+      selectedFolderId === "feed"
+    ) {
       return;
     }
     if (!folderMap.has(selectedFolderId) && folders.length > 0) {
@@ -191,8 +204,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       selectFolder,
       folders,
       foldersLoading,
-      recentCount: recentCountQuery ?? 0,
-      sharedCount: sharedCountQuery ?? 0,
+      recentCount: formatCount(recentCountQuery),
+      sharedCount: formatCount(sharedCountQuery),
       commandPalette,
     }),
     [

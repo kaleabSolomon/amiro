@@ -54,6 +54,21 @@ export type AuthSessionState = {
   connectedAt: string;
 };
 
+/** Where imported browser bookmarks land. */
+export type ImportStrategy = "keep-folders" | "unfiled";
+
+export type ImportSummary = {
+  queued: number;
+  foldersCreated: number;
+};
+
+export type ExportSummary = {
+  html: string;
+  count: number;
+  /** True when the export hit the server-side cap and is incomplete. */
+  truncated: boolean;
+};
+
 export type ExtensionMessage =
   | { type: "amiro/extract-page" }
   | {
@@ -81,7 +96,10 @@ export type ExtensionMessage =
     }
   | { type: "amiro/get-auth-state" }
   | { type: "amiro/disconnect-auth" }
-  | { type: "amiro/flush-queue" };
+  | { type: "amiro/flush-queue" }
+  | { type: "amiro/import-browser-bookmarks"; strategy: ImportStrategy }
+  | { type: "amiro/export-bookmarks" }
+  | { type: "amiro/discard-queued-capture"; url: string };
 
 export type ExtensionMessageResponse =
   | {
@@ -100,5 +118,8 @@ export type ExtensionMessageResponse =
       deleted?: true;
       moved?: true;
       flushed?: true;
+      imported?: ImportSummary;
+      exported?: ExportSummary;
+      discarded?: true;
     }
   | { ok: false; error: string };

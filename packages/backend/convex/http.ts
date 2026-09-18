@@ -656,6 +656,46 @@ http.route({
 });
 
 http.route({
+  path: "/api/extension/export",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: syncCorsHeaders });
+  }),
+});
+
+http.route({
+  path: "/api/extension/export",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    const authUser = await getHttpAuthUserOrNull(ctx);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized." }),
+        { status: 401, headers: syncCorsHeaders },
+      );
+    }
+
+    try {
+      const data = await ctx.runQuery(internal.sync.listAllBookmarksForExport, {
+        userId: authUser._id,
+      });
+
+      return new Response(JSON.stringify({ ok: true, data }), {
+        status: 200,
+        headers: syncCorsHeaders,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to export bookmarks.";
+      return new Response(JSON.stringify({ ok: false, error: message }), {
+        status: 400,
+        headers: syncCorsHeaders,
+      });
+    }
+  }),
+});
+
+http.route({
   path: "/api/extension/bookmarks/delete",
   method: "OPTIONS",
   handler: httpAction(async () => {

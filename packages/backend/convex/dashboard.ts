@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -78,26 +79,19 @@ async function getBookmarkEngagement(
   bookmark: Doc<"syncedBookmarks">,
   viewerId: string,
 ) {
-  const [saveStats, starStats, starClaim] = await Promise.all([
-    ctx.db
-      .query("bookmarkSaveStats")
-      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
-      .unique(),
-    ctx.db
-      .query("bookmarkStarStats")
-      .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
-      .unique(),
-    ctx.db
-      .query("bookmarkStarClaims")
-      .withIndex("by_starred_by_and_bookmark", (q) =>
-        q.eq("starredBy", viewerId).eq("bookmarkId", bookmark._id),
-      )
-      .unique(),
-  ]);
+  // Counts come off the bookmark itself now. This used to make three point
+  // reads per row, so a 4,000-item folder cost ~16,000 reads and blew the
+  // per-query limit. Only the viewer's own star claim still needs a lookup.
+  const starClaim = await ctx.db
+    .query("bookmarkStarClaims")
+    .withIndex("by_starred_by_and_bookmark", (q) =>
+      q.eq("starredBy", viewerId).eq("bookmarkId", bookmark._id),
+    )
+    .unique();
 
   return {
-    totalSaves: saveStats?.totalAttributedSaves ?? 0,
-    totalStars: starStats?.totalStars ?? 0,
+    totalSaves: bookmark.totalSaves ?? 0,
+    totalStars: bookmark.totalStars ?? 0,
     viewerHasStarred: Boolean(starClaim),
   };
 }
@@ -182,6 +176,9 @@ export const getFolderTree = query({
   },
 });
 
+// Upper bound for the sidebar count badges; past this the UI shows "999+".
+const COUNT_LIMIT = 999;
+
 export const getBookmarksForFolder = query({
   args: {
     folderId: v.string(),
@@ -228,6 +225,77 @@ export const getBookmarksForFolder = query({
         folderVisibility: targetFolderVisibility,
       })),
     );
+  },
+});
+
+export const bookmarkSortValidator = v.union(
+  v.literal("recent"),
+  v.literal("stars"),
+  v.literal("saves"),
+);
+
+/**
+ * Paginated replacement for getBookmarksForFolder.
+ *
+ * The old query collected an entire folder and then made three point reads
+ * per row, so a large folder simply exceeded the per-query read limit and the
+ * dashboard stopped loading. This reads one page, one star claim per row.
+ *
+ * Sorting runs off an index rather than in the client, so "most starred"
+ * means most starred in the whole folder, not within the page you happen to
+ * have loaded.
+ */
+export const listBookmarksForFolder = query({
+  args: {
+    folderId: v.string(),
+    sort: v.optional(bookmarkSortValidator),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const targetFolderId =
+      args.folderId === "unfiled"
+        ? undefined
+        : (args.folderId as Id<"folders">);
+    let targetFolderVisibility: "private" | "public" = "private";
+
+    if (targetFolderId) {
+      const folder = await ctx.db.get(targetFolderId);
+      if (!folder || folder.userId !== authUser._id) {
+        throw new ConvexError("Folder not found.");
+      }
+      targetFolderVisibility = folder.visibility ?? "private";
+    }
+
+    const sort = args.sort ?? "recent";
+    const indexName =
+      sort === "stars"
+        ? "by_user_and_folder_and_stars"
+        : sort === "saves"
+          ? "by_user_and_folder_and_saves"
+          : "by_user_and_folder";
+
+    const results = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex(indexName, (q) =>
+        q.eq("userId", authUser._id).eq("folderId", targetFolderId),
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    return {
+      ...results,
+      page: await Promise.all(
+        results.page.map(async (bookmark) => ({
+          ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+          folderVisibility: targetFolderVisibility,
+        })),
+      ),
+    };
   },
 });
 
@@ -286,7 +354,7 @@ export const getRecentBookmarkCount = query({
   handler: async (ctx, args) => {
     const authUser = await authComponent.safeGetAuthUser(ctx);
     if (!authUser) {
-      return 0;
+      return { count: 0, hasMore: false };
     }
 
     const days = Math.max(1, Math.min(args.days ?? 7, 31));
@@ -296,9 +364,14 @@ export const getRecentBookmarkCount = query({
       .withIndex("by_user_and_last_synced_at", (q) =>
         q.eq("userId", authUser._id).gte("lastSyncedAt", since),
       )
-      .take(1000);
+      .take(COUNT_LIMIT + 1);
 
-    return bookmarks.length;
+    // A flag beats a wrong number: .take(1000) silently capped this, so a
+    // user with 4,000 shared bookmarks was shown exactly 1000.
+    return {
+      count: Math.min(bookmarks.length, COUNT_LIMIT),
+      hasMore: bookmarks.length > COUNT_LIMIT,
+    };
   },
 });
 
@@ -392,7 +465,7 @@ export const getSharedBookmarkCount = query({
   handler: async (ctx) => {
     const authUser = await authComponent.safeGetAuthUser(ctx);
     if (!authUser) {
-      return 0;
+      return { count: 0, hasMore: false };
     }
 
     const bookmarks = await ctx.db
@@ -400,9 +473,14 @@ export const getSharedBookmarkCount = query({
       .withIndex("by_user_and_saved_at", (q) =>
         q.eq("userId", authUser._id).gt("savedAt", 0),
       )
-      .take(1000);
+      .take(COUNT_LIMIT + 1);
 
-    return bookmarks.length;
+    // A flag beats a wrong number: .take(1000) silently capped this, so a
+    // user with 4,000 shared bookmarks was shown exactly 1000.
+    return {
+      count: Math.min(bookmarks.length, COUNT_LIMIT),
+      hasMore: bookmarks.length > COUNT_LIMIT,
+    };
   },
 });
 
@@ -623,6 +701,124 @@ export const updateFolderVisibility = mutation({
     return {
       id: folder._id,
       visibility: args.visibility,
+    };
+  },
+});
+
+export const updateFolder = mutation({
+  args: {
+    folderId: v.id("folders"),
+    name: v.optional(v.string()),
+    icon: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || folder.userId !== authUser._id) {
+      throw new ConvexError("Folder not found.");
+    }
+
+    let name = folder.name;
+    if (args.name !== undefined) {
+      name = args.name.trim();
+      if (!name) {
+        throw new ConvexError("Folder name cannot be empty.");
+      }
+    }
+
+    // An explicitly-passed empty icon clears it; an omitted icon is left alone.
+    const icon =
+      args.icon === undefined ? folder.icon : args.icon.trim() || undefined;
+
+    await ctx.db.patch(folder._id, {
+      name,
+      icon,
+      updatedAt: Date.now(),
+    });
+
+    return { id: folder._id, name, icon: icon ?? null };
+  },
+});
+
+export const deleteFolder = mutation({
+  args: {
+    folderId: v.id("folders"),
+    // What to do with the bookmarks inside. Defaults to the non-destructive
+    // option so an older client that omits it can never delete anything.
+    bookmarks: v.optional(
+      v.union(v.literal("move-to-unfiled"), v.literal("delete")),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || folder.userId !== authUser._id) {
+      throw new ConvexError("Folder not found.");
+    }
+
+    const now = Date.now();
+    const deleteContainedBookmarks = args.bookmarks === "delete";
+
+    const contained = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_folder", (q) =>
+        q.eq("userId", authUser._id).eq("folderId", folder._id),
+      )
+      .collect();
+
+    for (const bookmark of contained) {
+      if (deleteContainedBookmarks) {
+        // Matches deleteBookmark, which also drops only the bookmark row.
+        await ctx.db.delete(bookmark._id);
+        continue;
+      }
+
+      // Unfiled cannot hold public bookmarks, so they are downgraded to
+      // private — the same rule moveBookmark applies when the destination
+      // isn't public.
+      await ctx.db.patch(bookmark._id, {
+        folderId: undefined,
+        visibility: "private",
+        lastSyncedAt: now,
+      });
+    }
+
+    // Nesting is creatable through the API even though the UI never exposes it.
+    // Lift any children to the root so they can't become unreachable.
+    const children = await ctx.db
+      .query("folders")
+      .withIndex("by_user_and_parent_folder", (q) =>
+        q.eq("userId", authUser._id).eq("parentFolderId", folder._id),
+      )
+      .collect();
+
+    for (const child of children) {
+      await ctx.db.patch(child._id, {
+        parentFolderId: undefined,
+        updatedAt: now,
+      });
+    }
+
+    // Any share link to this folder can no longer resolve to anything; drop the
+    // rows rather than leaving links that fail for whoever still holds them.
+    const folderShares = await ctx.db
+      .query("shares")
+      .withIndex("by_resource", (q) =>
+        q.eq("resourceType", "folder").eq("resourceId", folder._id),
+      )
+      .collect();
+
+    for (const share of folderShares) {
+      await ctx.db.delete(share._id);
+    }
+
+    await ctx.db.delete(folder._id);
+
+    return {
+      id: folder._id,
+      movedToUnfiled: deleteContainedBookmarks ? 0 : contained.length,
+      deletedBookmarks: deleteContainedBookmarks ? contained.length : 0,
+      revokedShares: folderShares.length,
     };
   },
 });

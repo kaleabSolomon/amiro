@@ -1,4 +1,4 @@
-import { ArrowRight, Eye, Globe2, Lock, Sparkles, Star } from "lucide-react";
+import { ArrowRight, Eye, Globe2, Lock, Star } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -37,13 +37,6 @@ export function Hero() {
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-12 px-6 py-24 lg:grid-cols-12 lg:py-32">
         {/* Left: copy */}
         <div className="lg:col-span-6">
-          <div className="mb-5 inline-flex items-center gap-2">
-            <span className="tag-chip tag-chip-mint">
-              <Sparkles className="h-3 w-3" />
-              Now in private beta
-            </span>
-          </div>
-
           <h1 className="font-serif text-5xl text-foreground leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">
             The bookmark app
             <br />

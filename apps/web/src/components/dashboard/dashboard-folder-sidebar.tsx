@@ -9,6 +9,7 @@ import {
   Plus,
   Share,
   Sparkles,
+  Users,
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
@@ -36,6 +37,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
 import { NewFolderDialog } from "./new-folder-dialog";
@@ -63,18 +65,18 @@ export function DashboardFolderSidebar({
   selectedFolderId,
   isLoading = false,
   loadingFallback,
-  recentCount = 0,
-  sharedCount = 0,
+  recentCount = "0",
+  sharedCount = "0",
   creatingFolder = false,
-  onSelectFolder,
+  onSelectFolder: onSelectFolderProp,
   onCreateFolder,
 }: {
   folders: DashboardFolder[];
   selectedFolderId: string;
   isLoading?: boolean;
   loadingFallback?: ReactNode;
-  recentCount?: number;
-  sharedCount?: number;
+  recentCount?: string;
+  sharedCount?: string;
   creatingFolder?: boolean;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (input: {
@@ -85,6 +87,16 @@ export function DashboardFolderSidebar({
 }) {
   const currentUser = useQuery(api.auth.getCurrentUser);
   const router = useRouter();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  // On mobile the sidebar is an overlay sheet — dismiss it after picking a
+  // folder so the bookmarks it reveals are actually visible.
+  const onSelectFolder = (folderId: string) => {
+    onSelectFolderProp(folderId);
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
   const profileHref = currentUser?.username
     ? (`/profile/${currentUser.username}` as Route)
     : "/dashboard";
@@ -107,7 +119,9 @@ export function DashboardFolderSidebar({
               <span className="font-light font-serif text-2xl tracking-tight group-data-[collapsible=icon]:hidden">
                 Amiro
               </span>
-              <SidebarTrigger />
+              {/* Desktop collapse control only — on mobile the sheet has its
+                  own close button. */}
+              <SidebarTrigger className="hidden md:inline-flex" />
             </div>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -140,6 +154,18 @@ export function DashboardFolderSidebar({
                   <span>Shared with me</span>
                 </SidebarMenuButton>
                 <SidebarMenuBadge>{sharedCount}</SidebarMenuBadge>
+              </SidebarMenuItem>
+            </SidebarMenu>
+            <SidebarMenu>
+              <SidebarMenuItem key="feed">
+                <SidebarMenuButton
+                  isActive={selectedFolderId === "feed"}
+                  onClick={() => onSelectFolder("feed")}
+                  tooltip="Feed"
+                >
+                  <Users className="h-4 w-4 text-sidebar-foreground/40" />
+                  <span>Feed</span>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

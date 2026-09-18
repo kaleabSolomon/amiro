@@ -1,9 +1,14 @@
 "use client";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Smartphone } from "lucide-react";
 import Image from "next/image";
 import { useRef } from "react";
 import amiro from "../../../assets/logos/amiro.png";
 import { AnimatedBeam, Circle, Icons } from "../ui/animated-beam";
+import {
+  CustomTooltip,
+  CustomTooltipContent,
+  CustomTooltipTrigger,
+} from "../ui/custom-tooltip";
 
 function AnimatedBeamDemo() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -146,26 +151,39 @@ export function Integrations() {
         {/* Bento grid */}
         <div className="mt-10 grid grid-cols-6 gap-3 sm:gap-4">
           {/* Mobile — tall */}
-          <BentoTile
-            className="col-span-6 min-h-[260px] sm:col-span-3 sm:row-span-2"
-            Icon={Icons.reactjs}
-            title="Mobile app"
-            desc="Save from anywhere on iOS and Android with native share sheets."
-            accent="mint"
-          >
-            <div className="absolute inset-x-6 top-24 bottom-6 overflow-hidden rounded-xl border border-border/70 bg-gradient-to-b from-surface-elevated to-surface p-3">
-              <div className="mx-auto h-1 w-10 rounded-full bg-border-strong" />
-              <div className="mt-3 space-y-2">
-                <div className="h-2.5 w-3/4 rounded-full bg-border" />
-                <div className="h-2.5 w-1/2 rounded-full bg-border/70" />
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <div className="aspect-square rounded-md bg-primary/15 ring-1 ring-primary/30" />
-                <div className="aspect-square rounded-md bg-border/50" />
-                <div className="aspect-square rounded-md bg-border/50" />
-              </div>
-            </div>
-          </BentoTile>
+          <CustomTooltip>
+            <CustomTooltipTrigger
+              render={
+                <div className="col-span-6 sm:col-span-3 sm:row-span-2" />
+              }
+            >
+              <BentoTile
+                className="h-full min-h-[260px]"
+                Icon={Smartphone}
+                title="Mobile app"
+                desc="Save from anywhere on iOS and Android with native share sheets."
+                disabled
+              >
+                {/* Phone mockup in normal flow (below the text) so it can never
+                overlap the description. */}
+                <div className="relative mt-5 overflow-hidden rounded-xl border border-border/70 bg-gradient-to-b from-surface-elevated to-surface p-3">
+                  <div className="mx-auto h-1 w-10 rounded-full bg-border-strong" />
+                  <div className="mt-3 space-y-2">
+                    <div className="h-2.5 w-3/4 rounded-full bg-border" />
+                    <div className="h-2.5 w-1/2 rounded-full bg-border/70" />
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    <div className="aspect-square rounded-md bg-primary/15 ring-1 ring-primary/30" />
+                    <div className="aspect-square rounded-md bg-border/50" />
+                    <div className="aspect-square rounded-md bg-border/50" />
+                  </div>
+                </div>
+              </BentoTile>
+            </CustomTooltipTrigger>
+            <CustomTooltipContent side="top">
+              Mobile app coming soon
+            </CustomTooltipContent>
+          </CustomTooltip>
 
           {/* Extension — wide short */}
           <BentoTile
@@ -196,6 +214,7 @@ function BentoTile({
   desc,
   accent,
   compact,
+  disabled,
   children,
 }: {
   className?: string;
@@ -204,28 +223,45 @@ function BentoTile({
   desc: string;
   accent?: "mint";
   compact?: boolean;
+  disabled?: boolean;
   children?: React.ReactNode;
 }) {
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-surface to-surface-elevated p-5 transition-all duration-300 hover:-translate-y-0.5 hover:border-border-strong ${className}`}
+      className={`group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-surface to-surface-elevated p-5 transition-all duration-300 ${
+        disabled
+          ? "opacity-60 saturate-[0.6]"
+          : "hover:-translate-y-0.5 hover:border-border-strong"
+      } ${className}`}
     >
       {/* glow accent */}
       <div
         className={`pointer-events-none absolute -top-10 -right-10 h-40 w-40 rounded-full blur-3xl transition-opacity duration-500 ${
-          accent === "mint"
-            ? "bg-primary/20 opacity-60 group-hover:opacity-100"
-            : "bg-primary/10 opacity-0 group-hover:opacity-80"
+          disabled
+            ? "bg-primary/10 opacity-40"
+            : accent === "mint"
+              ? "bg-primary/20 opacity-60 group-hover:opacity-100"
+              : "bg-primary/10 opacity-0 group-hover:opacity-80"
         }`}
       />
       {/* subtle grid */}
       <div className="mask-radial-fade pointer-events-none absolute inset-0 bg-dots-faint opacity-40" />
 
       <div className="relative flex items-start justify-between">
-        <div className="grid h-9 w-9 place-items-center rounded-lg border border-primary/30 bg-primary/10 text-primary transition-transform group-hover:-translate-y-0.5">
+        <div
+          className={`grid h-9 w-9 place-items-center rounded-lg border border-primary/30 bg-primary/10 text-primary ${
+            disabled ? "" : "transition-transform group-hover:-translate-y-0.5"
+          }`}
+        >
           <Icon className="h-4.5 w-4.5" strokeWidth={1.75} />
         </div>
-        <ArrowUpRight className="h-4 w-4 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />
+        {disabled ? (
+          <span className="rounded-full border border-border bg-surface-elevated px-2 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-[0.08em]">
+            Soon
+          </span>
+        ) : (
+          <ArrowUpRight className="h-4 w-4 text-muted-foreground/50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />
+        )}
       </div>
 
       <div className="relative mt-4">

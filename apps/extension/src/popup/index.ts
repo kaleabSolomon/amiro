@@ -6,6 +6,7 @@ import type {
   ExtensionMessage,
   ExtensionMessageResponse,
   FolderOption,
+  ImportStrategy,
   SearchResult,
   Visibility,
 } from "../types/messages";
@@ -15,7 +16,7 @@ const FOLDER_ICONS = ["📁", "⭐", "💡", "📚", "🎨", "💼", "🔖", "�
 const AUTH_SESSION_KEY = "amiro_auth_session";
 const CAPTURE_QUEUE_KEY = "amiro_capture_queue";
 
-type TabName = "save" | "bookmarks" | "settings";
+type TabName = "save" | "bookmarks" | "queued" | "settings";
 
 // ── DOM references (grabbed once) ─────────────────────────────────
 const $ = <T extends Element>(selector: string) =>
@@ -24,11 +25,13 @@ const $ = <T extends Element>(selector: string) =>
 const tabs: Record<TabName, HTMLButtonElement | null> = {
   save: $<HTMLButtonElement>("#tab-save"),
   bookmarks: $<HTMLButtonElement>("#tab-bookmarks"),
+  queued: $<HTMLButtonElement>("#tab-queued"),
   settings: $<HTMLButtonElement>("#tab-settings"),
 };
 const panels: Record<TabName, HTMLElement | null> = {
   save: $<HTMLElement>("#panel-save"),
   bookmarks: $<HTMLElement>("#panel-bookmarks"),
+  queued: $<HTMLElement>("#panel-queued"),
   settings: $<HTMLElement>("#panel-settings"),
 };
 
@@ -59,11 +62,15 @@ const connectButton = $<HTMLButtonElement>("#connect");
 const disconnectButton = $<HTMLButtonElement>("#disconnect");
 const connectionState = $<HTMLParagraphElement>("#connection-state");
 const sourceLabel = $<HTMLElement>("#source-label");
+const importButton = $<HTMLButtonElement>("#import-bookmarks");
+const exportButton = $<HTMLButtonElement>("#export-bookmarks");
+const transferState = $<HTMLParagraphElement>("#transfer-state");
 
 const connectBmButton = $<HTMLButtonElement>("#connect-bm");
 const bmConnectNudge = $<HTMLDivElement>("#bm-connect-nudge");
-const bmPending = $<HTMLDivElement>("#bm-pending");
 const bmPendingList = $<HTMLDivElement>("#bm-pending-list");
+const queuedCount = $<HTMLSpanElement>("#queued-count");
+const queuedEmpty = $<HTMLParagraphElement>("#queued-empty");
 const bmBody = $<HTMLDivElement>("#bm-body");
 const bmFolders = $<HTMLDivElement>("#bm-folders");
 const bmList = $<HTMLDivElement>("#bm-list");
@@ -79,10 +86,10 @@ let folderTree: FolderOption[] = [];
 let selectedBmFolderId = "unfiled";
 let bookmarksInitialized = false;
 let searchQuery = "";
+let importStrategy: ImportStrategy = "keep-folders";
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Auto tags applied on capture are noise in the row UI; hide them.
-const HIDDEN_TAG_PREFIXES = ["source:", "domain:", "captured:"];
 
 // ── Status bar ────────────────────────────────────────────────────
 type StatusKind = "default" | "pending" | "success" | "error";
@@ -134,10 +141,16 @@ function activateTab(name: TabName) {
     bookmarksInitialized = true;
     void loadBookmarks();
   }
+
+  // The flusher drains the queue in the background, so re-read on every open
+  // rather than trusting whatever was rendered when the popup mounted.
+  if (name === "queued") {
+    void refreshPending();
+  }
 }
 
 function wireTabs() {
-  const order: TabName[] = ["save", "bookmarks", "settings"];
+  const order: TabName[] = ["save", "bookmarks", "queued", "settings"];
   for (const name of order) {
     tabs[name]?.addEventListener("click", () => activateTab(name));
     tabs[name]?.addEventListener("keydown", (event) => {
@@ -201,7 +214,7 @@ function setConnectionState(session: AuthSessionState | null) {
     }
   }
 
-  // Pending (queued) captures show on the Bookmarks tab regardless of state.
+  // Keeps the Queued tab badge accurate no matter which panel is showing.
   void refreshPending();
 }
 
@@ -327,6 +340,13 @@ async function loadFolders() {
 }
 
 // ── Bookmarks tab ─────────────────────────────────────────────────
+/**
+ * Folder picker for the browse view.
+ *
+ * Was a wrapping row of pills with no upper bound — a dozen folders pushed the
+ * bookmark list most of the way down a 600px popup. A select is fixed height
+ * whatever the folder count, and shows the current folder as its own label.
+ */
 function renderFolderFilter() {
   if (!bmFolders) {
     return;
@@ -337,46 +357,31 @@ function renderFolderFilter() {
     selectedBmFolderId = "unfiled";
   }
 
-  for (const folder of folderTree) {
-    const pill = document.createElement("button");
-    pill.type = "button";
-    pill.className = "folder-pill";
-    pill.dataset.folderId = folder.id;
-    pill.setAttribute(
-      "aria-pressed",
-      folder.id === selectedBmFolderId ? "true" : "false",
-    );
-
-    const icon = document.createElement("span");
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = folder.icon || "📁";
-
-    const name = document.createElement("span");
-    name.className = "folder-pill-name";
-    name.textContent = folder.name;
-
-    const count = document.createElement("span");
-    count.className = "count";
-    count.textContent = String(folder.itemCount ?? 0);
-
-    pill.append(icon, name, count);
-    pill.addEventListener("click", () => {
-      if (selectedBmFolderId === folder.id) {
-        return;
-      }
-      selectedBmFolderId = folder.id;
-      for (const child of Array.from(bmFolders.children)) {
-        child.setAttribute(
-          "aria-pressed",
-          (child as HTMLElement).dataset.folderId === folder.id
-            ? "true"
-            : "false",
-        );
-      }
-      void loadBookmarks();
-    });
-    bmFolders.append(pill);
+  if (folderTree.length === 0) {
+    return;
   }
+
+  const select = document.createElement("select");
+  select.className = "select folder-select";
+  select.setAttribute("aria-label", "Filter by folder");
+
+  for (const folder of folderTree) {
+    const option = document.createElement("option");
+    option.value = folder.id;
+    option.textContent = `${folder.icon || "📁"}  ${folder.name}  (${folder.itemCount ?? 0})`;
+    option.selected = folder.id === selectedBmFolderId;
+    select.append(option);
+  }
+
+  select.addEventListener("change", () => {
+    if (!select.value || select.value === selectedBmFolderId) {
+      return;
+    }
+    selectedBmFolderId = select.value;
+    void loadBookmarks();
+  });
+
+  bmFolders.append(select);
 }
 
 function renderBmState(kind: "loading" | "empty" | "error", message?: string) {
@@ -462,7 +467,15 @@ async function refreshPending() {
 }
 
 function renderPending(queue: CapturePayload[]) {
-  bmPending?.classList.toggle("hidden", queue.length === 0);
+  // The count lives on the tab so a backlog is visible from any panel —
+  // previously these rows sat on top of the synced list, which meant a
+  // 40-bookmark import buried everything the user actually came to browse.
+  if (queuedCount) {
+    queuedCount.textContent = queue.length > 99 ? "99+" : String(queue.length);
+    queuedCount.classList.toggle("hidden", queue.length === 0);
+  }
+  queuedEmpty?.classList.toggle("hidden", queue.length > 0);
+
   if (!bmPendingList) {
     return;
   }
@@ -487,6 +500,7 @@ function buildPendingRow(capture: CapturePayload) {
   const title = document.createElement("span");
   title.className = "bm-title";
   title.textContent = capture.title;
+  title.title = capture.title;
 
   const meta = document.createElement("span");
   meta.className = "bm-meta";
@@ -508,15 +522,44 @@ function buildPendingRow(capture: CapturePayload) {
     meta.append(dot, time);
   }
 
-  const tagRow = document.createElement("span");
-  tagRow.className = "bm-tags";
-  const chip = document.createElement("span");
-  chip.className = "chip chip-queued";
-  chip.textContent = "Queued";
-  tagRow.append(chip);
+  // Without this there's no way to get a bad capture out of the queue — it
+  // would sync to the account on the next connect, wrong or not.
+  const discard = document.createElement("button");
+  discard.type = "button";
+  discard.className = "icon-btn";
+  discard.setAttribute(
+    "aria-label",
+    `Discard queued capture: ${capture.title}`,
+  );
+  discard.textContent = "✕";
+  discard.addEventListener("click", () => {
+    void (async () => {
+      discard.disabled = true;
+      try {
+        const response = await send({
+          type: "amiro/discard-queued-capture",
+          url: capture.url,
+        });
+        if (!response.ok) {
+          setStatus(response.error, "error");
+          discard.disabled = false;
+          return;
+        }
+        row.remove();
+        renderPending(await getQueue());
+        setStatus("Removed from queue.");
+      } catch (error) {
+        setStatus(
+          error instanceof Error ? error.message : "Failed to discard.",
+          "error",
+        );
+        discard.disabled = false;
+      }
+    })();
+  });
 
-  body.append(title, meta, tagRow);
-  row.append(avatar, body);
+  body.append(title, meta);
+  row.append(avatar, body, discard);
   return row;
 }
 
@@ -614,7 +657,9 @@ function renderSearchResults(result: SearchResult, query: string) {
     bmList.append(label);
 
     const folderRow = document.createElement("div");
-    folderRow.className = "folder-filter";
+    // Pills are fine here: search returns a bounded handful of matches, unlike
+    // the browse filter which has to cope with every folder you own.
+    folderRow.className = "folder-results";
     for (const folder of result.folders) {
       const pill = document.createElement("button");
       pill.type = "button";
@@ -698,6 +743,7 @@ function buildBookmarkRow(item: BookmarkItem) {
   open.href = item.url;
   open.target = "_blank";
   open.rel = "noopener noreferrer";
+  open.title = `${item.title}\n${item.url}`;
 
   const avatar = document.createElement("span");
   avatar.className = "avatar";
@@ -710,6 +756,8 @@ function buildBookmarkRow(item: BookmarkItem) {
   const title = document.createElement("span");
   title.className = "bm-title";
   title.textContent = item.title;
+  // Titles clamp to one line, so the full text is only reachable on hover.
+  title.title = item.title;
 
   const meta = document.createElement("span");
   meta.className = "bm-meta";
@@ -737,28 +785,21 @@ function buildBookmarkRow(item: BookmarkItem) {
     meta.append(vis);
   }
 
-  body.append(title, meta);
-
-  const tags = formatTags(item.tags);
-  // Show the folder chip on search results (where rows span folders).
-  const showFolderChip = isSearching() && Boolean(item.folderName);
-  if (tags.length > 0 || showFolderChip) {
-    const tagRow = document.createElement("span");
-    tagRow.className = "bm-tags";
-    if (showFolderChip && item.folderName) {
-      const folderChip = document.createElement("span");
-      folderChip.className = "chip chip-folder";
-      folderChip.textContent = item.folderName;
-      tagRow.append(folderChip);
-    }
-    for (const tag of tags) {
-      const chip = document.createElement("span");
-      chip.className = tag.kind === "topic" ? "chip chip-topic" : "chip";
-      chip.textContent = tag.label;
-      tagRow.append(chip);
-    }
-    body.append(tagRow);
+  // Tags used to render as a third line of chips here. They aren't filterable
+  // from the popup, so they cost a row of height for no action. Folder stays,
+  // inline, because search results span folders and it disambiguates them.
+  if (isSearching() && item.folderName) {
+    const dot2 = document.createElement("span");
+    dot2.className = "bm-dot";
+    dot2.setAttribute("aria-hidden", "true");
+    dot2.textContent = "·";
+    const folder = document.createElement("span");
+    folder.className = "bm-folder-inline";
+    folder.textContent = item.folderName;
+    meta.append(dot2, folder);
   }
+
+  body.append(title, meta);
 
   open.append(avatar, body);
 
@@ -896,25 +937,6 @@ async function performMove(item: BookmarkItem, folderId: string) {
       error instanceof Error ? error.message : "Failed to move bookmark.";
     setStatus(message, "error");
   }
-}
-
-type FormattedTag = { label: string; kind: "topic" | "type" | "plain" };
-
-function formatTags(tags: string[]): FormattedTag[] {
-  return tags
-    .filter(
-      (tag) => !HIDDEN_TAG_PREFIXES.some((prefix) => tag.startsWith(prefix)),
-    )
-    .slice(0, 2)
-    .map((tag) => {
-      const kind = tag.startsWith("topic:")
-        ? "topic"
-        : tag.startsWith("type:")
-          ? "type"
-          : "plain";
-      const label = tag.includes(":") ? tag.slice(tag.indexOf(":") + 1) : tag;
-      return { label, kind };
-    });
 }
 
 function domainFromUrl(url: string) {
@@ -1293,6 +1315,154 @@ wireSegments("[data-vis-folder]", "visFolder", (value) => {
   folderVisibility = value;
 });
 folderSelect?.addEventListener("change", updateVisibilityAvailability);
+
+function setTransferState(message: string) {
+  if (transferState) {
+    transferState.textContent = message;
+  }
+}
+
+async function importBrowserBookmarks() {
+  if (!importButton) {
+    return;
+  }
+
+  // chrome.permissions.request only works inside a user gesture, and a
+  // service worker never has one — so the prompt has to happen here, in the
+  // popup, before handing the work to the background.
+  let granted = false;
+  try {
+    granted = await chrome.permissions.request({ permissions: ["bookmarks"] });
+  } catch {
+    granted = false;
+  }
+
+  if (!granted) {
+    setStatus("Bookmark access is needed to import.", "error");
+    setTransferState("Permission declined.");
+    return;
+  }
+
+  importButton.disabled = true;
+  setStatus("Reading browser bookmarks…");
+  setTransferState("Reading browser bookmarks…");
+
+  try {
+    const response = await send({
+      type: "amiro/import-browser-bookmarks",
+      strategy: importStrategy,
+    });
+
+    if (!response.ok) {
+      setStatus(response.error, "error");
+      setTransferState(response.error);
+      return;
+    }
+
+    const summary = response.imported;
+    if (!summary || summary.queued === 0) {
+      setStatus("No importable bookmarks found.");
+      setTransferState("No importable bookmarks found.");
+      return;
+    }
+
+    const folderNote =
+      summary.foldersCreated > 0
+        ? `, ${summary.foldersCreated} ${
+            summary.foldersCreated === 1 ? "folder" : "folders"
+          } created`
+        : "";
+    // They sync through the normal queue, so the badge is the progress bar.
+    const message = `Queued ${summary.queued} ${
+      summary.queued === 1 ? "bookmark" : "bookmarks"
+    }${folderNote}. Syncing in the background.`;
+    setStatus(message, "success");
+    setTransferState(message);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to import bookmarks.";
+    setStatus(message, "error");
+    setTransferState(message);
+  } finally {
+    importButton.disabled = false;
+  }
+}
+
+async function exportBookmarks() {
+  if (!exportButton) {
+    return;
+  }
+
+  exportButton.disabled = true;
+  setStatus("Preparing export…");
+  setTransferState("Preparing export…");
+
+  let objectUrl: string | null = null;
+  try {
+    const response = await send({ type: "amiro/export-bookmarks" });
+
+    if (!response.ok) {
+      setStatus(response.error, "error");
+      setTransferState(response.error);
+      return;
+    }
+
+    const summary = response.exported;
+    if (!summary) {
+      setStatus("Export failed.", "error");
+      return;
+    }
+
+    const blob = new Blob([summary.html], { type: "text/html" });
+    objectUrl = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `amiro-bookmarks-${stamp}.html`;
+    link.click();
+
+    const message = summary.truncated
+      ? `Exported the ${summary.count} most recent bookmarks (export limit reached).`
+      : `Exported ${summary.count} ${
+          summary.count === 1 ? "bookmark" : "bookmarks"
+        }.`;
+    setStatus(message, summary.truncated ? "default" : "success");
+    setTransferState(message);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to export bookmarks.";
+    setStatus(message, "error");
+    setTransferState(message);
+  } finally {
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    exportButton.disabled = false;
+  }
+}
+
+for (const button of Array.from(
+  document.querySelectorAll<HTMLButtonElement>("[data-import-strategy]"),
+)) {
+  button.addEventListener("click", () => {
+    const value = button.dataset.importStrategy as ImportStrategy | undefined;
+    if (!value) {
+      return;
+    }
+    importStrategy = value;
+    for (const sibling of Array.from(
+      document.querySelectorAll<HTMLButtonElement>("[data-import-strategy]"),
+    )) {
+      sibling.setAttribute(
+        "aria-pressed",
+        sibling === button ? "true" : "false",
+      );
+    }
+  });
+}
+
+importButton?.addEventListener("click", () => void importBrowserBookmarks());
+exportButton?.addEventListener("click", () => void exportBookmarks());
 
 connectButton?.addEventListener("click", () => void connectSession());
 connectBmButton?.addEventListener("click", () => void connectSession());

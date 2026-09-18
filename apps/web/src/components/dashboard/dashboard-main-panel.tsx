@@ -14,12 +14,13 @@ import {
   FolderInput,
   Globe2,
   Hash,
+  Loader2,
   Lock,
   Plus,
   Star,
   Trash2,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { MoveBookmarkDialog } from "@/components/dashboard/move-bookmark-dialog";
@@ -31,10 +32,18 @@ import {
   CustomTooltipContent,
   CustomTooltipTrigger,
 } from "@/components/ui/custom-tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToggleBookmarkStar } from "@/lib/use-bookmark-star";
 import { cn } from "@/lib/utils";
 
 import { useDashboard } from "./dashboard-context";
+import { FolderActionsMenu } from "./folder-actions-menu";
 import { type DisplayTag, tagFacetClass, toDisplayTags } from "./tag-display";
 import { formatRelativeTime } from "./time";
 import type { DashboardBookmark, DashboardFolder } from "./types";
@@ -55,8 +64,8 @@ function getLetterAvatar(url: string): string {
 }
 
 const SORT_OPTIONS = ["Recent", "Most starred", "Most saved"] as const;
-type SortOption = (typeof SORT_OPTIONS)[number];
-const RECENT_PAGE_SIZE = 20;
+export type SortOption = (typeof SORT_OPTIONS)[number];
+const PAGE_SIZE = 20;
 
 function getDayKey(timestamp: number) {
   return new Date(timestamp).toISOString().slice(0, 10);
@@ -112,7 +121,10 @@ function BookmarkSkeletonList() {
   return (
     <div className="divide-y divide-border/60">
       {BOOKMARK_SKELETONS.map((skeletonId) => (
-        <div key={skeletonId} className="flex items-start gap-4 px-5 py-5">
+        <div
+          key={skeletonId}
+          className="flex items-start gap-3 px-3 py-5 sm:gap-4 sm:px-5"
+        >
           <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1 space-y-2">
             <Skeleton className="h-4 w-3/5" />
@@ -139,6 +151,7 @@ function VisibilityToggle({
   label,
   compact = false,
   disabled = false,
+  pending = false,
   onClick,
 }: {
   active: boolean;
@@ -146,13 +159,14 @@ function VisibilityToggle({
   label: string;
   compact?: boolean;
   disabled?: boolean;
+  pending?: boolean;
   onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || pending}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
         compact && "px-2",
@@ -165,7 +179,12 @@ function VisibilityToggle({
       aria-label={label}
       title={label}
     >
-      <Icon className="h-3 w-3" />
+      {/* Swapping the icon in place keeps the control from resizing mid-flight. */}
+      {pending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <Icon className="h-3 w-3" />
+      )}
       {compact ? null : label}
     </button>
   );
@@ -173,12 +192,20 @@ function VisibilityToggle({
 
 /* ─── Main component ──────────────────────────────────────── */
 
+// Tag chips shown inline before the rest collapse into a dropdown.
+const VISIBLE_TAG_LIMIT = 6;
+
 export function DashboardMainPanel({
   selectedFolder,
   bookmarks,
   bookmarksLoading = false,
   bookmarksLoadingFallback,
   onDeleteBookmark,
+  sortBy,
+  onSortChange,
+  onLoadMore,
+  canLoadMore = false,
+  loadingMore = false,
 }: {
   selectedFolder: DashboardFolder;
   breadcrumbs: DashboardFolder[];
@@ -186,16 +213,43 @@ export function DashboardMainPanel({
   bookmarksLoading?: boolean;
   bookmarksLoadingFallback?: ReactNode;
   onDeleteBookmark: (bookmarkId: string) => Promise<void>;
+  sortBy: SortOption;
+  onSortChange: (sort: SortOption) => void;
+  // Present only for views backed by a paginated query. When set, the server
+  // has already ordered and paged the rows, so this component must not sort
+  // or slice them again.
+  onLoadMore?: () => void;
+  canLoadMore?: boolean;
+  loadingMore?: boolean;
 }) {
   const [deletingBookmarkId, setDeletingBookmarkId] = useState<string | null>(
     null,
   );
+  // Which visibility change is in flight: the control group ("folder" or a
+  // bookmark id) plus the side being switched TO, so the spinner lands on the
+  // option you picked rather than on both halves of the pair.
+  const [pendingVisibility, setPendingVisibility] = useState<{
+    key: string;
+    target: "private" | "public";
+  } | null>(null);
+
+  const isSwitchingTo = (key: string, target: "private" | "public") =>
+    pendingVisibility?.key === key && pendingVisibility.target === target;
+  // The sibling stays disabled during the round trip so the pair can't race.
+  const isSwitching = (key: string) => pendingVisibility?.key === key;
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<SortOption>("Recent");
+  const serverPaginated = Boolean(onLoadMore);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-  const [recentPage, setRecentPage] = useState(1);
+  const [page, setPage] = useState(1);
 
   const { folders } = useDashboard();
+
+  // Switching folder (or re-sorting) should start at the top of the list, not
+  // whatever page number the previous folder was on.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed on folder/sort, not page
+  useEffect(() => {
+    setPage(1);
+  }, [selectedFolder.id, sortBy]);
 
   const createBookmark = useMutation(api.sync.createBookmark);
   const updateFolderVisibility = useMutation(
@@ -204,7 +258,7 @@ export function DashboardMainPanel({
   const updateBookmarkVisibility = useMutation(
     api.dashboard.updateBookmarkVisibility,
   );
-  const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
+  const toggleBookmarkStar = useToggleBookmarkStar();
   const moveBookmark = useMutation(api.dashboard.moveBookmark);
 
   const [creatingBookmark, setCreatingBookmark] = useState(false);
@@ -225,6 +279,33 @@ export function DashboardMainPanel({
     return out;
   }, [bookmarks]);
 
+  /* The filter bar is a single row — a folder with a few dozen distinct tags
+     used to wrap to three lines and push the list off screen. Everything past
+     the cap moves into a dropdown, and an active tag is always pulled into
+     view so the current filter is never hidden behind "+N". */
+  const { visibleTags, overflowTags } = useMemo(() => {
+    if (allTags.length <= VISIBLE_TAG_LIMIT) {
+      return { visibleTags: allTags, overflowTags: [] as DisplayTag[] };
+    }
+
+    const head = allTags.slice(0, VISIBLE_TAG_LIMIT);
+    const tail = allTags.slice(VISIBLE_TAG_LIMIT);
+    const hiddenActive = activeTag
+      ? tail.find((tag) => tag.raw === activeTag)
+      : undefined;
+
+    if (!hiddenActive) {
+      return { visibleTags: head, overflowTags: tail };
+    }
+
+    const promoted = [...head.slice(0, VISIBLE_TAG_LIMIT - 1), hiddenActive];
+    const promotedRaw = new Set(promoted.map((tag) => tag.raw));
+    return {
+      visibleTags: promoted,
+      overflowTags: allTags.filter((tag) => !promotedRaw.has(tag.raw)),
+    };
+  }, [allTags, activeTag]);
+
   /* Filter bookmarks by active tag */
   const filteredBookmarks = useMemo(() => {
     if (!activeTag) return bookmarks;
@@ -233,7 +314,8 @@ export function DashboardMainPanel({
 
   const isRecentView = selectedFolder.id === "recent";
   const isSharedView = selectedFolder.id === "shared";
-  const isFeedView = isRecentView || isSharedView;
+  const isFeedFollowingView = selectedFolder.id === "feed";
+  const isFeedView = isRecentView || isSharedView || isFeedFollowingView;
   const folderIsPublic = selectedFolder.visibility === "public";
   const folderVisibilityLocked = selectedFolder.id === "unfiled";
   const feedTimestamp = useMemo(
@@ -251,12 +333,17 @@ export function DashboardMainPanel({
       ? feedTimestamp(bookmarks[0])
       : null
     : selectedFolder.updatedAtMs;
-  const recentPageCount = Math.max(
+  const pageCount = Math.max(
     1,
-    Math.ceil(filteredBookmarks.length / RECENT_PAGE_SIZE),
+    Math.ceil(filteredBookmarks.length / PAGE_SIZE),
   );
-  const safeRecentPage = Math.min(recentPage, recentPageCount);
+  const safePage = Math.min(page, pageCount);
   const sortedBookmarks = useMemo(() => {
+    // The paginated query already applied the sort via an index; re-sorting
+    // here would only reorder the rows fetched so far and contradict it.
+    if (serverPaginated) {
+      return filteredBookmarks;
+    }
     const next = [...filteredBookmarks];
     if (sortBy === "Most starred") {
       return next.sort((a, b) => (b.totalStars ?? 0) - (a.totalStars ?? 0));
@@ -265,13 +352,12 @@ export function DashboardMainPanel({
       return next.sort((a, b) => (b.totalSaves ?? 0) - (a.totalSaves ?? 0));
     }
     return next.sort((a, b) => feedTimestamp(b) - feedTimestamp(a));
-  }, [filteredBookmarks, sortBy, feedTimestamp]);
-  const visibleBookmarks = isFeedView
-    ? sortedBookmarks.slice(
-        (safeRecentPage - 1) * RECENT_PAGE_SIZE,
-        safeRecentPage * RECENT_PAGE_SIZE,
-      )
-    : sortedBookmarks;
+  }, [filteredBookmarks, sortBy, feedTimestamp, serverPaginated]);
+  // Paginate every view — a large folder would otherwise render every bookmark
+  // in one endless page.
+  const visibleBookmarks = serverPaginated
+    ? sortedBookmarks
+    : sortedBookmarks.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const feedBookmarkGroups = useMemo(
     () => groupBookmarksByDay(visibleBookmarks, feedTimestamp),
     [visibleBookmarks, feedTimestamp],
@@ -295,9 +381,9 @@ export function DashboardMainPanel({
     return (
       <div
         key={bookmark.id}
-        className="group flex items-start gap-4 px-5 py-4 transition-colors hover:bg-muted/50"
+        className="group flex items-start gap-3 px-3 py-4 transition-colors hover:bg-muted/50 sm:gap-4 sm:px-5"
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground text-sm">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground text-sm sm:h-10 sm:w-10">
           {letter}
         </div>
 
@@ -312,7 +398,9 @@ export function DashboardMainPanel({
               {bookmark.title}
             </a>
             <div className="relative flex items-center">
-              <div className="flex items-center opacity-100 transition-opacity group-hover:opacity-0">
+              {/* Static indicator: swapped for the toggle on hover/focus (pointer
+                  devices only — on touch the toggle would have no way to appear). */}
+              <div className="flex items-center opacity-100 transition-opacity md:group-hover:opacity-0 md:group-focus-within:opacity-0">
                 {bookmarkIsPublic ? (
                   <Globe2 className="h-3 w-3 shrink-0 text-muted-foreground/60" />
                 ) : (
@@ -320,17 +408,22 @@ export function DashboardMainPanel({
                 )}
               </div>
 
-              <div className="pointer-events-none absolute top-1/2 left-0 z-10 flex -translate-y-1/2 items-center rounded-md border border-border bg-background/80 p-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+              <div className="pointer-events-none absolute top-1/2 left-0 z-10 hidden -translate-y-1/2 items-center rounded-md border border-border bg-background/80 p-0.5 opacity-0 transition-opacity md:flex md:group-hover:pointer-events-auto md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:group-focus-within:opacity-100">
                 <VisibilityToggle
                   active={!bookmarkIsPublic}
                   icon={Lock}
                   label="Private bookmark"
                   compact
-                  disabled={bookmarkToggleDisabled}
+                  disabled={bookmarkToggleDisabled || isSwitching(bookmark.id)}
+                  pending={isSwitchingTo(bookmark.id, "private")}
                   onClick={async () => {
                     if (bookmarkToggleDisabled || !bookmarkIsPublic) {
                       return;
                     }
+                    setPendingVisibility({
+                      key: bookmark.id,
+                      target: "private",
+                    });
                     try {
                       await updateBookmarkVisibility({
                         bookmarkId: bookmark.id as Id<"syncedBookmarks">,
@@ -343,6 +436,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update bookmark visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />
@@ -351,11 +446,16 @@ export function DashboardMainPanel({
                   icon={Globe2}
                   label="Public bookmark"
                   compact
-                  disabled={bookmarkToggleDisabled}
+                  disabled={bookmarkToggleDisabled || isSwitching(bookmark.id)}
+                  pending={isSwitchingTo(bookmark.id, "public")}
                   onClick={async () => {
                     if (bookmarkToggleDisabled || bookmarkIsPublic) {
                       return;
                     }
+                    setPendingVisibility({
+                      key: bookmark.id,
+                      target: "public",
+                    });
                     try {
                       await updateBookmarkVisibility({
                         bookmarkId: bookmark.id as Id<"syncedBookmarks">,
@@ -368,6 +468,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update bookmark visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />
@@ -381,9 +483,9 @@ export function DashboardMainPanel({
 
           {isFeedView && bookmark.folderName ? (
             <p className="mt-1 text-muted-foreground text-xs">
-              {isSharedView && bookmark.savedFrom ? (
+              {(isSharedView || isFeedFollowingView) && bookmark.savedFrom ? (
                 <>
-                  Saved from{" "}
+                  {isFeedFollowingView ? "From" : "Saved from"}{" "}
                   <span className="font-medium text-foreground/80">
                     {bookmark.savedFrom.username
                       ? `@${bookmark.savedFrom.username}`
@@ -438,8 +540,8 @@ export function DashboardMainPanel({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col items-end justify-between self-stretch">
-          <div className="flex items-center gap-4 pt-0.5 text-muted-foreground">
+        <div className="flex shrink-0 flex-col items-end justify-between gap-2 self-stretch">
+          <div className="flex items-center gap-3 pt-0.5 text-muted-foreground sm:gap-4">
             <span className="flex items-center gap-1 text-xs" title="Saves">
               <BookmarkIcon className="h-3.5 w-3.5" />
               {totalSaves}
@@ -491,16 +593,9 @@ export function DashboardMainPanel({
             </button>
           </div>
 
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <a
-              href={bookmark.url}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Open link"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+          {/* Always visible on touch (no hover to reveal them); hover-reveal on
+              pointer devices to keep rows calm. */}
+          <div className="flex items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
             <MoveBookmarkDialog
               folders={folders}
               currentFolderId={currentFolderId}
@@ -547,10 +642,14 @@ export function DashboardMainPanel({
                   );
                 }
               }}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Delete bookmark"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              {deletingBookmarkId === bookmark.id ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
             </button>
           </div>
         </div>
@@ -562,10 +661,12 @@ export function DashboardMainPanel({
     <div>
       {/* Header section */}
       <header className="mb-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        {/* Stacks on mobile: the action group is ~340px wide and shrink-0, so
+            side-by-side would crush the title into a one-word column. */}
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <h1 className="mb-4 font-serif text-5xl tracking-tight">
-              <span className="mr-3 align-middle text-4xl">
+            <h1 className="mb-4 break-words font-serif text-3xl tracking-tight sm:text-4xl lg:text-5xl">
+              <span className="mr-2 align-middle text-2xl sm:mr-3 sm:text-3xl lg:text-4xl">
                 {selectedFolder.icon ?? "📁"}
               </span>
               {selectedFolder.name}
@@ -578,6 +679,8 @@ export function DashboardMainPanel({
                 " · last 7 days"
               ) : isSharedView ? (
                 " · saved from others"
+              ) : isFeedFollowingView ? (
+                " · from people you follow"
               ) : (
                 <span className="inline-flex items-center gap-1">
                   {" · "}
@@ -608,17 +711,19 @@ export function DashboardMainPanel({
           </div>
 
           {!isFeedView ? (
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
               <div className="flex items-center rounded-md border border-border bg-surface p-0.5">
                 <VisibilityToggle
                   active={!folderIsPublic}
                   icon={Lock}
                   label="Private"
-                  disabled={folderVisibilityLocked}
+                  disabled={folderVisibilityLocked || isSwitching("folder")}
+                  pending={isSwitchingTo("folder", "private")}
                   onClick={async () => {
                     if (folderVisibilityLocked || !folderIsPublic) {
                       return;
                     }
+                    setPendingVisibility({ key: "folder", target: "private" });
                     try {
                       await updateFolderVisibility({
                         folderId: selectedFolder.id as Id<"folders">,
@@ -631,6 +736,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update folder visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />
@@ -638,11 +745,13 @@ export function DashboardMainPanel({
                   active={folderIsPublic}
                   icon={Globe2}
                   label="Public"
-                  disabled={folderVisibilityLocked}
+                  disabled={folderVisibilityLocked || isSwitching("folder")}
+                  pending={isSwitchingTo("folder", "public")}
                   onClick={async () => {
                     if (folderVisibilityLocked || folderIsPublic) {
                       return;
                     }
+                    setPendingVisibility({ key: "folder", target: "public" });
                     try {
                       await updateFolderVisibility({
                         folderId: selectedFolder.id as Id<"folders">,
@@ -655,6 +764,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update folder visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />
@@ -705,6 +816,10 @@ export function DashboardMainPanel({
                   </Button>
                 }
               />
+              {/* Unfiled is a synthetic bucket with no row to rename or delete. */}
+              {selectedFolder.id !== "unfiled" ? (
+                <FolderActionsMenu folder={selectedFolder} />
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -717,7 +832,9 @@ export function DashboardMainPanel({
             ? "Recent bookmarks from the last 7 days"
             : isSharedView
               ? "Bookmarks you saved from others"
-              : `Bookmarks in ${selectedFolder.name}`}
+              : isFeedFollowingView
+                ? "The latest public saves from people you follow"
+                : `Bookmarks in ${selectedFolder.name}`}
         </p>
 
         {bookmarksLoading ? (
@@ -732,21 +849,23 @@ export function DashboardMainPanel({
               ? "No bookmarks saved in the last 7 days."
               : isSharedView
                 ? "Nothing here yet. Bookmarks you save from other people will show up here."
-                : "No bookmarks in this folder yet."}
+                : isFeedFollowingView
+                  ? "Your feed is empty. Follow people whose taste you trust — their public saves will show up here."
+                  : "No bookmarks in this folder yet."}
           </div>
         ) : (
           <div className="rounded-xl border border-border/60 bg-card/50">
             {/* ─── Filter bar + sort ───────────────────── */}
-            <div className="flex items-center justify-between gap-3 border-border/60 border-b px-5 py-3">
+            <div className="flex flex-col gap-2 border-border/60 border-b px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-5">
               {/* Tag filters */}
-              <div className="flex flex-wrap items-center gap-2 overflow-x-auto">
+              <div className="-mx-1 flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:px-0 sm:pb-0">
                 <button
                   type="button"
                   onClick={() => {
                     setActiveTag(null);
-                    setRecentPage(1);
+                    setPage(1);
                   }}
-                  className={`rounded-full px-3 py-1 font-medium text-xs transition-colors ${
+                  className={`shrink-0 rounded-full px-3 py-1 font-medium text-xs transition-colors ${
                     activeTag === null
                       ? "bg-foreground text-background"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -754,16 +873,16 @@ export function DashboardMainPanel({
                 >
                   All
                 </button>
-                {allTags.map((tag) => (
+                {visibleTags.map((tag) => (
                   <button
                     key={tag.raw}
                     type="button"
                     onClick={() => {
                       setActiveTag(activeTag === tag.raw ? null : tag.raw);
-                      setRecentPage(1);
+                      setPage(1);
                     }}
                     className={cn(
-                      "rounded-full border px-3 py-1 font-medium text-xs transition-colors",
+                      "shrink-0 whitespace-nowrap rounded-full border px-3 py-1 font-medium text-xs transition-colors",
                       activeTag === tag.raw
                         ? "border-transparent bg-foreground text-background"
                         : cn(tagFacetClass(tag.facet), "hover:opacity-80"),
@@ -772,10 +891,47 @@ export function DashboardMainPanel({
                     {tag.label}
                   </button>
                 ))}
+
+                {overflowTags.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border bg-muted px-3 py-1 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted/80"
+                      aria-label={`Show ${overflowTags.length} more tags`}
+                    >
+                      +{overflowTags.length}
+                      <ChevronDown className="h-3 w-3" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="start"
+                      className="max-h-72 w-52 overflow-y-auto"
+                    >
+                      {overflowTags.map((tag) => (
+                        <DropdownMenuItem
+                          key={tag.raw}
+                          onClick={() => {
+                            setActiveTag(
+                              activeTag === tag.raw ? null : tag.raw,
+                            );
+                            setPage(1);
+                          }}
+                        >
+                          <span
+                            className={cn(
+                              "h-2 w-2 shrink-0 rounded-full border",
+                              tagFacetClass(tag.facet),
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate">{tag.label}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
 
               {/* Sort dropdown */}
-              <div className="relative shrink-0">
+              <div className="relative shrink-0 self-end sm:self-auto">
                 <button
                   type="button"
                   onClick={() => setSortDropdownOpen((prev) => !prev)}
@@ -800,7 +956,7 @@ export function DashboardMainPanel({
                           key={option}
                           type="button"
                           onClick={() => {
-                            setSortBy(option);
+                            onSortChange(option);
                             setSortDropdownOpen(false);
                           }}
                           className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted ${
@@ -846,21 +1002,40 @@ export function DashboardMainPanel({
               </div>
             )}
 
-            {isFeedView && recentPageCount > 1 ? (
-              <div className="flex items-center justify-between border-border/60 border-t px-5 py-3">
+            {serverPaginated ? (
+              canLoadMore ? (
+                <div className="flex items-center justify-center border-border/60 border-t px-3 py-3 sm:px-5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingMore}
+                    onClick={() => onLoadMore?.()}
+                  >
+                    {loadingMore ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading…
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                </div>
+              ) : null
+            ) : pageCount > 1 ? (
+              <div className="flex items-center justify-between gap-3 border-border/60 border-t px-3 py-3 sm:px-5">
                 <p className="text-muted-foreground text-xs">
-                  Page {safeRecentPage} of {recentPageCount}
+                  Page {safePage} of {pageCount}
                 </p>
                 <div className="flex items-center gap-1">
                   <Button
                     type="button"
                     variant="outline"
                     size="icon-sm"
-                    disabled={safeRecentPage === 1}
-                    onClick={() =>
-                      setRecentPage((page) => Math.max(1, page - 1))
-                    }
-                    aria-label="Previous recent page"
+                    disabled={safePage === 1}
+                    onClick={() => setPage((page) => Math.max(1, page - 1))}
+                    aria-label="Previous page"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -868,13 +1043,11 @@ export function DashboardMainPanel({
                     type="button"
                     variant="outline"
                     size="icon-sm"
-                    disabled={safeRecentPage === recentPageCount}
+                    disabled={safePage === pageCount}
                     onClick={() =>
-                      setRecentPage((page) =>
-                        Math.min(recentPageCount, page + 1),
-                      )
+                      setPage((page) => Math.min(pageCount, page + 1))
                     }
-                    aria-label="Next recent page"
+                    aria-label="Next page"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>

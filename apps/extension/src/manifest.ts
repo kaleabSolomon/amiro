@@ -33,6 +33,10 @@ const manifest: ManifestV3Export = {
     "contextMenus",
     "alarms",
   ],
+  // Requested on demand from the import button rather than at install time —
+  // "read your bookmarks" is a hard sell up front for a feature most people
+  // use once.
+  optional_permissions: ["bookmarks"],
   host_permissions: ["<all_urls>"],
   content_scripts: [
     {

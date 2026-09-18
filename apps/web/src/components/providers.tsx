@@ -32,7 +32,7 @@ export default function Providers({
       >
         {children}
       </ConvexBetterAuthProvider>
-      <Toaster richColors />
+      <Toaster />
     </ThemeProvider>
   );
 }

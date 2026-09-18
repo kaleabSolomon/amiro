@@ -203,12 +203,21 @@ export default defineSchema({
     tagStatus: v.optional(
       v.union(v.literal("pending"), v.literal("tagged"), v.literal("skipped")),
     ),
+    // Denormalized engagement counters, mirrored from bookmarkStarStats /
+    // bookmarkSaveStats inside bumpBookmarkStarStats / bumpBookmarkStats —
+    // the only two writers. They exist so a folder can be sorted by
+    // popularity with an index instead of reading a stats row per bookmark,
+    // which is what made a large folder exceed the query read limit.
+    totalStars: v.optional(v.number()),
+    totalSaves: v.optional(v.number()),
     capturedAt: v.number(),
     lastSyncedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_and_source_and_url", ["userId", "source", "url"])
     .index("by_user_and_folder", ["userId", "folderId"])
+    .index("by_user_and_folder_and_stars", ["userId", "folderId", "totalStars"])
+    .index("by_user_and_folder_and_saves", ["userId", "folderId", "totalSaves"])
     .index("by_user_and_last_synced_at", ["userId", "lastSyncedAt"])
     .index("by_user_and_saved_at", ["userId", "savedAt"])
     // Used by the tagging cron to find bookmarks awaiting AI topic tags.
@@ -241,6 +250,22 @@ export default defineSchema({
   })
     .index("by_recipient_and_created_at", ["recipientId", "createdAt"])
     .index("by_recipient_and_read", ["recipientId", "read"]),
+  // --- Follow graph (subscription model) ---
+  // One row per (follower → followee) relationship. Following a user subscribes
+  // you to their public saves — it's a content subscription, not a popularity
+  // metric, so there are deliberately no denormalized follower counts. Better
+  // Auth user ids are strings, so both sides are stored as strings (consistent
+  // with the rest of the schema).
+  follows: defineTable({
+    followerId: v.string(),
+    followeeId: v.string(),
+    createdAt: v.number(),
+  })
+    // "who I follow" (drives the feed) and "who follows me"
+    .index("by_follower", ["followerId"])
+    .index("by_followee", ["followeeId"])
+    // uniqueness + fast isFollowing check
+    .index("by_follower_and_followee", ["followerId", "followeeId"]),
   // --- AI tagging infrastructure ---
   // Caches AI-generated topic tags keyed by canonical URL. When the exact same
   // link is saved by multiple users the cache hit avoids a redundant AI call.

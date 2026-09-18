@@ -57,6 +57,22 @@
         Bookmarks
       </button>
       <button
+        id="tab-queued"
+        class="tab tab-icon-only"
+        role="tab"
+        type="button"
+        aria-selected="false"
+        aria-controls="panel-queued"
+        aria-label="Queued"
+        title="Queued"
+      >
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+        <span id="queued-count" class="tab-badge hidden">0</span>
+      </button>
+      <button
         id="tab-settings"
         class="tab tab-icon-only"
         role="tab"
@@ -251,12 +267,6 @@
           </button>
         </div>
 
-        <!-- Locally queued captures awaiting sync (shown whenever non-empty) -->
-        <div id="bm-pending" class="stack hidden">
-          <p class="bm-section-label">Pending sync</p>
-          <div id="bm-pending-list" class="bm-list"></div>
-        </div>
-
         <!-- Shown when connected -->
         <div id="bm-body" class="stack hidden">
           <div class="bm-search">
@@ -296,6 +306,24 @@
 
       <!-- ── Settings panel ───────────────────────────────────── -->
       <section
+        id="panel-queued"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-queued"
+        tabindex="0"
+        hidden
+      >
+        <p class="bm-section-label">
+          Saved locally, waiting to sync. These upload on their own once
+          you&rsquo;re connected.
+        </p>
+        <div id="bm-pending-list" class="bm-list" aria-live="polite"></div>
+        <p id="queued-empty" class="empty-note hidden">
+          Nothing waiting to sync.
+        </p>
+      </section>
+
+      <section
         id="panel-settings"
         class="panel"
         role="tabpanel"
@@ -316,6 +344,57 @@
           >
             Disconnect
           </button>
+        </div>
+
+        <div class="card">
+          <span class="card-title">Browser bookmarks</span>
+          <p class="label">
+            Bring in the bookmarks already in this browser. Re-importing
+            updates existing saves instead of duplicating them.
+          </p>
+          <div class="field">
+            <span class="label" id="import-strategy-label">Folders</span>
+            <div
+              class="segmented"
+              role="group"
+              aria-labelledby="import-strategy-label"
+            >
+              <button
+                class="segment"
+                type="button"
+                data-import-strategy="keep-folders"
+                aria-pressed="true"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+                Keep structure
+              </button>
+              <button
+                class="segment"
+                type="button"
+                data-import-strategy="unfiled"
+                aria-pressed="false"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 12h4l2 3h6l2-3h4" />
+                  <path d="M5 5h14l2 7v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z" />
+                </svg>
+                All to Unfiled
+              </button>
+            </div>
+          </div>
+          <button id="import-bookmarks" class="btn btn-block" type="button">
+            Import from browser
+          </button>
+          <button
+            id="export-bookmarks"
+            class="btn btn-ghost btn-block"
+            type="button"
+          >
+            Export as HTML
+          </button>
+          <p id="transfer-state" class="label"></p>
         </div>
 
         <div class="card">
