@@ -41,15 +41,17 @@ export function useToggleBookmarkStar() {
     (localStore, args) => {
       const bookmarkId = args.bookmarkId as string;
 
+      // Paginated: each loaded page is its own cached query, so every one
+      // has to be patched or starring a row on page 2 would appear to do
+      // nothing until the next server round trip.
       for (const { args: queryArgs, value } of localStore.getAllQueries(
-        api.dashboard.getBookmarksForFolder,
+        api.dashboard.listBookmarksForFolder,
       )) {
         if (!value) continue;
-        localStore.setQuery(
-          api.dashboard.getBookmarksForFolder,
-          queryArgs,
-          toggleStarIn(value, bookmarkId),
-        );
+        localStore.setQuery(api.dashboard.listBookmarksForFolder, queryArgs, {
+          ...value,
+          page: toggleStarIn(value.page, bookmarkId),
+        });
       }
 
       for (const { args: queryArgs, value } of localStore.getAllQueries(

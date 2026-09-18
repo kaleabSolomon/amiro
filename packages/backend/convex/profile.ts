@@ -1,6 +1,7 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { query } from "./_generated/server";
 import { authComponent } from "./auth";
@@ -157,5 +158,99 @@ export const getProfileByUsername = query({
       bookmarks,
       isOwner,
     };
+  },
+});
+
+/**
+ * Paginated public bookmarks for a profile.
+ *
+ * getProfileByUsername collects every bookmark the user owns to build this
+ * list, which is unbounded and, with a stats read per row, is what put a
+ * hard ceiling on large accounts. This reads one page at a time.
+ *
+ * Visibility is filtered in the index scan rather than after it, so a mostly
+ * private account doesn't return page after page of empty results.
+ */
+export const listProfileBookmarks = query({
+  args: {
+    username: v.string(),
+    folderId: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "username", value: args.username }],
+    })) as { _id: string } | null;
+
+    if (!user) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    const isOwner = authUser ? authUser._id === user._id : false;
+
+    const folders = await ctx.db
+      .query("folders")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const folderById = new Map(folders.map((folder) => [folder._id, folder]));
+
+    const targetFolderId =
+      args.folderId && args.folderId !== "unfiled"
+        ? (args.folderId as Id<"folders">)
+        : undefined;
+    const scopedToFolder = Boolean(args.folderId);
+
+    const base = scopedToFolder
+      ? ctx.db
+          .query("syncedBookmarks")
+          .withIndex("by_user_and_folder", (q) =>
+            q.eq("userId", user._id).eq("folderId", targetFolderId),
+          )
+      : ctx.db
+          .query("syncedBookmarks")
+          .withIndex("by_user", (q) => q.eq("userId", user._id));
+
+    const scoped = isOwner
+      ? base
+      : base.filter((q) => q.eq(q.field("visibility"), "public"));
+
+    const results = await scoped.order("desc").paginate(args.paginationOpts);
+
+    const page = await Promise.all(
+      results.page
+        // Belt and braces: a public bookmark should already imply a public
+        // folder (the invariant in moveBookmark / upsertCaptureFromExtension),
+        // so this drops nothing in practice but never leaks if that slips.
+        .filter((bookmark) => {
+          if (isOwner || !bookmark.folderId) {
+            return true;
+          }
+          const folder = folderById.get(bookmark.folderId);
+          return (folder?.visibility ?? "private") === "public";
+        })
+        .map(async (b) => {
+          const folder = b.folderId ? folderById.get(b.folderId) : null;
+          return {
+            id: b._id,
+            url: b.url,
+            title: b.title,
+            text: b.text ?? "",
+            tags: b.tags,
+            capturedAt: b.capturedAt,
+            lastSyncedAt: b.lastSyncedAt,
+            folderId: b.folderId ?? null,
+            folderName: folder?.name ?? "Unfiled",
+            folderIcon: folder?.icon ?? "📁",
+            folderVisibility: folder?.visibility ?? "private",
+            visibility: b.visibility ?? "private",
+            source: b.source,
+            ...(await getBookmarkEngagement(ctx, b, authUser?._id)),
+          };
+        }),
+    );
+
+    return { ...results, page };
   },
 });

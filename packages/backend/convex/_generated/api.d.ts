@@ -21,6 +21,7 @@ import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as lib_heuristic_tags from "../lib/heuristic_tags.js";
 import type * as lib_url_canonical from "../lib/url_canonical.js";
+import type * as migrations from "../migrations.js";
 import type * as notifications from "../notifications.js";
 import type * as privateData from "../privateData.js";
 import type * as profile from "../profile.js";
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/heuristic_tags": typeof lib_heuristic_tags;
   "lib/url_canonical": typeof lib_url_canonical;
+  migrations: typeof migrations;
   notifications: typeof notifications;
   privateData: typeof privateData;
   profile: typeof profile;

@@ -7,17 +7,21 @@ import {
   AuthLoading,
   Unauthenticated,
   useMutation,
+  usePaginatedQuery,
   useQuery,
 } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
   DashboardProvider,
   useDashboard,
 } from "@/components/dashboard/dashboard-context";
-import { DashboardMainPanel } from "@/components/dashboard/dashboard-main-panel";
+import {
+  DashboardMainPanel,
+  type SortOption,
+} from "@/components/dashboard/dashboard-main-panel";
 import type {
   DashboardBookmark,
   DashboardFolder,
@@ -93,9 +97,20 @@ function FolderWorkspace() {
     selectedFolderId === "recent" ||
     selectedFolderId === "shared" ||
     selectedFolderId === "feed";
-  const folderBookmarks = useQuery(
-    api.dashboard.getBookmarksForFolder,
-    isFeedView ? "skip" : { folderId: selectedFolderId },
+  // Folder views go through the paginated query: the old one collected the
+  // whole folder, which is what put a hard ceiling on large accounts.
+  const [sortBy, setSortBy] = useState<SortOption>("Recent");
+  const serverSort =
+    sortBy === "Most starred"
+      ? "stars"
+      : sortBy === "Most saved"
+        ? "saves"
+        : "recent";
+
+  const folderPages = usePaginatedQuery(
+    api.dashboard.listBookmarksForFolder,
+    isFeedView ? "skip" : { folderId: selectedFolderId, sort: serverSort },
+    { initialNumItems: BOOKMARKS_PER_PAGE },
   );
   const recentBookmarks = useQuery(
     api.dashboard.getRecentBookmarks,
@@ -145,8 +160,12 @@ function FolderWorkspace() {
         ? sharedBookmarks
         : selectedFolderId === "feed"
           ? feedBookmarks
-          : folderBookmarks;
-  const bookmarksLoading = bookmarks === undefined;
+          : folderPages.results;
+  // "LoadingFirstPage" is the only state that should blank the list; loading a
+  // later page keeps what's already on screen.
+  const bookmarksLoading = isFeedView
+    ? bookmarks === undefined
+    : folderPages.status === "LoadingFirstPage";
 
   const deleteBookmark = useMutation(api.dashboard.deleteBookmark);
 
@@ -171,10 +190,22 @@ function FolderWorkspace() {
         bookmarks={bookmarks ?? []}
         bookmarksLoading={bookmarksLoading}
         onDeleteBookmark={handleDeleteBookmark}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        onLoadMore={
+          isFeedView
+            ? undefined
+            : () => folderPages.loadMore(BOOKMARKS_PER_PAGE)
+        }
+        canLoadMore={!isFeedView && folderPages.status === "CanLoadMore"}
+        loadingMore={folderPages.status === "LoadingMore"}
       />
     </section>
   );
 }
+
+// Page size for the folder list. Also the increment for "Load more".
+const BOOKMARKS_PER_PAGE = 20;
 
 export default function DashboardPage() {
   const currentUser = useQuery(api.auth.getCurrentUser);

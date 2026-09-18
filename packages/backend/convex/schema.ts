@@ -203,12 +203,21 @@ export default defineSchema({
     tagStatus: v.optional(
       v.union(v.literal("pending"), v.literal("tagged"), v.literal("skipped")),
     ),
+    // Denormalized engagement counters, mirrored from bookmarkStarStats /
+    // bookmarkSaveStats inside bumpBookmarkStarStats / bumpBookmarkStats —
+    // the only two writers. They exist so a folder can be sorted by
+    // popularity with an index instead of reading a stats row per bookmark,
+    // which is what made a large folder exceed the query read limit.
+    totalStars: v.optional(v.number()),
+    totalSaves: v.optional(v.number()),
     capturedAt: v.number(),
     lastSyncedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_and_source_and_url", ["userId", "source", "url"])
     .index("by_user_and_folder", ["userId", "folderId"])
+    .index("by_user_and_folder_and_stars", ["userId", "folderId", "totalStars"])
+    .index("by_user_and_folder_and_saves", ["userId", "folderId", "totalSaves"])
     .index("by_user_and_last_synced_at", ["userId", "lastSyncedAt"])
     .index("by_user_and_saved_at", ["userId", "savedAt"])
     // Used by the tagging cron to find bookmarks awaiting AI topic tags.

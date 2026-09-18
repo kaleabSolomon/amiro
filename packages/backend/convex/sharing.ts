@@ -326,20 +326,25 @@ async function bumpBookmarkStats(
     .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
     .unique();
 
+  const nextTotal = Math.max(0, (stats?.totalAttributedSaves ?? 0) + amount);
+
   if (stats) {
     await ctx.db.patch(stats._id, {
       totalAttributedSaves: stats.totalAttributedSaves + amount,
       updatedAt: now,
     });
-    return;
+  } else {
+    await ctx.db.insert("bookmarkSaveStats", {
+      bookmarkId: bookmark._id,
+      ownerId: bookmark.userId,
+      totalAttributedSaves: amount,
+      updatedAt: now,
+    });
   }
 
-  await ctx.db.insert("bookmarkSaveStats", {
-    bookmarkId: bookmark._id,
-    ownerId: bookmark.userId,
-    totalAttributedSaves: amount,
-    updatedAt: now,
-  });
+  // Mirror onto the bookmark so list queries can sort and read the count
+  // without touching this table. Kept here so the two can't drift.
+  await ctx.db.patch(bookmark._id, { totalSaves: nextTotal });
 }
 
 async function bumpBookmarkStarStats(
@@ -353,24 +358,27 @@ async function bumpBookmarkStarStats(
     .withIndex("by_bookmark", (q) => q.eq("bookmarkId", bookmark._id))
     .unique();
 
+  const nextTotal = Math.max(0, (stats?.totalStars ?? 0) + amount);
+
   if (stats) {
     await ctx.db.patch(stats._id, {
-      totalStars: Math.max(0, stats.totalStars + amount),
+      totalStars: nextTotal,
       updatedAt: now,
     });
-    return;
+  } else {
+    if (amount <= 0) {
+      return;
+    }
+    await ctx.db.insert("bookmarkStarStats", {
+      bookmarkId: bookmark._id,
+      ownerId: bookmark.userId,
+      totalStars: amount,
+      updatedAt: now,
+    });
   }
 
-  if (amount <= 0) {
-    return;
-  }
-
-  await ctx.db.insert("bookmarkStarStats", {
-    bookmarkId: bookmark._id,
-    ownerId: bookmark.userId,
-    totalStars: amount,
-    updatedAt: now,
-  });
+  // See bumpBookmarkStats — same mirroring, same reason.
+  await ctx.db.patch(bookmark._id, { totalStars: nextTotal });
 }
 
 async function bumpShareBookmarkStats(

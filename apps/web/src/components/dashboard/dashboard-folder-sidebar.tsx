@@ -65,8 +65,8 @@ export function DashboardFolderSidebar({
   selectedFolderId,
   isLoading = false,
   loadingFallback,
-  recentCount = 0,
-  sharedCount = 0,
+  recentCount = "0",
+  sharedCount = "0",
   creatingFolder = false,
   onSelectFolder: onSelectFolderProp,
   onCreateFolder,
@@ -75,8 +75,8 @@ export function DashboardFolderSidebar({
   selectedFolderId: string;
   isLoading?: boolean;
   loadingFallback?: ReactNode;
-  recentCount?: number;
-  sharedCount?: number;
+  recentCount?: string;
+  sharedCount?: string;
   creatingFolder?: boolean;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (input: {

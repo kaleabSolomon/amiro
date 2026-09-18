@@ -64,7 +64,7 @@ function getLetterAvatar(url: string): string {
 }
 
 const SORT_OPTIONS = ["Recent", "Most starred", "Most saved"] as const;
-type SortOption = (typeof SORT_OPTIONS)[number];
+export type SortOption = (typeof SORT_OPTIONS)[number];
 const PAGE_SIZE = 20;
 
 function getDayKey(timestamp: number) {
@@ -201,6 +201,11 @@ export function DashboardMainPanel({
   bookmarksLoading = false,
   bookmarksLoadingFallback,
   onDeleteBookmark,
+  sortBy,
+  onSortChange,
+  onLoadMore,
+  canLoadMore = false,
+  loadingMore = false,
 }: {
   selectedFolder: DashboardFolder;
   breadcrumbs: DashboardFolder[];
@@ -208,6 +213,14 @@ export function DashboardMainPanel({
   bookmarksLoading?: boolean;
   bookmarksLoadingFallback?: ReactNode;
   onDeleteBookmark: (bookmarkId: string) => Promise<void>;
+  sortBy: SortOption;
+  onSortChange: (sort: SortOption) => void;
+  // Present only for views backed by a paginated query. When set, the server
+  // has already ordered and paged the rows, so this component must not sort
+  // or slice them again.
+  onLoadMore?: () => void;
+  canLoadMore?: boolean;
+  loadingMore?: boolean;
 }) {
   const [deletingBookmarkId, setDeletingBookmarkId] = useState<string | null>(
     null,
@@ -225,7 +238,7 @@ export function DashboardMainPanel({
   // The sibling stays disabled during the round trip so the pair can't race.
   const isSwitching = (key: string) => pendingVisibility?.key === key;
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<SortOption>("Recent");
+  const serverPaginated = Boolean(onLoadMore);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [page, setPage] = useState(1);
 
@@ -326,6 +339,11 @@ export function DashboardMainPanel({
   );
   const safePage = Math.min(page, pageCount);
   const sortedBookmarks = useMemo(() => {
+    // The paginated query already applied the sort via an index; re-sorting
+    // here would only reorder the rows fetched so far and contradict it.
+    if (serverPaginated) {
+      return filteredBookmarks;
+    }
     const next = [...filteredBookmarks];
     if (sortBy === "Most starred") {
       return next.sort((a, b) => (b.totalStars ?? 0) - (a.totalStars ?? 0));
@@ -334,13 +352,12 @@ export function DashboardMainPanel({
       return next.sort((a, b) => (b.totalSaves ?? 0) - (a.totalSaves ?? 0));
     }
     return next.sort((a, b) => feedTimestamp(b) - feedTimestamp(a));
-  }, [filteredBookmarks, sortBy, feedTimestamp]);
+  }, [filteredBookmarks, sortBy, feedTimestamp, serverPaginated]);
   // Paginate every view — a large folder would otherwise render every bookmark
   // in one endless page.
-  const visibleBookmarks = sortedBookmarks.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
-  );
+  const visibleBookmarks = serverPaginated
+    ? sortedBookmarks
+    : sortedBookmarks.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const feedBookmarkGroups = useMemo(
     () => groupBookmarksByDay(visibleBookmarks, feedTimestamp),
     [visibleBookmarks, feedTimestamp],
@@ -939,7 +956,7 @@ export function DashboardMainPanel({
                           key={option}
                           type="button"
                           onClick={() => {
-                            setSortBy(option);
+                            onSortChange(option);
                             setSortDropdownOpen(false);
                           }}
                           className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted ${
@@ -985,7 +1002,28 @@ export function DashboardMainPanel({
               </div>
             )}
 
-            {pageCount > 1 ? (
+            {serverPaginated ? (
+              canLoadMore ? (
+                <div className="flex items-center justify-center border-border/60 border-t px-3 py-3 sm:px-5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingMore}
+                    onClick={() => onLoadMore?.()}
+                  >
+                    {loadingMore ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Loading…
+                      </>
+                    ) : (
+                      "Load more"
+                    )}
+                  </Button>
+                </div>
+              ) : null
+            ) : pageCount > 1 ? (
               <div className="flex items-center justify-between gap-3 border-border/60 border-t px-3 py-3 sm:px-5">
                 <p className="text-muted-foreground text-xs">
                   Page {safePage} of {pageCount}
