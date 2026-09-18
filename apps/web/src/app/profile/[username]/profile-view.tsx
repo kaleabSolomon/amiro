@@ -37,6 +37,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { useToggleBookmarkStar } from "@/lib/use-bookmark-star";
+import { useToggleFollow } from "@/lib/use-toggle-follow";
 import { cn } from "@/lib/utils";
 
 type ProfileFolder = {
@@ -141,7 +143,7 @@ export function ProfileView({ username }: { username: string }) {
   const createTelegramLinkToken = useMutation(
     api.dashboard.createTelegramLinkToken,
   );
-  const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
+  const toggleBookmarkStar = useToggleBookmarkStar();
   const savePublicBookmark = useMutation(api.sharing.savePublicBookmark);
   const createShare = useMutation(api.sharing.createShare);
 
@@ -169,8 +171,7 @@ export function ProfileView({ username }: { username: string }) {
   const canUseAuthenticatedActions = Boolean(currentUser);
 
   // Following (subscription) — no counts vanity; just the button + utility count.
-  const followUser = useMutation(api.follows.followUser);
-  const unfollowUser = useMutation(api.follows.unfollowUser);
+  const { follow: followUser, unfollow: unfollowUser } = useToggleFollow();
   const followState = useQuery(
     api.follows.isFollowing,
     profileUser?.id && !isOwner ? { userId: profileUser.id } : "skip",
@@ -179,11 +180,10 @@ export function ProfileView({ username }: { username: string }) {
     api.follows.getFollowingCount,
     profileUser?.id ? { userId: profileUser.id } : "skip",
   );
-  const [optimisticFollowing, setOptimisticFollowing] = useState<
-    boolean | null
-  >(null);
   const [followPending, setFollowPending] = useState(false);
-  const isFollowing = optimisticFollowing ?? followState?.following ?? false;
+  // No local mirror: the optimistic update patches isFollowing directly, so
+  // this always reflects the freshest value Convex has.
+  const isFollowing = followState?.following ?? false;
   const followingCount = followingCountData?.count ?? 0;
 
   async function handleToggleFollow() {
@@ -196,7 +196,6 @@ export function ProfileView({ username }: { username: string }) {
     }
 
     const next = !isFollowing;
-    setOptimisticFollowing(next);
     setFollowPending(true);
     try {
       if (next) {
@@ -205,7 +204,7 @@ export function ProfileView({ username }: { username: string }) {
         await unfollowUser({ followeeId: profileUser.id });
       }
     } catch (error) {
-      setOptimisticFollowing(!next); // revert
+      // Convex rolls the optimistic update back on its own.
       toast.error(
         error instanceof Error ? error.message : "Could not update follow.",
       );

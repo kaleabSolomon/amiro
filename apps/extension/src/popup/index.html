@@ -57,6 +57,22 @@
         Bookmarks
       </button>
       <button
+        id="tab-queued"
+        class="tab tab-icon-only"
+        role="tab"
+        type="button"
+        aria-selected="false"
+        aria-controls="panel-queued"
+        aria-label="Queued"
+        title="Queued"
+      >
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+        <span id="queued-count" class="tab-badge hidden">0</span>
+      </button>
+      <button
         id="tab-settings"
         class="tab tab-icon-only"
         role="tab"
@@ -251,12 +267,6 @@
           </button>
         </div>
 
-        <!-- Locally queued captures awaiting sync (shown whenever non-empty) -->
-        <div id="bm-pending" class="stack hidden">
-          <p class="bm-section-label">Pending sync</p>
-          <div id="bm-pending-list" class="bm-list"></div>
-        </div>
-
         <!-- Shown when connected -->
         <div id="bm-body" class="stack hidden">
           <div class="bm-search">
@@ -295,6 +305,24 @@
       </section>
 
       <!-- ── Settings panel ───────────────────────────────────── -->
+      <section
+        id="panel-queued"
+        class="panel"
+        role="tabpanel"
+        aria-labelledby="tab-queued"
+        tabindex="0"
+        hidden
+      >
+        <p class="bm-section-label">
+          Saved locally, waiting to sync. These upload on their own once
+          you&rsquo;re connected.
+        </p>
+        <div id="bm-pending-list" class="bm-list" aria-live="polite"></div>
+        <p id="queued-empty" class="empty-note hidden">
+          Nothing waiting to sync.
+        </p>
+      </section>
+
       <section
         id="panel-settings"
         class="panel"

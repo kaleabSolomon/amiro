@@ -14,6 +14,7 @@ import {
   FolderInput,
   Globe2,
   Hash,
+  Loader2,
   Lock,
   Plus,
   Star,
@@ -38,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToggleBookmarkStar } from "@/lib/use-bookmark-star";
 import { cn } from "@/lib/utils";
 
 import { useDashboard } from "./dashboard-context";
@@ -149,6 +151,7 @@ function VisibilityToggle({
   label,
   compact = false,
   disabled = false,
+  pending = false,
   onClick,
 }: {
   active: boolean;
@@ -156,13 +159,14 @@ function VisibilityToggle({
   label: string;
   compact?: boolean;
   disabled?: boolean;
+  pending?: boolean;
   onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || pending}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
         compact && "px-2",
@@ -175,7 +179,12 @@ function VisibilityToggle({
       aria-label={label}
       title={label}
     >
-      <Icon className="h-3 w-3" />
+      {/* Swapping the icon in place keeps the control from resizing mid-flight. */}
+      {pending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <Icon className="h-3 w-3" />
+      )}
       {compact ? null : label}
     </button>
   );
@@ -203,6 +212,18 @@ export function DashboardMainPanel({
   const [deletingBookmarkId, setDeletingBookmarkId] = useState<string | null>(
     null,
   );
+  // Which visibility change is in flight: the control group ("folder" or a
+  // bookmark id) plus the side being switched TO, so the spinner lands on the
+  // option you picked rather than on both halves of the pair.
+  const [pendingVisibility, setPendingVisibility] = useState<{
+    key: string;
+    target: "private" | "public";
+  } | null>(null);
+
+  const isSwitchingTo = (key: string, target: "private" | "public") =>
+    pendingVisibility?.key === key && pendingVisibility.target === target;
+  // The sibling stays disabled during the round trip so the pair can't race.
+  const isSwitching = (key: string) => pendingVisibility?.key === key;
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>("Recent");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
@@ -224,7 +245,7 @@ export function DashboardMainPanel({
   const updateBookmarkVisibility = useMutation(
     api.dashboard.updateBookmarkVisibility,
   );
-  const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
+  const toggleBookmarkStar = useToggleBookmarkStar();
   const moveBookmark = useMutation(api.dashboard.moveBookmark);
 
   const [creatingBookmark, setCreatingBookmark] = useState(false);
@@ -376,11 +397,16 @@ export function DashboardMainPanel({
                   icon={Lock}
                   label="Private bookmark"
                   compact
-                  disabled={bookmarkToggleDisabled}
+                  disabled={bookmarkToggleDisabled || isSwitching(bookmark.id)}
+                  pending={isSwitchingTo(bookmark.id, "private")}
                   onClick={async () => {
                     if (bookmarkToggleDisabled || !bookmarkIsPublic) {
                       return;
                     }
+                    setPendingVisibility({
+                      key: bookmark.id,
+                      target: "private",
+                    });
                     try {
                       await updateBookmarkVisibility({
                         bookmarkId: bookmark.id as Id<"syncedBookmarks">,
@@ -393,6 +419,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update bookmark visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />
@@ -401,11 +429,16 @@ export function DashboardMainPanel({
                   icon={Globe2}
                   label="Public bookmark"
                   compact
-                  disabled={bookmarkToggleDisabled}
+                  disabled={bookmarkToggleDisabled || isSwitching(bookmark.id)}
+                  pending={isSwitchingTo(bookmark.id, "public")}
                   onClick={async () => {
                     if (bookmarkToggleDisabled || bookmarkIsPublic) {
                       return;
                     }
+                    setPendingVisibility({
+                      key: bookmark.id,
+                      target: "public",
+                    });
                     try {
                       await updateBookmarkVisibility({
                         bookmarkId: bookmark.id as Id<"syncedBookmarks">,
@@ -418,6 +451,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update bookmark visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />
@@ -590,10 +625,14 @@ export function DashboardMainPanel({
                   );
                 }
               }}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="Delete bookmark"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              {deletingBookmarkId === bookmark.id ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
             </button>
           </div>
         </div>
@@ -661,11 +700,13 @@ export function DashboardMainPanel({
                   active={!folderIsPublic}
                   icon={Lock}
                   label="Private"
-                  disabled={folderVisibilityLocked}
+                  disabled={folderVisibilityLocked || isSwitching("folder")}
+                  pending={isSwitchingTo("folder", "private")}
                   onClick={async () => {
                     if (folderVisibilityLocked || !folderIsPublic) {
                       return;
                     }
+                    setPendingVisibility({ key: "folder", target: "private" });
                     try {
                       await updateFolderVisibility({
                         folderId: selectedFolder.id as Id<"folders">,
@@ -678,6 +719,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update folder visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />
@@ -685,11 +728,13 @@ export function DashboardMainPanel({
                   active={folderIsPublic}
                   icon={Globe2}
                   label="Public"
-                  disabled={folderVisibilityLocked}
+                  disabled={folderVisibilityLocked || isSwitching("folder")}
+                  pending={isSwitchingTo("folder", "public")}
                   onClick={async () => {
                     if (folderVisibilityLocked || folderIsPublic) {
                       return;
                     }
+                    setPendingVisibility({ key: "folder", target: "public" });
                     try {
                       await updateFolderVisibility({
                         folderId: selectedFolder.id as Id<"folders">,
@@ -702,6 +747,8 @@ export function DashboardMainPanel({
                           ? error.message
                           : "Failed to update folder visibility.";
                       toast.error(message);
+                    } finally {
+                      setPendingVisibility(null);
                     }
                   }}
                 />

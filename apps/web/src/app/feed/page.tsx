@@ -20,6 +20,7 @@ import {
 } from "@/components/dashboard/tag-display";
 import { formatRelativeTime } from "@/components/dashboard/time";
 import { Button } from "@/components/ui/button";
+import { useToggleBookmarkStar } from "@/lib/use-bookmark-star";
 import { cn } from "@/lib/utils";
 
 type FeedBookmark = {
@@ -61,7 +62,7 @@ function getInitials(name: string) {
 export default function FeedPage() {
   const currentUser = useQuery(api.auth.getCurrentUser);
   const feedData = useQuery(api.follows.getFollowingFeed, { limit: 50 });
-  const toggleBookmarkStar = useMutation(api.sharing.toggleBookmarkStar);
+  const toggleBookmarkStar = useToggleBookmarkStar();
   const savePublicBookmark = useMutation(api.sharing.savePublicBookmark);
 
   const [savingId, setSavingId] = useState<string | null>(null);
