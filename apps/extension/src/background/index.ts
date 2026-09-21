@@ -3,7 +3,11 @@ import {
   flattenBookmarkTree,
   folderNameForPath,
 } from "../lib/bookmark-transfer";
-import { DEFAULT_WEB_APP_URL } from "../lib/config";
+import {
+  AMIRO_WEB_ORIGIN,
+  DEFAULT_WEB_APP_URL,
+  PINNED_CONVEX_SITE_URL,
+} from "../lib/config";
 import {
   addCaptureToQueue,
   clearAuthSession,
@@ -737,6 +741,52 @@ async function exportBookmarks(): Promise<ExportSummary> {
   };
 }
 
+/**
+ * Decides whether a handshake message may install a session.
+ *
+ * Without this, any page in the world could serve /extension/connect with its
+ * own token and Convex URL, silently replace the real session, and receive
+ * every subsequent capture — including page text from authenticated pages.
+ * `sender.url` is populated by Chrome from the actual frame and cannot be
+ * forged by page script, so it is the only value worth trusting here.
+ */
+function handshakeSenderOrigin(sender: chrome.runtime.MessageSender) {
+  if (!sender.url) {
+    return null;
+  }
+  try {
+    const origin = new URL(sender.url).origin;
+    return origin === AMIRO_WEB_ORIGIN ? origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The backend this session may talk to.
+ *
+ * Prefers the build-time pin so a compromised web app can't redirect captures
+ * elsewhere. Falls back to the value from the (already origin-verified) page,
+ * but only if it is a well-formed https origin — never plain http, which
+ * would otherwise let a downgrade send bearer tokens in the clear.
+ */
+function resolveConvexSiteUrl(claimed: string) {
+  if (PINNED_CONVEX_SITE_URL) {
+    return PINNED_CONVEX_SITE_URL;
+  }
+  try {
+    const url = new URL(claimed);
+    const isLocal =
+      url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    if (url.protocol !== "https:" && !isLocal) {
+      return null;
+    }
+    return `${url.origin}${url.pathname.replace(/\/$/, "")}`.replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 async function discardQueuedCapture(url: string) {
   const queue = await getCaptureQueue();
   const remaining = queue.filter((capture) => capture.url !== url);
@@ -974,10 +1024,35 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "amiro/complete-handshake") {
+      const senderOrigin = handshakeSenderOrigin(sender);
+      if (!senderOrigin) {
+        // Deliberately does not close the tab or flush the queue — those are
+        // exactly what an attacker page wants.
+        console.warn(
+          "[amiro-extension] rejected handshake from untrusted origin",
+          { sender: sender.url, expected: AMIRO_WEB_ORIGIN },
+        );
+        sendResponse({
+          ok: false,
+          error: "This page is not allowed to connect the Amiro extension.",
+        });
+        return true;
+      }
+
+      const convexSiteUrl = resolveConvexSiteUrl(message.convexSiteUrl);
+      if (!convexSiteUrl) {
+        sendResponse({
+          ok: false,
+          error: "Invalid Convex URL in handshake. Reconnect from the web app.",
+        });
+        return true;
+      }
+
       setAuthSession({
         token: message.token,
-        webAppUrl: message.webAppUrl,
-        convexSiteUrl: message.convexSiteUrl,
+        // Taken from the verified sender, not from the message body.
+        webAppUrl: senderOrigin,
+        convexSiteUrl,
         connectedAt: new Date().toISOString(),
       })
         .then(async () => {
