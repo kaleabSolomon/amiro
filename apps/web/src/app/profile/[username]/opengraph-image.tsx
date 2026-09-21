@@ -25,7 +25,7 @@ export default async function Image({
     });
   }
 
-  const count = data.bookmarks.length;
+  const count = data.publicBookmarkCount;
 
   return renderOgCard({
     eyebrow: `@${data.user.username ?? username}`,

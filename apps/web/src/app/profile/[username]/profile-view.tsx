@@ -2,15 +2,15 @@
 
 import { api } from "@amiro/backend/convex/_generated/api";
 import type { Id } from "@amiro/backend/convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
   Bookmark as BookmarkIcon,
   Calendar,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   ExternalLink,
   Globe2,
   Link2,
+  LoaderCircle,
   Lock,
   LogOut,
   Monitor,
@@ -150,7 +150,6 @@ export function ProfileView({ username }: { username: string }) {
   const [activeFolderFilter, setActiveFolderFilter] = useState<string | null>(
     null,
   );
-  const [bookmarkPage, setBookmarkPage] = useState(1);
   const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
   const [displayName, setDisplayName] = useState("");
   const [usernameValue, setUsernameValue] = useState("");
@@ -167,7 +166,15 @@ export function ProfileView({ username }: { username: string }) {
   const isOwner = profileData?.isOwner ?? false;
   const profileUser = profileData?.user;
   const folders = (profileData?.folders ?? []) as ProfileFolder[];
-  const bookmarks = (profileData?.bookmarks ?? []) as ProfileBookmark[];
+  // Server-paginated: the folder filter is a query arg, not a client filter,
+  // so switching folders fetches that folder rather than sifting an array
+  // that had to be fully downloaded first.
+  const bookmarkPages = usePaginatedQuery(
+    api.profile.listProfileBookmarks,
+    { username, folderId: activeFolderFilter ?? undefined },
+    { initialNumItems: BOOKMARKS_PAGE_SIZE },
+  );
+  const bookmarks = bookmarkPages.results as ProfileBookmark[];
   const canUseAuthenticatedActions = Boolean(currentUser);
 
   // Following (subscription) — no counts vanity; just the button + utility count.
@@ -285,36 +292,16 @@ export function ProfileView({ username }: { username: string }) {
   );
 
   // Changing the folder filter should start at page 1.
-  useEffect(() => {
-    setBookmarkPage(1);
-  }, [activeFolderFilter]);
-
-  const filteredBookmarks = useMemo(() => {
-    const next = activeFolderFilter
-      ? bookmarks.filter((bookmark) => bookmark.folderId === activeFolderFilter)
-      : bookmarks;
-
-    return [...next].sort((a, b) => b.lastSyncedAt - a.lastSyncedAt);
-  }, [bookmarks, activeFolderFilter]);
-
-  // Paginate — a profile with hundreds of public bookmarks would otherwise
-  // render one endless page.
-  const bookmarkPageCount = Math.max(
-    1,
-    Math.ceil(filteredBookmarks.length / BOOKMARKS_PAGE_SIZE),
-  );
-  const safeBookmarkPage = Math.min(bookmarkPage, bookmarkPageCount);
-  const visibleBookmarks = filteredBookmarks.slice(
-    (safeBookmarkPage - 1) * BOOKMARKS_PAGE_SIZE,
-    safeBookmarkPage * BOOKMARKS_PAGE_SIZE,
-  );
+  // Already filtered and ordered by the server; re-sorting would only shuffle
+  // the pages fetched so far.
+  const visibleBookmarks = bookmarks;
 
   const publicFolders = folders.filter(
     (folder) => folder.visibility === "public",
   );
-  const publicBookmarks = bookmarks.filter(
-    (bookmark) => bookmark.visibility === "public",
-  );
+  // Counted server-side — the client no longer holds the full collection.
+  const publicBookmarkCount = profileData?.publicBookmarkCount ?? 0;
+  const visibleBookmarkCount = profileData?.visibleBookmarkCount ?? 0;
 
   const handleSaveProfile = async () => {
     if (!displayName.trim()) {
@@ -566,7 +553,7 @@ export function ProfileView({ username }: { username: string }) {
                 <StatTile label="Following" value={followingCount} />
                 <StatTile
                   label="Public bookmarks"
-                  value={publicBookmarks.length}
+                  value={publicBookmarkCount}
                 />
                 <StatTile label="Public folders" value={publicFolders.length} />
               </div>
@@ -663,9 +650,11 @@ export function ProfileView({ username }: { username: string }) {
               <section className="space-y-4">
                 <SectionHeading
                   title={isOwner ? "Bookmarks" : "Public bookmarks"}
-                  meta={`${filteredBookmarks.length} visible`}
+                  meta={`${visibleBookmarkCount} visible`}
                 />
-                {filteredBookmarks.length === 0 ? (
+                {bookmarkPages.status === "LoadingFirstPage" ? (
+                  <EmptyPanel text="Loading bookmarks…" />
+                ) : visibleBookmarks.length === 0 ? (
                   <EmptyPanel
                     text={
                       activeFolderFilter
@@ -691,42 +680,30 @@ export function ProfileView({ username }: { username: string }) {
                       ))}
                     </div>
 
-                    {bookmarkPageCount > 1 ? (
-                      <div className="flex items-center justify-between gap-3 border-border/60 border-t px-3 py-3 sm:px-5">
-                        <p className="text-muted-foreground text-xs">
-                          Page {safeBookmarkPage} of {bookmarkPageCount}
-                        </p>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            disabled={safeBookmarkPage === 1}
-                            onClick={() =>
-                              setBookmarkPage((current) =>
-                                Math.max(1, current - 1),
-                              )
-                            }
-                            aria-label="Previous page"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            disabled={safeBookmarkPage === bookmarkPageCount}
-                            onClick={() =>
-                              setBookmarkPage((current) =>
-                                Math.min(bookmarkPageCount, current + 1),
-                              )
-                            }
-                            aria-label="Next page"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+                    {bookmarkPages.status === "CanLoadMore" ||
+                    bookmarkPages.status === "LoadingMore" ? (
+                      /* Matches the dashboard: a continuation row, not a
+                         button parked in a footer. */
+                      <button
+                        type="button"
+                        disabled={bookmarkPages.status === "LoadingMore"}
+                        onClick={() =>
+                          bookmarkPages.loadMore(BOOKMARKS_PAGE_SIZE)
+                        }
+                        className="flex w-full items-center justify-center gap-1.5 border-border/40 border-t px-3 py-3.5 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-default disabled:bg-transparent disabled:text-muted-foreground sm:px-5"
+                      >
+                        {bookmarkPages.status === "LoadingMore" ? (
+                          <>
+                            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                            Loading more…
+                          </>
+                        ) : (
+                          <>
+                            Show more
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </>
+                        )}
+                      </button>
                     ) : null}
                   </div>
                 )}

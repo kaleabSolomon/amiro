@@ -25,7 +25,6 @@ import { toast } from "sonner";
 
 import { MoveBookmarkDialog } from "@/components/dashboard/move-bookmark-dialog";
 import { NewBookmarkDialog } from "@/components/dashboard/new-bookmark-dialog";
-import { ShareFolderDialog } from "@/components/dashboard/share-folder-dialog";
 import { Button } from "@/components/ui/button";
 import {
   CustomTooltip,
@@ -802,21 +801,8 @@ export function DashboardMainPanel({
                   </Button>
                 }
               />
-              <ShareFolderDialog
-                folderId={selectedFolder.id as Id<"folders">}
-                folderName={selectedFolder.name}
-                trigger={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!folderIsPublic}
-                  >
-                    Share
-                  </Button>
-                }
-              />
-              {/* Unfiled is a synthetic bucket with no row to rename or delete. */}
+              {/* Share now lives in the actions menu alongside rename/delete.
+                  Unfiled is a synthetic bucket with none of those. */}
               {selectedFolder.id !== "unfiled" ? (
                 <FolderActionsMenu folder={selectedFolder} />
               ) : null}
@@ -1004,24 +990,26 @@ export function DashboardMainPanel({
 
             {serverPaginated ? (
               canLoadMore ? (
-                <div className="flex items-center justify-center border-border/60 border-t px-3 py-3 sm:px-5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={loadingMore}
-                    onClick={() => onLoadMore?.()}
-                  >
-                    {loadingMore ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Loading…
-                      </>
-                    ) : (
-                      "Load more"
-                    )}
-                  </Button>
-                </div>
+                /* Styled as a continuation of the list rather than a button
+                   floating in a footer — same row rhythm, same hover. */
+                <button
+                  type="button"
+                  disabled={loadingMore}
+                  onClick={() => onLoadMore?.()}
+                  className="flex w-full items-center justify-center gap-1.5 border-border/40 border-t px-3 py-3.5 font-medium text-muted-foreground text-xs transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-default disabled:bg-transparent disabled:text-muted-foreground sm:px-5"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading more…
+                    </>
+                  ) : (
+                    <>
+                      Show more
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </button>
               ) : null
             ) : pageCount > 1 ? (
               <div className="flex items-center justify-between gap-3 border-border/60 border-t px-3 py-3 sm:px-5">

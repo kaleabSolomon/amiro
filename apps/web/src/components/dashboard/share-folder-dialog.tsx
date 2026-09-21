@@ -23,11 +23,31 @@ import { Skeleton } from "@/components/ui/skeleton";
 type Props = {
   folderId: Id<"folders">;
   folderName: string;
-  trigger: ReactElement;
+  /** Omit when driving the dialog from outside, e.g. a dropdown item. */
+  trigger?: ReactElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
-export function ShareFolderDialog({ folderId, folderName, trigger }: Props) {
-  const [open, setOpen] = useState(false);
+export function ShareFolderDialog({
+  folderId,
+  folderName,
+  trigger,
+  open: controlledOpen,
+  onOpenChange,
+}: Props) {
+  // Supports both modes: its own trigger, or controlled by a parent. A
+  // dropdown item can't be the trigger directly — the menu unmounts on click
+  // and would take the dialog with it.
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) {
+      setUncontrolledOpen(next);
+    }
+    onOpenChange?.(next);
+  };
   const [publicId, setPublicId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
@@ -80,7 +100,7 @@ export function ShareFolderDialog({ folderId, folderName, trigger }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger} />
+      {trigger ? <DialogTrigger render={trigger} /> : null}
       <DialogContent className="border-border bg-popover sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl tracking-tight">

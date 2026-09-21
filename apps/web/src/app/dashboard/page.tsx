@@ -123,13 +123,15 @@ function FolderWorkspace() {
     isFeedView ? "skip" : { folderId: selectedFolderId, sort: serverSort },
     { initialNumItems: BOOKMARKS_PER_PAGE },
   );
-  const recentBookmarks = useQuery(
-    api.dashboard.getRecentBookmarks,
-    selectedFolderId === "recent" ? { days: 7, limit: 120 } : "skip",
+  const recentPages = usePaginatedQuery(
+    api.dashboard.listRecentBookmarks,
+    selectedFolderId === "recent" ? { days: 7 } : "skip",
+    { initialNumItems: BOOKMARKS_PER_PAGE },
   );
-  const sharedBookmarks = useQuery(
-    api.dashboard.getSharedBookmarks,
-    selectedFolderId === "shared" ? { limit: 120 } : "skip",
+  const sharedPages = usePaginatedQuery(
+    api.dashboard.listSharedBookmarks,
+    selectedFolderId === "shared" ? {} : "skip",
+    { initialNumItems: BOOKMARKS_PER_PAGE },
   );
   const feedData = useQuery(
     api.follows.getFollowingFeed,
@@ -164,19 +166,25 @@ function FolderWorkspace() {
     }));
   }, [feedData]);
 
-  const bookmarks =
+  // Recent, Shared and folder views are all cursor-paginated now; only the
+  // feed still fetches a fixed window.
+  const activePages =
     selectedFolderId === "recent"
-      ? recentBookmarks
+      ? recentPages
       : selectedFolderId === "shared"
-        ? sharedBookmarks
+        ? sharedPages
         : selectedFolderId === "feed"
-          ? feedBookmarks
-          : folderPages.results;
+          ? null
+          : folderPages;
+
+  const bookmarks =
+    selectedFolderId === "feed" ? feedBookmarks : activePages?.results;
+
   // "LoadingFirstPage" is the only state that should blank the list; loading a
   // later page keeps what's already on screen.
-  const bookmarksLoading = isFeedView
-    ? bookmarks === undefined
-    : folderPages.status === "LoadingFirstPage";
+  const bookmarksLoading = activePages
+    ? activePages.status === "LoadingFirstPage"
+    : bookmarks === undefined;
 
   const deleteBookmark = useMutation(api.dashboard.deleteBookmark);
 
@@ -204,12 +212,12 @@ function FolderWorkspace() {
         sortBy={sortBy}
         onSortChange={setSortBy}
         onLoadMore={
-          isFeedView
-            ? undefined
-            : () => folderPages.loadMore(BOOKMARKS_PER_PAGE)
+          activePages
+            ? () => activePages.loadMore(BOOKMARKS_PER_PAGE)
+            : undefined
         }
-        canLoadMore={!isFeedView && folderPages.status === "CanLoadMore"}
-        loadingMore={folderPages.status === "LoadingMore"}
+        canLoadMore={activePages?.status === "CanLoadMore"}
+        loadingMore={activePages?.status === "LoadingMore"}
       />
     </section>
   );
