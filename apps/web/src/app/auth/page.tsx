@@ -52,11 +52,11 @@ function AuthPageInner() {
   const requiresUsernameCompletion = Boolean(
     isAuthenticated && currentUser && !currentUser.username,
   );
+  // Google sends users back here, so this marks "we just returned from OAuth"
+  // — the window where the session is still being established.
+  const returningFromOAuth = mode === "complete-profile";
   const isResolvingUsernameRequirement =
-    isAuthenticated &&
-    currentUser === undefined &&
-    mode === "complete-profile" &&
-    !isLoading;
+    isAuthenticated && currentUser === undefined && returningFromOAuth;
 
   const isVerificationSuccess =
     verificationStatus === "success" ||
@@ -72,6 +72,28 @@ function AuthPageInner() {
     () => isVerificationSuccess || isVerificationFailure,
     [isVerificationSuccess, isVerificationFailure],
   );
+
+  // Verification and profile-completion own the screen; a redirect spinner
+  // must not pre-empt them.
+  const hasDedicatedFlow = Boolean(
+    verificationFlow ||
+      pendingVerificationEmail ||
+      hasVerificationParams ||
+      requiresUsernameCompletion,
+  );
+
+  // True while this page is on its way out. Rendering the sign-in form during
+  // this window is what made a successful Google login flash the login screen
+  // before landing on the dashboard.
+  const isLeavingForDashboard =
+    !hasDedicatedFlow &&
+    // Session still being established after the OAuth round trip. Scoped to
+    // the OAuth return so a first-time visitor gets the form instantly rather
+    // than staring at a spinner.
+    ((isLoading && returningFromOAuth) ||
+      // Authenticated — either waiting on getCurrentUser to decide where to
+      // send them, or resolved and the redirect effect is about to fire.
+      isAuthenticated);
 
   useEffect(() => {
     if (mode === "signin") {
@@ -408,6 +430,18 @@ function AuthPageInner() {
                         Use a different email
                       </Button>
                     </div>
+                  </div>
+                ) : isLeavingForDashboard ? (
+                  <div className="flex w-full flex-col items-center">
+                    <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary shadow-xs ring-1 ring-primary/20">
+                      <LoaderCircle className="h-6 w-6 animate-spin stroke-[1.8]" />
+                    </div>
+                    <h2 className="mb-1.5 font-semibold text-2xl tracking-tight">
+                      Signing you in
+                    </h2>
+                    <p className="text-center text-muted-foreground text-sm leading-relaxed">
+                      Taking you to your bookmarks…
+                    </p>
                   </div>
                 ) : isResolvingUsernameRequirement ? (
                   <div className="flex w-full flex-col items-center">

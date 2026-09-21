@@ -3,7 +3,13 @@
 import { api } from "@amiro/backend/convex/_generated/api";
 import type { Id } from "@amiro/backend/convex/_generated/dataModel";
 import { useMutation } from "convex/react";
-import { FolderInput, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  FolderInput,
+  MoreHorizontal,
+  Pencil,
+  Share2,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -27,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDashboard } from "./dashboard-context";
 import { FOLDER_ICONS } from "./new-folder-dialog";
+import { ShareFolderDialog } from "./share-folder-dialog";
 import type { DashboardFolder, FolderBookmarkDisposition } from "./types";
 
 type Props = {
@@ -37,6 +44,7 @@ export function FolderActionsMenu({ folder }: Props) {
   const updateFolder = useMutation(api.dashboard.updateFolder);
   const deleteFolder = useMutation(api.dashboard.deleteFolder);
   const { selectFolder } = useDashboard();
+  const [shareOpen, setShareOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [name, setName] = useState(folder.name);
@@ -135,7 +143,20 @@ export function FolderActionsMenu({ folder }: Props) {
         >
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="bottom" className="w-44">
+        <DropdownMenuContent align="end" side="bottom" className="w-52">
+          <DropdownMenuItem
+            disabled={folder.visibility !== "public"}
+            title={
+              folder.visibility === "public"
+                ? undefined
+                : "Make this folder public to share it"
+            }
+            onClick={() => setShareOpen(true)}
+          >
+            <Share2 className="h-4 w-4" />
+            {folder.visibility === "public" ? "Share" : "Share (make public)"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={openRename}>
             <Pencil className="h-4 w-4" />
             Rename
@@ -147,6 +168,13 @@ export function FolderActionsMenu({ folder }: Props) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <ShareFolderDialog
+        folderId={folder.id as Id<"folders">}
+        folderName={folder.name}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="border-border bg-popover sm:max-w-md">

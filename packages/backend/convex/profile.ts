@@ -122,27 +122,13 @@ export const getProfileByUsername = query({
       return (folder?.visibility ?? "private") === "public";
     });
 
-    const bookmarks = await Promise.all(
-      visibleBookmarks.map(async (b) => {
-        const folder = b.folderId ? folderById.get(b.folderId) : null;
-        return {
-          id: b._id,
-          url: b.url,
-          title: b.title,
-          text: b.text ?? "",
-          tags: b.tags,
-          capturedAt: b.capturedAt,
-          lastSyncedAt: b.lastSyncedAt,
-          folderId: b.folderId ?? null,
-          folderName: folder?.name ?? "Unfiled",
-          folderIcon: folder?.icon ?? "📁",
-          folderVisibility: folder?.visibility ?? "private",
-          visibility: b.visibility ?? "private",
-          source: b.source,
-          ...(await getBookmarkEngagement(ctx, b, authUser?._id)),
-        };
-      }),
-    );
+    // The bookmark rows themselves come from listProfileBookmarks, one page at
+    // a time. Building them here meant an engagement lookup per bookmark and
+    // shipping the entire collection on every profile view.
+    const visibleBookmarkCount = visibleBookmarks.length;
+    const publicBookmarkCount = allBookmarks.filter(
+      (bookmark) => (bookmark.visibility ?? "private") === "public",
+    ).length;
 
     return {
       user: {
@@ -155,7 +141,8 @@ export const getProfileByUsername = query({
         createdAt: user.createdAt,
       },
       folders,
-      bookmarks,
+      visibleBookmarkCount,
+      publicBookmarkCount,
       isOwner,
     };
   },

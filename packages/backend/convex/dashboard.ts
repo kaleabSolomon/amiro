@@ -404,6 +404,57 @@ async function resolveSaverProfiles(ctx: QueryCtx, userIds: Iterable<string>) {
   return new Map(entries);
 }
 
+/**
+ * Paginated Recent view. The non-paginated getRecentBookmarks caps at 200 and
+ * gives no sign there are more, so a busy week simply disappeared off the end.
+ */
+export const listRecentBookmarks = query({
+  args: {
+    days: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const days = Math.max(1, Math.min(args.days ?? 7, 31));
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    const folders = await ctx.db
+      .query("folders")
+      .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+      .collect();
+    const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
+
+    const results = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_last_synced_at", (q) =>
+        q.eq("userId", authUser._id).gte("lastSyncedAt", since),
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    return {
+      ...results,
+      page: await Promise.all(
+        results.page.map(async (bookmark) => {
+          const folder = bookmark.folderId
+            ? folderMap.get(bookmark.folderId)
+            : undefined;
+          return {
+            ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+            folderId: bookmark.folderId ?? null,
+            folderName: folder?.name ?? "Unfiled",
+            folderVisibility: folder?.visibility ?? "private",
+          };
+        }),
+      ),
+    };
+  },
+});
+
 export const getSharedBookmarks = query({
   args: {
     limit: v.optional(v.number()),
@@ -457,6 +508,65 @@ export const getSharedBookmarks = query({
         };
       }),
     );
+  },
+});
+
+/**
+ * Paginated Shared-with-me view. Same reason as listRecentBookmarks: the
+ * take() version stopped at 200 with nothing to indicate more existed.
+ */
+export const listSharedBookmarks = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    const folders = await ctx.db
+      .query("folders")
+      .withIndex("by_user", (q) => q.eq("userId", authUser._id))
+      .collect();
+    const folderMap = new Map(folders.map((folder) => [folder._id, folder]));
+
+    const results = await ctx.db
+      .query("syncedBookmarks")
+      .withIndex("by_user_and_saved_at", (q) =>
+        q.eq("userId", authUser._id).gt("savedAt", 0),
+      )
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    // Resolved per page rather than for the whole collection.
+    const savers = await resolveSaverProfiles(
+      ctx,
+      results.page
+        .map((bookmark) => bookmark.savedFromUserId)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    return {
+      ...results,
+      page: await Promise.all(
+        results.page.map(async (bookmark) => {
+          const folder = bookmark.folderId
+            ? folderMap.get(bookmark.folderId)
+            : undefined;
+          return {
+            ...(await mapBookmarkWithEngagement(ctx, bookmark, authUser._id)),
+            folderId: bookmark.folderId ?? null,
+            folderName: folder?.name ?? "Unfiled",
+            folderVisibility: folder?.visibility ?? "private",
+            savedAt: bookmark.savedAt ?? bookmark.lastSyncedAt,
+            savedFrom: bookmark.savedFromUserId
+              ? (savers.get(bookmark.savedFromUserId) ?? null)
+              : null,
+          };
+        }),
+      ),
+    };
   },
 });
 

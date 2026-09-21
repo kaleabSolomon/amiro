@@ -29,8 +29,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const title = `${data.user.name} (@${data.user.username ?? username})`;
   const description =
     data.user.bio?.trim() ||
-    `${data.bookmarks.length} ${
-      data.bookmarks.length === 1 ? "bookmark" : "bookmarks"
+    `${data.publicBookmarkCount} ${
+      data.publicBookmarkCount === 1 ? "bookmark" : "bookmarks"
     } across ${data.folders.length} ${
       data.folders.length === 1 ? "collection" : "collections"
     } on amiro.`;

@@ -55,25 +55,23 @@ export function useToggleBookmarkStar() {
       }
 
       for (const { args: queryArgs, value } of localStore.getAllQueries(
-        api.dashboard.getRecentBookmarks,
+        api.dashboard.listRecentBookmarks,
       )) {
         if (!value) continue;
-        localStore.setQuery(
-          api.dashboard.getRecentBookmarks,
-          queryArgs,
-          toggleStarIn(value, bookmarkId),
-        );
+        localStore.setQuery(api.dashboard.listRecentBookmarks, queryArgs, {
+          ...value,
+          page: toggleStarIn(value.page, bookmarkId),
+        });
       }
 
       for (const { args: queryArgs, value } of localStore.getAllQueries(
-        api.dashboard.getSharedBookmarks,
+        api.dashboard.listSharedBookmarks,
       )) {
         if (!value) continue;
-        localStore.setQuery(
-          api.dashboard.getSharedBookmarks,
-          queryArgs,
-          toggleStarIn(value, bookmarkId),
-        );
+        localStore.setQuery(api.dashboard.listSharedBookmarks, queryArgs, {
+          ...value,
+          page: toggleStarIn(value.page, bookmarkId),
+        });
       }
 
       for (const { args: queryArgs, value } of localStore.getAllQueries(
@@ -87,12 +85,12 @@ export function useToggleBookmarkStar() {
       }
 
       for (const { args: queryArgs, value } of localStore.getAllQueries(
-        api.profile.getProfileByUsername,
+        api.profile.listProfileBookmarks,
       )) {
         if (!value) continue;
-        localStore.setQuery(api.profile.getProfileByUsername, queryArgs, {
+        localStore.setQuery(api.profile.listProfileBookmarks, queryArgs, {
           ...value,
-          bookmarks: toggleStarIn(value.bookmarks, bookmarkId),
+          page: toggleStarIn(value.page, bookmarkId),
         });
       }
     },
