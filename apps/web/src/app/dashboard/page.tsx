@@ -28,6 +28,17 @@ import type {
 } from "@/components/dashboard/types";
 import { AppShell } from "@/components/layout/app-shell";
 
+// Both of these render a placeholder rather than null: returning null left a
+// blank page for the frame or two before the route change committed, which
+// read as the app hanging.
+function RedirectNotice({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-svh items-center justify-center">
+      <div className="text-muted-foreground text-sm">{message}</div>
+    </div>
+  );
+}
+
 function RedirectToAuth() {
   const router = useRouter();
 
@@ -35,7 +46,7 @@ function RedirectToAuth() {
     router.replace("/auth");
   }, [router]);
 
-  return null;
+  return <RedirectNotice message="Redirecting to sign in…" />;
 }
 
 function RedirectToCompleteProfile() {
@@ -45,7 +56,7 @@ function RedirectToCompleteProfile() {
     router.replace("/auth?mode=complete-profile");
   }, [router]);
 
-  return null;
+  return <RedirectNotice message="Finishing your profile…" />;
 }
 
 function FolderWorkspace() {

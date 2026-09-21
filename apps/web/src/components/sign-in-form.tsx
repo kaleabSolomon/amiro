@@ -23,11 +23,11 @@ export default function SignInForm({
   const [showPassword, setShowPassword] = useState(false);
   const [keepLoggedIn, setKeepLoggedIn] = useState(true);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     try {
-      // TODO: after deployment check if there's flickering or we slightly show the complete-profile page for users already with username.
       await authClient.signIn.social({
         provider: "google",
         callbackURL: "/auth?mode=complete-profile",
@@ -54,12 +54,17 @@ export default function SignInForm({
 
       const handlers = {
         onSuccess: () => {
-          router.push("/dashboard");
+          // replace, not push: leaving /auth in history sent Back to a login
+          // page the user is already signed in to, which then bounced them
+          // forward again.
+          setIsRedirecting(true);
+          router.replace("/dashboard");
           toast.success("Sign in successful");
         },
         onError: (error: {
           error: { message?: string; statusText?: string };
         }) => {
+          setIsRedirecting(false);
           const message =
             error.error.message || error.error.statusText || "Sign in failed.";
           if (
@@ -134,7 +139,7 @@ export default function SignInForm({
           variant="outline"
           className="h-11 w-full rounded-lg border border-input bg-background font-normal shadow-xs"
           onClick={handleGoogleSignIn}
-          disabled={isGoogleLoading}
+          disabled={isGoogleLoading || isRedirecting}
         >
           <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
             <title>Google Logo</title>
@@ -317,9 +322,16 @@ export default function SignInForm({
                 type="submit"
                 size="lg"
                 className="h-12 w-full rounded-lg shadow-md"
-                disabled={!state.canSubmit || state.isSubmitting}
+                disabled={
+                  !state.canSubmit ||
+                  state.isSubmitting ||
+                  isRedirecting ||
+                  isGoogleLoading
+                }
               >
-                {state.isSubmitting ? "Signing in..." : "Login"}
+                {state.isSubmitting || isRedirecting
+                  ? "Signing in..."
+                  : "Login"}
               </Button>
             )}
           </form.Subscribe>
