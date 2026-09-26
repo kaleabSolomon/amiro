@@ -19,6 +19,7 @@ import type * as email_templates_verificationEmail from "../email/templates/veri
 import type * as follows from "../follows.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
+import type * as lib_bookmark_cascade from "../lib/bookmark_cascade.js";
 import type * as lib_heuristic_tags from "../lib/heuristic_tags.js";
 import type * as lib_url_canonical from "../lib/url_canonical.js";
 import type * as migrations from "../migrations.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   follows: typeof follows;
   healthCheck: typeof healthCheck;
   http: typeof http;
+  "lib/bookmark_cascade": typeof lib_bookmark_cascade;
   "lib/heuristic_tags": typeof lib_heuristic_tags;
   "lib/url_canonical": typeof lib_url_canonical;
   migrations: typeof migrations;

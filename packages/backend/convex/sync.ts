@@ -109,7 +109,12 @@ export const upsertCaptureFromExtension = internalMutation({
   args: {
     userId: v.string(),
     source: sourceValidator,
-    folderId: v.optional(v.id("folders")),
+    // Three states, because "leave it alone" and "move to Unfiled" are
+    // different intents that an optional id cannot tell apart:
+    //   absent  -> keep the bookmark where it already is (Unfiled if new)
+    //   null    -> explicitly move it to Unfiled
+    //   id      -> move it to that folder
+    folderId: v.optional(v.union(v.id("folders"), v.null())),
     url: v.string(),
     title: v.string(),
     text: v.optional(v.string()),
@@ -131,15 +136,6 @@ export const upsertCaptureFromExtension = internalMutation({
     const capturedAtMs = Date.parse(args.capturedAt);
     if (Number.isNaN(capturedAtMs)) {
       throw new ConvexError("Invalid capturedAt value.");
-    }
-
-    let folderIsPublic = false;
-    if (args.folderId) {
-      const folder = await ctx.db.get(args.folderId);
-      if (!folder || folder.userId !== args.userId) {
-        throw new ConvexError("Invalid folder for this user.");
-      }
-      folderIsPublic = (folder.visibility ?? "private") === "public";
     }
 
     const { canonicalUrl } = canonicalizeUrl(args.url);
@@ -195,9 +191,27 @@ export const upsertCaptureFromExtension = internalMutation({
       )
       .unique();
 
+    // Re-capturing a page must not reorganise it. Previously an omitted
+    // folderId was treated as an authoritative "move to Unfiled", so
+    // right-clicking Save on a page already filed in a public folder silently
+    // pulled it out of that folder and unpublished it.
+    const folderProvided = args.folderId !== undefined;
+    const nextFolderId = folderProvided
+      ? (args.folderId ?? undefined)
+      : (existing?.folderId ?? undefined);
+
+    let folderIsPublic = false;
+    if (nextFolderId) {
+      const folder = await ctx.db.get(nextFolderId);
+      if (!folder || folder.userId !== args.userId) {
+        throw new ConvexError("Invalid folder for this user.");
+      }
+      folderIsPublic = (folder.visibility ?? "private") === "public";
+    }
+
     // Invariant (mirrors dashboard.moveBookmark / updateBookmarkVisibility):
-    // a bookmark may be public only inside a public folder. In Unfiled or a
-    // private folder, force private regardless of the requested visibility.
+    // a bookmark may be public only inside a public folder. Visibility is
+    // sticky too — only an explicit value changes it.
     const requestedVisibility =
       args.visibility ?? existing?.visibility ?? "private";
     const resolvedVisibility =
@@ -205,7 +219,7 @@ export const upsertCaptureFromExtension = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
-        folderId: args.folderId,
+        folderId: nextFolderId,
         visibility: resolvedVisibility,
         title: args.title,
         text: args.text,
@@ -227,7 +241,7 @@ export const upsertCaptureFromExtension = internalMutation({
     const id = await ctx.db.insert("syncedBookmarks", {
       userId: args.userId,
       source: args.source,
-      folderId: args.folderId,
+      folderId: nextFolderId,
       visibility: resolvedVisibility,
       url: args.url,
       title: args.title,

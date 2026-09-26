@@ -740,13 +740,18 @@ export const saveFromShare = mutation({
           additionalLinks: bookmark.childLinks,
           tags: bookmark.tags,
           capturedAt: new Date(now).toISOString(),
-          visibility: "private",
+          // Omitted, not "private": if the saver already owns this URL and
+          // has published it, saving someone else's share of the same link
+          // must not silently unpublish their own copy. New copies still
+          // default to private.
         },
-      )) as { id: Id<"syncedBookmarks"> };
+      )) as { id: Id<"syncedBookmarks">; status: "created" | "updated" };
 
       // Record that this copy was saved from someone else so it surfaces in
-      // "Shared with me". Skip when saving from your own share.
-      if (bookmark.userId !== authUser._id) {
+      // "Shared with me" — but only for a genuinely new copy. Stamping it on a
+      // bookmark the saver already had would refile their own curation as
+      // someone else's.
+      if (bookmark.userId !== authUser._id && saved.status === "created") {
         await ctx.db.patch(saved.id, {
           savedFromUserId: bookmark.userId,
           savedAt: now,

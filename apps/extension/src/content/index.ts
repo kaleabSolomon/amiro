@@ -1,3 +1,4 @@
+import { AMIRO_WEB_ORIGIN } from "../lib/config";
 import type {
   CapturePayload,
   ExtensionMessage,
@@ -34,6 +35,14 @@ function setHandshakeStatus(message: string, kind: "success" | "error") {
 }
 
 function completeAuthHandshakeIfNeeded() {
+  // This script runs on every site, so the path alone proves nothing — any
+  // page can be served at /extension/connect. The background re-checks the
+  // origin against sender.url, which is the authoritative test; this just
+  // avoids handing a token to a message the background will reject anyway.
+  if (window.location.origin !== AMIRO_WEB_ORIGIN) {
+    return;
+  }
+
   if (window.location.pathname !== "/extension/connect") {
     return;
   }

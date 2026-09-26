@@ -10,6 +10,7 @@ import {
   query,
 } from "./_generated/server";
 import { authComponent } from "./auth";
+import { cascadeDeleteBookmark } from "./lib/bookmark_cascade";
 
 type FolderStats = {
   itemCount: number;
@@ -786,7 +787,7 @@ export const deleteBookmark = mutation({
       throw new ConvexError("Bookmark not found.");
     }
 
-    await ctx.db.delete(args.bookmarkId);
+    await cascadeDeleteBookmark(ctx, bookmark);
     return { ok: true as const };
   },
 });
@@ -878,8 +879,7 @@ export const deleteFolder = mutation({
 
     for (const bookmark of contained) {
       if (deleteContainedBookmarks) {
-        // Matches deleteBookmark, which also drops only the bookmark row.
-        await ctx.db.delete(bookmark._id);
+        await cascadeDeleteBookmark(ctx, bookmark);
         continue;
       }
 
@@ -1038,7 +1038,7 @@ export const deleteBookmarkForUser = internalMutation({
       throw new ConvexError("Bookmark not found.");
     }
 
-    await ctx.db.delete(args.bookmarkId);
+    await cascadeDeleteBookmark(ctx, bookmark);
     return { ok: true as const };
   },
 });
