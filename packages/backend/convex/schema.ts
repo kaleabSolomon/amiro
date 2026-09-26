@@ -249,7 +249,10 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_recipient_and_created_at", ["recipientId", "createdAt"])
-    .index("by_recipient_and_read", ["recipientId", "read"]),
+    .index("by_recipient_and_read", ["recipientId", "read"])
+    // Lets a deleted bookmark take its notifications with it, instead of
+    // leaving the bell rendering "X saved <Title>" against a dead id.
+    .index("by_bookmark", ["bookmarkId"]),
   // --- Follow graph (subscription model) ---
   // One row per (follower → followee) relationship. Following a user subscribes
   // you to their public saves — it's a content subscription, not a popularity
