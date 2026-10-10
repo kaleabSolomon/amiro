@@ -1,8 +1,5 @@
-"use client";
-
 import type { Route } from "next";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "../ui/button";
@@ -13,64 +10,45 @@ import {
 } from "../ui/custom-tooltip";
 
 const SECTION_LINKS = [
-  { href: "/#what-we-do", label: "What we do" },
-  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#features", label: "Features" },
   { href: "/#integrations", label: "Integrations" },
-  // { href: "/#pricing", label: "Pricing" },
   { href: "/#faq", label: "FAQ" },
 ] satisfies ReadonlyArray<{ href: Route; label: string }>;
 
 export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
-  const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
   return (
-    <header
-      className={`sticky top-4 z-50 mx-auto w-[calc(100%-2rem)] max-w-6xl rounded-2xl border border-white/30 bg-green-800/10 shadow-lg backdrop-blur-2xl transition-all duration-300 dark:border-white/10 dark:bg-green-950/40 ${
-        isScrolled ? "top-2 translate-y-0 shadow-xl" : "top-4"
-      }`}
-    >
-      <nav
-        className={`mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 transition-all duration-300 ${isScrolled ? "py-4" : "py-6"}`}
-      >
+    <header className="sticky top-0 z-50 border-border/60 border-b bg-background/90 backdrop-blur-sm">
+      <nav className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-3.5">
         <Link className="font-serif text-2xl" href="/">
           Amiro
         </Link>
-        <div className="hidden items-center gap-5 md:flex">
+        <div className="hidden items-center gap-6 md:flex">
           {SECTION_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="font-medium text-(--landing-subtle-ink) text-sm transition-colors hover:text-(--landing-ink)"
+              className="text-muted-foreground text-sm transition-colors hover:text-foreground"
             >
               {link.label}
             </Link>
           ))}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <ModeToggle />
-          {!hideAuth && (
+          {hideAuth ? null : (
             <>
-              <Link
-                href="/auth?mode=signin"
-                className="cursor-pointer text-muted-foreground text-xs transition-colors hover:text-foreground"
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<Link href="/auth?mode=signin" />}
               >
                 Sign in
-              </Link>
-
+              </Button>
+              {/* Disabled until the mobile app ships; the tooltip says why. */}
               <CustomTooltip>
                 <CustomTooltipTrigger>
-                  <Button
-                    size="sm"
-                    disabled
-                    // className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    Get The App
+                  <Button size="sm" disabled>
+                    Get the app
                   </Button>
                 </CustomTooltipTrigger>
                 <CustomTooltipContent>
