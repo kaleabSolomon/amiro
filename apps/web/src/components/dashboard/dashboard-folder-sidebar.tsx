@@ -8,7 +8,7 @@ import {
   LogOut,
   Plus,
   Share,
-  Sparkles,
+  UserRound,
   Users,
 } from "lucide-react";
 import type { Route } from "next";
@@ -238,7 +238,6 @@ export function DashboardFolderSidebar({
                   <span className="truncate">
                     {currentUser?.name ?? "Profile"}
                   </span>
-                  <Sparkles className="h-3 w-3 shrink-0 text-primary" />
                 </div>
                 <div className="text-[11px] text-muted-foreground">
                   @{currentUser?.username ?? "user"}
@@ -252,7 +251,7 @@ export function DashboardFolderSidebar({
               className="w-48"
             >
               <DropdownMenuItem render={<Link href={profileHref} />}>
-                <Sparkles className="h-4 w-4" />
+                <UserRound className="h-4 w-4" />
                 Open profile
               </DropdownMenuItem>
               <DropdownMenuSeparator />

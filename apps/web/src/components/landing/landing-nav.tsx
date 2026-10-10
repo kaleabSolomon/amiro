@@ -1,7 +1,11 @@
+"use client";
+
 import type { Route } from "next";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { ModeToggle } from "@/components/mode-toggle";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import {
   CustomTooltip,
@@ -16,9 +20,33 @@ const SECTION_LINKS = [
 ] satisfies ReadonlyArray<{ href: Route; label: string }>;
 
 export function LandingNav({ hideAuth }: { hideAuth?: boolean }) {
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
+    // Run once on mount too: a page restored mid-scroll would otherwise show
+    // the tall, unscrolled bar until the next scroll event.
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-50 border-border/60 border-b bg-background/90 backdrop-blur-sm">
-      <nav className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-3.5">
+    <header
+      className={cn(
+        // Theme tokens instead of hard-coded green and white, so one set of
+        // classes works in light and dark mode.
+        "sticky z-50 mx-auto w-[calc(100%-2rem)] max-w-6xl rounded-2xl border border-(--landing-border)/60 bg-(--landing-panel)/70 backdrop-blur-md",
+        "transition-[top,box-shadow] duration-300 motion-reduce:transition-none",
+        isScrolled ? "top-2 shadow-lg" : "top-4 shadow-sm",
+      )}
+    >
+      <nav
+        className={cn(
+          "flex items-center justify-between gap-4 px-5 transition-[padding] duration-300 motion-reduce:transition-none",
+          isScrolled ? "py-2.5" : "py-3.5",
+        )}
+      >
         <Link className="font-serif text-2xl" href="/">
           Amiro
         </Link>
