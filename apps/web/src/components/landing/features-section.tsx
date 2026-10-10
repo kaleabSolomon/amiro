@@ -1,147 +1,80 @@
+import {
+  FolderInput,
+  Globe2,
+  MousePointerClick,
+  Search,
+  Tags,
+  Users,
+} from "lucide-react";
+import type { ComponentType } from "react";
+
 import { LandingSection } from "./landing-section";
 
-const WHAT_WE_DO = [
-  {
-    title: "Save with intent",
-    description:
-      "Tag, describe, and file links the moment you find them. Your future self will thank you.",
-  },
-  {
-    title: "Organize beautifully",
-    description:
-      "Folders, smart views, and a dashboard that's a pleasure to look at every day.",
-  },
-  {
-    title: "Share with anyone",
-    description:
-      "Make a folder public, send the link, and let people save its contents in one click.",
-  },
-] as const;
+type Feature = {
+  Icon: ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+};
 
-const HOW_IT_WORKS = [
+// Every line here describes something the product does today. Keep it that
+// way: a claim the app can't back up costs more trust than it earns.
+const FEATURES: Feature[] = [
   {
-    step: "01",
-    title: "Save content",
+    Icon: MousePointerClick,
+    title: "Save in one action",
     description:
-      "Use the extension, Mobile app or telegram bot to save articles, videos, or essays as you browse.",
+      "Open the Chrome extension with ⌘⇧Y and save the current tab, or right-click any link. Saves made offline upload when you reconnect.",
   },
   {
-    step: "02",
-    title: "Automatic processing",
+    Icon: Tags,
+    title: "Automatic topic tags",
     description:
-      "Amiro extracts the content and generates factual summaries, tags, and categories.",
+      "Amiro reads each bookmark's title and the start of its page text and adds topic tags such as design or rust. A link that has been tagged before reuses its tags.",
   },
   {
-    step: "03",
-    title: "See your map",
+    Icon: Search,
+    title: "Search by title, tag, or folder",
     description:
-      "Track trends and review your interests in a clean personal dashboard.",
+      "Press ⌘K in the dashboard, or use the search box in the extension. Results come back as you type.",
   },
-] as const;
+  {
+    Icon: Globe2,
+    title: "Private by default",
+    description:
+      "Every bookmark starts private. Make a folder public and share its link, and other people can save its bookmarks to their own folders in one click.",
+  },
+  {
+    Icon: Users,
+    title: "Follow people",
+    description:
+      "Follow someone to see their public saves in your feed. Profiles don't show follower counts.",
+  },
+  {
+    Icon: FolderInput,
+    title: "Import and export",
+    description:
+      "Import your browser's bookmarks with their folders, and export everything as an HTML file that any browser can open.",
+  },
+];
 
-export function LandingWhatWeDoSection() {
+export function LandingFeaturesSection() {
   return (
-    <LandingSection
-      id="what-we-do"
-      eyebrow="What We Do"
-      title="A bookmark home, not a junk drawer."
-      description="Most bookmark tools are clipboards. Amiro is a calm, well-designed place where the links you collect actually become useful."
-    >
-      <div className="grid gap-4 md:grid-cols-3">
-        {WHAT_WE_DO.map((item, idx) => (
-          <article
-            key={item.title}
-            className={
-              idx % 2 === 0
-                ? "rounded-2xl border border-[var(--landing-accent)] p-6 shadow-[0_22px_50px_-26px_rgba(54,125,63,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
-                : "rounded-2xl border border-[var(--landing-border)] p-6 shadow-[0_22px_50px_-28px_rgba(19,30,24,0.62)] ring-1 ring-black/10 transition-transform duration-300 hover:-translate-y-0.5"
-            }
-            style={{
-              backgroundImage:
-                idx % 2 === 0
-                  ? "var(--landing-card-green-gradient)"
-                  : "var(--landing-card-dark-gradient)",
-            }}
-          >
-            <h3
-              className={
-                idx % 2 === 0
-                  ? "font-semibold font-serif text-2xl text-[var(--landing-accent-foreground)]"
-                  : "font-semibold font-serif text-2xl text-[var(--landing-ink)]"
-              }
-            >
-              {item.title}
-            </h3>
-            <p
-              className={
-                idx % 2 === 0
-                  ? "mt-2 text-[var(--landing-accent-foreground)]/90 text-sm leading-relaxed"
-                  : "mt-2 text-[var(--landing-subtle-ink)] text-sm leading-relaxed"
-              }
-            >
-              {item.description}
-            </p>
-          </article>
+    <LandingSection id="features" eyebrow="Features" title="What Amiro does">
+      <ul className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
+        {FEATURES.map(({ Icon, title, description }) => (
+          <li key={title} className="flex gap-4">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border text-foreground">
+              <Icon className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="font-medium text-foreground">{title}</h3>
+              <p className="mt-1.5 text-muted-foreground text-sm leading-relaxed">
+                {description}
+              </p>
+            </div>
+          </li>
         ))}
-      </div>
-    </LandingSection>
-  );
-}
-
-export function LandingHowItWorksSection() {
-  return (
-    <LandingSection
-      id="how-it-works"
-      eyebrow="How It Works"
-      title="Built for a simple habit loop."
-      description="Capture, process, and reflect without adding extra overhead to your day."
-    >
-      <div className="grid gap-4 md:grid-cols-3">
-        {HOW_IT_WORKS.map((item, idx) => (
-          <article
-            key={item.step}
-            className={
-              idx % 2 === 0
-                ? "rounded-2xl border border-[var(--landing-border)] p-6 shadow-[0_22px_50px_-28px_rgba(19,30,24,0.62)] ring-1 ring-black/10 transition-transform duration-300 hover:-translate-y-0.5"
-                : "rounded-2xl border border-[var(--landing-accent)] p-6 shadow-[0_22px_50px_-26px_rgba(54,125,63,0.78)] transition-transform duration-300 hover:-translate-y-0.5"
-            }
-            style={{
-              backgroundImage:
-                idx % 2 === 0
-                  ? "var(--landing-card-dark-gradient)"
-                  : "var(--landing-card-green-gradient)",
-            }}
-          >
-            <p
-              className={
-                idx % 2 === 0
-                  ? "font-semibold text-[var(--landing-subtle-ink)] text-xs uppercase tracking-[0.12em]"
-                  : "font-semibold text-[var(--landing-accent-foreground)]/75 text-xs uppercase tracking-[0.12em]"
-              }
-            >
-              Step {item.step}
-            </p>
-            <h3
-              className={
-                idx % 2 === 0
-                  ? "mt-2 font-semibold font-serif text-2xl text-[var(--landing-ink)]"
-                  : "mt-2 font-semibold font-serif text-2xl text-[var(--landing-accent-foreground)]"
-              }
-            >
-              {item.title}
-            </h3>
-            <p
-              className={
-                idx % 2 === 0
-                  ? "mt-2 text-[var(--landing-subtle-ink)] text-sm leading-relaxed"
-                  : "mt-2 text-[var(--landing-accent-foreground)]/90 text-sm leading-relaxed"
-              }
-            >
-              {item.description}
-            </p>
-          </article>
-        ))}
-      </div>
+      </ul>
     </LandingSection>
   );
 }

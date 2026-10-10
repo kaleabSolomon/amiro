@@ -1,5 +1,5 @@
 "use client";
-import { ArrowUpRight, Smartphone } from "lucide-react";
+import { ArrowUpRight, Github, Smartphone } from "lucide-react";
 import Image from "next/image";
 import { useRef } from "react";
 import amiro from "../../../assets/logos/amiro.png";
@@ -58,7 +58,7 @@ function AnimatedBeamDemo() {
         {/* Bottom row */}
         <div className="flex flex-row items-center justify-between">
           <Circle ref={div4Ref}>
-            <Icons.code />
+            <Github className="size-full text-[#569B6C]" strokeWidth={1.75} />
           </Circle>
           <Circle ref={div5Ref}>
             <Icons.chrome />
@@ -128,8 +128,10 @@ function AnimatedBeamDemo() {
 
 export function Integrations() {
   return (
-    // <div className="mx-auto w-full max-w-6xl px-6 py-14 sm:py-16">
-    <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-6 py-14 sm:py-16 lg:grid-cols-12 lg:gap-8">
+    <section
+      id="integrations"
+      className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-6 py-14 sm:py-16 lg:grid-cols-12 lg:gap-8"
+    >
       <div className="flex w-full items-center justify-center pr-4 lg:col-span-5 lg:justify-start">
         <AnimatedBeamDemo />
       </div>
@@ -144,8 +146,8 @@ export function Integrations() {
           you already are.
         </h2>
         <p className="mt-5 max-w-md text-muted-foreground">
-          Amiro meets you where your links live — your phone, your browser, your
-          chats. Everything funnels into one calm home.
+          Links from YouTube, X, Instagram, GitHub, or any other site go through
+          the Chrome extension or the Telegram bot and land in the same library.
         </p>
 
         {/* Bento grid */}
@@ -161,7 +163,7 @@ export function Integrations() {
                 className="h-full min-h-[260px]"
                 Icon={Smartphone}
                 title="Mobile app"
-                desc="Save from anywhere on iOS and Android with native share sheets."
+                desc="Save from the share sheet on iOS and Android."
                 disabled
               >
                 {/* Phone mockup in normal flow (below the text) so it can never
@@ -190,7 +192,7 @@ export function Integrations() {
             className="col-span-6 min-h-[140px] sm:col-span-3"
             Icon={Icons.chrome}
             title="Chrome extension"
-            desc="One-click save from any tab — tags, folders, notes inline."
+            desc="Save the open tab or right-click any link, and pick the folder before you save."
           />
 
           {/* Telegram — small */}
@@ -198,12 +200,11 @@ export function Integrations() {
             className="col-span-6 min-h-[140px] sm:col-span-3"
             Icon={Icons.telegram}
             title="Telegram bot"
-            desc="Forward links to @amirobot."
+            desc="Send a link to the bot, or forward a message that contains one."
           />
         </div>
       </div>
-    </div>
-    // </div>
+    </section>
   );
 }
 
@@ -212,7 +213,6 @@ function BentoTile({
   Icon,
   title,
   desc,
-  accent,
   compact,
   disabled,
   children,
@@ -221,7 +221,6 @@ function BentoTile({
   Icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   title: string;
   desc: string;
-  accent?: "mint";
   compact?: boolean;
   disabled?: boolean;
   children?: React.ReactNode;
@@ -234,19 +233,6 @@ function BentoTile({
           : "hover:-translate-y-0.5 hover:border-border-strong"
       } ${className}`}
     >
-      {/* glow accent */}
-      <div
-        className={`pointer-events-none absolute -top-10 -right-10 h-40 w-40 rounded-full blur-3xl transition-opacity duration-500 ${
-          disabled
-            ? "bg-primary/10 opacity-40"
-            : accent === "mint"
-              ? "bg-primary/20 opacity-60 group-hover:opacity-100"
-              : "bg-primary/10 opacity-0 group-hover:opacity-80"
-        }`}
-      />
-      {/* subtle grid */}
-      <div className="mask-radial-fade pointer-events-none absolute inset-0 bg-dots-faint opacity-40" />
-
       <div className="relative flex items-start justify-between">
         <div
           className={`grid h-9 w-9 place-items-center rounded-lg border border-primary/30 bg-primary/10 text-primary ${
